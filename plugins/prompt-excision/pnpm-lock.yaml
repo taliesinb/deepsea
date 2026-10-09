@@ -1,0 +1,13 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: link:../../harness/packages/core/system-prompt
+        version: link:../../harness/packages/core/system-prompt

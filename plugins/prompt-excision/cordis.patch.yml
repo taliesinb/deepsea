@@ -1,0 +1,13 @@
+# Bundle patch, used when the package is installed into a profile.
+# On the Anthropic plan route (anthropic-oauth, harness topic
+# pi-ai-oauth-routes), removes every initial-system-prompt paragraph that
+# contains "DeepSeek Harness": the identity, implementation-checkout and Web
+# GUI paragraphs. Installing the bundle opts into this mapping; a profile
+# override of `config` replaces it whole.
+- insert:
+    - id: deepsea-prompt-excision
+      name: "@deepsea/prompt-excision"
+      config:
+        providers:
+          anthropic-oauth:
+            - DeepSeek Harness
