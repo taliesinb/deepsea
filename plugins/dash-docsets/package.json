@@ -1,0 +1,50 @@
+{
+  "name": "@deepsea/dash-docsets",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: dash_list_docsets, dash_search and dash_get_page tools over the local HTTP API of Dash 8 (the macOS documentation browser), with HTML-to-Markdown page conversion (section scoping, MathML to LaTeX).",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "tools.mjs",
+    "dash.mjs",
+    "docsets.mjs",
+    "docset-info.mjs",
+    "html-to-md.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/tools.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "deepsea": {
+    "machineWide": "Dash: launches it when it is not running and turns on its API server setting"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs && node scripts/gen-tool-docs.mjs --check",
+    "check": "node --check index.js && node --test tests/*.test.mjs && node scripts/gen-tool-docs.mjs --check",
+    "live": "node scripts/live-test.mjs",
+    "docs": "node scripts/gen-tool-docs.mjs"
+  },
+  "dependencies": {
+    "@deepsea/logs": "link:../../packages/logs",
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths",
+    "@deepseek-ai/dsh-tools": "link:../../harness/packages/core/tools",
+    "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery",
+    "linkedom": "^0.18.12",
+    "mathml-to-latex": "^1.5.0",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2"
+  },
+  "license": "MIT"
+}
