@@ -1,0 +1,6 @@
+# Bundle patch, used when the package is installed into a profile.
+# /import-api-keys (browser command, lib/client.js) and the host's plan route
+# that compares candidate keys with the credential store. No config.
+- insert:
+    - id: deepsea-import-api-keys
+      name: "@deepsea/import-api-keys"
