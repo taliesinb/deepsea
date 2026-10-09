@@ -1,0 +1,17 @@
+# Bundle patch, used when the package is installed into a profile.
+# Binds tiny local models to tiny compositions: Apple Foundation on-device to
+# minimal-no-tools (a preset of @deepsea/no-global-tools), LM Studio models to
+# the shipped minimal, everything else back to standard. A profile override of
+# `config` replaces the whole value; `trace: true` writes a decision trace to
+# the variant's log directory.
+- insert:
+    - id: deepsea-enforce-model-preset
+      name: "@deepsea/enforce-model-preset"
+      config:
+        rules:
+          - provider: apple
+            preset: minimal-no-tools
+          - provider: lmstudio
+            preset: minimal
+          - provider: '*'
+            preset: standard
