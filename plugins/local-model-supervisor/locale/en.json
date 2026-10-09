@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Local Model Servers",
+    "description": "Starts local model servers when a session needs them and stops them when idle."
+  }
+}
