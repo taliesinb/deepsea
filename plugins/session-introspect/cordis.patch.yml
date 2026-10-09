@@ -1,0 +1,8 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers the transcript_* tools and serves this instance's transcripts to
+# other instances' tools (/api/deepsea-session-introspect/v1). Defaults: every
+# session of this home is visible (scope: all). Override `config` in the
+# profile's patch (a later layer replaces the whole value).
+- insert:
+    - id: deepsea-session-introspect
+      name: "@deepsea/session-introspect"
