@@ -1,0 +1,8 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers dash_list_docsets, dash_search and dash_get_page. Defaults: launch
+# Dash in the background and turn its API server on when a tool needs them.
+# Override `config` in the profile's patch (a later layer replaces the whole
+# value).
+- insert:
+    - id: deepsea-dash-docsets
+      name: "@deepsea/dash-docsets"
