@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "title": "Wait controls",
+    "description": "The wait tool's progress bar, with Skip and Abort."
+  },
+  "card": {
+    "title": "Wait",
+    "skip": "Skip",
+    "abort": "Abort",
+    "progress": "{elapsed} / {total}",
+    "progress.aria": "Wait progress",
+    "outcome.skipped": "skipped",
+    "outcome.aborted": "aborted by user",
+    "outcome.interrupted": "interrupted",
+    "verdict.waited": "waited {duration}",
+    "verdict.done": "done",
+    "verdict.failed": "failed",
+    "verdict.after": "{outcome} after {waited}",
+    "verdict.afterOf": "{outcome} after {waited} of {total}",
+    "duration.s": "{s}s",
+    "duration.m": "{m}m",
+    "duration.ms": "{m}m{s}s",
+    "duration.h": "{h}h",
+    "duration.hm": "{h}h{m}m",
+    "duration.hms": "{h}h{m}m{s}s"
+  }
+}
