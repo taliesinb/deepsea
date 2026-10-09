@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Reboot",
+    "description": "/reboot restarts the server, showing first what a restart would interrupt."
+  }
+}

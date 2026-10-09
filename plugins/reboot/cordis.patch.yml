@@ -1,0 +1,7 @@
+# Bundle patch, used when the package is installed into a profile.
+# /reboot (host command and control routes) and its dialog (browser half,
+# lib/client.js). No config. Whether a reboot is a restart comes from the
+# optional `deepseaTailscaleRelay` service of @deepsea/tailscale.
+- insert:
+    - id: deepsea-reboot
+      name: "@deepsea/reboot"
