@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Chat-only preset",
+    "description": "Hides every global tool from a preset's agents, and adds a chat-only preset for tiny local models."
+  }
+}
