@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "导入会话",
+    "description": "将 Claude Code 和 pi 的对话记录以及其他主目录中的会话导入为可继续的会话。"
+  }
+}
