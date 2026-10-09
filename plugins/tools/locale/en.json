@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Tool List",
+    "description": "/tools lists the tools the session's agent can call, with their arguments and descriptions."
+  }
+}
