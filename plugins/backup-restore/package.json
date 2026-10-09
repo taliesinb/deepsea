@@ -1,0 +1,65 @@
+{
+  "name": "@deepsea/backup-restore",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: /backup writes the whole home to a private, verified ZIP in the variant's backups directory (SQLite through its online backup, links as links); /restore saves a rollback, stops the server and swaps the chosen backup in, with a confirmation, a chooser and the verified outcome in the web GUI.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "archive.mjs",
+    "paths.mjs",
+    "restore-worker.mjs",
+    "restore-status.mjs",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "deepsea": {
+    "requires": [
+      "command-claim-decoration",
+      "modal-width"
+    ]
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --check archive.mjs && node --check paths.mjs && node --check restore-worker.mjs && node --test tests/*.test.mjs",
+    "prepare": "node build.mjs"
+  },
+  "dependencies": {
+    "@deepsea/logs": "link:../../packages/logs",
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-client-connection": "link:../../harness/packages/client/connection",
+    "@deepseek-ai/dsh-client-ui-commands": "link:../../harness/packages/client/ui-commands",
+    "@deepseek-ai/dsh-client-ui-layout": "link:../../harness/packages/client/ui-layout",
+    "@deepseek-ai/dsh-client-ui-primitives": "link:../../harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}

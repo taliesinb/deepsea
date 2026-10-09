@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "备份与恢复",
+    "description": "/backup 将整个主目录保存为 ZIP；/restore 恢复某个备份。"
+  }
+}
