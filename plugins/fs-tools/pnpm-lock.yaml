@@ -1,0 +1,22 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../harness/packages/llm/llm
+        version: link:../../harness/packages/llm/llm
+      '@deepseek-ai/dsh-tools':
+        specifier: link:../../harness/packages/core/tools
+        version: link:../../harness/packages/core/tools
+      '@deepseek-ai/schemastery':
+        specifier: link:../../harness/vendor/schemastery
+        version: link:../../harness/vendor/schemastery
+      '@vscode/ripgrep':
+        specifier: link:../../harness/packages/fs/tool-fs-search/node_modules/@vscode/ripgrep
+        version: link:../../harness/packages/fs/tool-fs-search/node_modules/@vscode/ripgrep

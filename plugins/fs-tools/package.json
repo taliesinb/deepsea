@@ -1,0 +1,40 @@
+{
+  "name": "@deepsea/fs-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: batch filesystem tools beside the built-ins: list_dir (directories included), read_many (several line ranges per call, observed for the read-before-edit guard), edit_many (several edits across files, validated before any write, with an optional verify command) and search (literal/word/regex selectors and exclusions, context, files/count modes, path globs and several roots).",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "common.mjs",
+    "list-dir.mjs",
+    "read-many.mjs",
+    "edit-many.mjs",
+    "search.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-llm": "link:../../harness/packages/llm/llm",
+    "@deepseek-ai/dsh-tools": "link:../../harness/packages/core/tools",
+    "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery",
+    "@vscode/ripgrep": "link:../../harness/packages/fs/tool-fs-search/node_modules/@vscode/ripgrep"
+  },
+  "license": "MIT"
+}
