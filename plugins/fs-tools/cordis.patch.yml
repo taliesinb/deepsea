@@ -1,0 +1,7 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers list_dir, read_many, edit_many and search beside the built-in
+# read/edit/grep/glob tools, and a short system-prompt hint. Override `config`
+# in the profile's patch (a later layer replaces the whole value).
+- insert:
+    - id: deepsea-fs-tools
+      name: "@deepsea/fs-tools"
