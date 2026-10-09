@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Wait",
+    "description": "Gives the agent a wait tool, shown as a live progress bar you can skip or abort."
+  }
+}
