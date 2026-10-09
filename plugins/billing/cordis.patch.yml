@@ -1,0 +1,6 @@
+# Bundle patch, used when the package is installed into a profile.
+# The billing pill, card and /billing (both halves). Estimates need the
+# harness's resolved-model `pricing` and plan usage (topic billing-metadata).
+- insert:
+    - id: deepsea-billing
+      name: "@deepsea/billing"
