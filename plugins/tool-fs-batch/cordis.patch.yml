@@ -1,0 +1,9 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers list_dir, read_many, edit_many and search beside the built-in
+# read/edit/grep/glob tools, and a short system-prompt hint. dsd moves this row
+# into the agent presets that have tool-fs-search and disables it here
+# (package.json deepsea.presets). Override `config` in the profile's patch (a
+# later layer replaces the whole value); dsd carries it into the presets.
+- insert:
+    - id: deepsea-tool-fs-batch
+      name: "@deepsea/tool-fs-batch"
