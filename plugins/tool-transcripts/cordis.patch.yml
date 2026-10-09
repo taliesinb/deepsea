@@ -1,0 +1,13 @@
+# Bundle patch, used when the package is installed into a profile. Two rows:
+# - deepsea-tool-transcripts (global): serves this instance's transcripts to
+#   other instances' tools (/api/deepsea-session-introspect/v1); config
+#   `serve`, `trace`;
+# - deepsea-tool-transcripts-tools: the transcript_* tools. dsd moves it into
+#   the agent presets that have @deepseek-ai/dsh-tool-subagent (package.json
+#   deepsea.presets) and disables it here. Its config: scope, limits, remote
+#   keys, `trace`. Defaults: every session of this home is visible (scope: all).
+- insert:
+    - id: deepsea-tool-transcripts
+      name: "@deepsea/tool-transcripts"
+    - id: deepsea-tool-transcripts-tools
+      name: "@deepsea/tool-transcripts/tools"
