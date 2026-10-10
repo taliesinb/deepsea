@@ -1,0 +1,11 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers the rename_chat tool, its system-prompt rule and the runtime-context
+# line carrying the automatic title. dsd moves this row into the agent presets
+# that have tool-ask-user and disables it here (package.json deepsea.presets).
+# Override `config` in the profile's patch (a later layer replaces the whole
+# value; dsd carries it into the presets):
+#   - id: deepsea-tool-rename-chat
+#     config: { style: natural, maxWords: 6 }
+- insert:
+    - id: deepsea-tool-rename-chat
+      name: "@deepsea/tool-rename-chat"
