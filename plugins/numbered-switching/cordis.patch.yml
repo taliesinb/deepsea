@@ -1,0 +1,7 @@
+# Bundle patch, used when the package is installed into a profile.
+# Browser-only: the sidebar numbers and ⌘1…⌘5 (Ctrl+1…5 off Apple platforms)
+# come from the browser half (lib/client.js); the host row only carries it.
+# No config.
+- insert:
+    - id: deepsea-numbered-switching
+      name: "@deepsea/numbered-switching"
