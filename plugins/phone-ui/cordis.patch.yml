@@ -1,0 +1,13 @@
+# Bundle patch, used when the package is installed into a profile.
+# Below 640px of viewport width, or under <html data-deepsea-view="mobile">:
+# no session header, per-message icon rows or composer stats dock, tighter
+# margins and blocks (host <style> row), and the mobile composer (browser
+# half, lib/client.js). Override `config` in the profile's patch (a later
+# layer replaces the whole value):
+#   - id: deepsea-phone-ui
+#     config:
+#       maxWidth: 480          # px, integer 320-1200
+#       messageActions: false  # keep the copy / branch / feedback rows
+- insert:
+    - id: deepsea-phone-ui
+      name: "@deepsea/phone-ui"
