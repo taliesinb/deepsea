@@ -1,0 +1,7 @@
+# Bundle patch, used when the package is installed into a profile.
+# Names a session from a `some-slug: ` prefix on its first prompt (host), and
+# previews the slug on the New Session row and keeps typed-into New Sessions
+# as ghost rows (browser half, lib/client.js). No config.
+- insert:
+    - id: deepsea-session-title-slug
+      name: "@deepsea/session-title-slug"
