@@ -1,0 +1,44 @@
+{
+  "name": "@deepsea/settings-shortcut",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: ⌘. (Ctrl+. off Apple devices) toggles the web GUI's Settings panel, a chord Safari and Chrome both hand to the page (Safari keeps ⌘, for itself); the macOS app's Settings… (⌘,) dispatches it.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts",
+    "check": "node --check index.js && node --test tests/*.test.ts",
+    "prepare": "node build.mjs"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,6 @@
+# Bundle patch, used when the package is installed into a profile.
+# ⌘. (Ctrl+. off Apple devices) toggles the Settings panel (browser half,
+# lib/client.js). No config.
+- insert:
+    - id: deepsea-settings-shortcut
+      name: "@deepsea/settings-shortcut"
