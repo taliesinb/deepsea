@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Reload on Restart",
+    "description": "Reloads the page when the server restarts on new code."
+  }
+}
