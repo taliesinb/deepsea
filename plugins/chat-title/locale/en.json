@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Chat Title",
+    "description": "Lets the agent rename a chat whose automatic title is wrong, generic or stale."
+  }
+}
