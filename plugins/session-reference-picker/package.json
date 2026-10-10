@@ -1,0 +1,54 @@
+{
+  "name": "@deepsea/session-reference-picker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: % in the composer opens a picker of ordinary sessions, named workspace/session and newest first; %foo matches anywhere, %foo/bar the workspace and the session separately; a pick inserts the session-reference chip.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "deepsea": {
+    "requires": [
+      "input-triggers",
+      "trigger-label-segments"
+    ]
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts",
+    "check": "node --check index.js && node --test tests/*.test.ts",
+    "prepare": "node build.mjs"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-api-session-controller": "link:../../harness/packages/api/session-controller",
+    "@deepseek-ai/dsh-api-workspace-controller": "link:../../harness/packages/api/workspace-controller",
+    "@deepseek-ai/dsh-client-ui-input-trigger": "link:../../harness/packages/client/ui-input-trigger",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}
