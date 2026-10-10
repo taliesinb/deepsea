@@ -1,0 +1,9 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers the rename_chat tool, its system-prompt rule and the runtime-context
+# line carrying the automatic title. Override `config` in the profile's patch
+# (a later layer replaces the whole value):
+#   - id: deepsea-chat-title
+#     config: { style: natural, maxWords: 6 }
+- insert:
+    - id: deepsea-chat-title
+      name: "@deepsea/chat-title"

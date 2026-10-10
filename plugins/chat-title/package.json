@@ -1,0 +1,35 @@
+{
+  "name": "@deepsea/chat-title",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: a rename_chat tool that lets the agent review the automatic chat title and rename the chat when the title is wrong, generic or stale, in the titler's style, never over a title the person chose; a system-prompt rule and a runtime-context line carrying the current automatic title. Host-only.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "title.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --check title.mjs && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-llm": "link:../../harness/packages/llm/llm",
+    "@deepseek-ai/dsh-tools": "link:../../harness/packages/core/tools",
+    "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery"
+  },
+  "license": "MIT"
+}
