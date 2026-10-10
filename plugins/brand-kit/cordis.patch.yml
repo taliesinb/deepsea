@@ -1,0 +1,8 @@
+# Bundle patch, used when the package is installed into a profile.
+# The active brand profile's style and payload rows and the profile routes
+# (host), the brand slots, the two text swaps and the profiles card on this
+# bundle's Plugins page (browser half, lib/client.js). No config: profiles live
+# in $DSH_HOME/plugins/brand-kit/, none active is the shipped look.
+- insert:
+    - id: deepsea-brand-kit
+      name: "@deepsea/brand-kit"
