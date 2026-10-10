@@ -1,0 +1,13 @@
+# Bundle patch, used when the package is installed into a profile.
+# The variant's name in the sidebar wordmark and the window title, its colour
+# on the whale (sidebar and favicon), a quiet build-version chip: from
+# $DSH_HOME/variant.yml, nothing on a home without one. Override `config` in
+# the profile's patch (a later layer replaces the whole value):
+#   - id: deepsea-variant-identity
+#     config:
+#       display: DeepSea Personal   # '' keeps the shipped name
+#       color: '#30A46C'            # '' keeps the stock whale
+#       versionBadge: subtle        # subtle | stock
+- insert:
+    - id: deepsea-variant-identity
+      name: "@deepsea/variant-identity"

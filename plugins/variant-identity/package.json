@@ -1,0 +1,35 @@
+{
+  "name": "@deepsea/variant-identity",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: tells variants apart in any browser. The sidebar wordmark and the window title read the variant's display name, the whale (sidebar and favicon) takes its colour and the build-version chip is quietened, all from $DSH_HOME/variant.yml unless configured. Host-only.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "identity.mjs",
+    "favicon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --check identity.mjs && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@deepsea/logs": "link:../../packages/logs",
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths"
+  },
+  "license": "MIT"
+}
