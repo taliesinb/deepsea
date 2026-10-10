@@ -1,0 +1,6 @@
+# Bundle patch, used when the package is installed into a profile.
+# Reloads the page when the server comes back with every client bundle
+# re-revisioned (browser half, lib/client.js). No config.
+- insert:
+    - id: deepsea-reload-on-restart
+      name: "@deepsea/reload-on-restart"
