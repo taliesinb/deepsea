@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Browser windows",
+    "description": "Runs the Safari and Chrome windows behind the browser tools, and keeps covered Safari pages running."
+  }
+}

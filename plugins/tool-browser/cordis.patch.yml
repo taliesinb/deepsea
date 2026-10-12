@@ -1,0 +1,15 @@
+# Bundle patch, used when the package is installed into a profile. Two rows:
+# - deepsea-tool-browser (the package root, global): the windows, the reader
+#   pool, placement, the DeepSea app's window routes and the screenshot rows
+#   (browser half, lib/client.js); provides the deepseaBrowser service.
+# - deepsea-tool-browser-tools (@deepsea/tool-browser/tools): the safari_* and
+#   chrome_* tools; dsd's generated presets move it into the agent presets
+#   that have tool-web (package.json, deepsea.presets).
+# Defaults: Safari Technology Preview and visible Chrome, covered Safari
+# windows parked. Override `config` in the profile's patch (a later layer
+# replaces the whole value).
+- insert:
+    - id: deepsea-tool-browser
+      name: "@deepsea/tool-browser"
+    - id: deepsea-tool-browser-tools
+      name: "@deepsea/tool-browser/tools"
