@@ -1,0 +1,12 @@
+# Bundle patch, used when the package is installed into a profile.
+# Remote workspaces: the egress routes under /deepsea-remote-workspaces/servers/<id>/,
+# the control channel /deepsea-remote-workspaces/<endpoint> (host half) and the
+# Remotes section of the sidebar with its dialogs (browser half, lib/client.js).
+# The registry is $DSH_HOME/plugins/remote-workspaces/workspaces.json. Override
+# in the profile's cordis.patch.yml (a later layer replaces the whole config):
+#   config: { servers: [{ id, url, label, token }], tailscalePath, trace }
+# Needs the harness topics embed-session, session-relocation,
+# workspace-destinations and modal-width.
+- insert:
+    - id: deepsea-remote-workspaces
+      name: "@deepsea/remote-workspaces"
