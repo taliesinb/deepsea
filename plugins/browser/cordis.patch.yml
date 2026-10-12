@@ -1,0 +1,9 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers the safari_* and chrome_* tools into every eligible agent and the
+# DeepSea app's window routes (host), and the screenshot rows (browser half,
+# lib/client.js). Defaults: Safari Technology Preview and visible Chrome,
+# covered Safari windows parked. Override `config` in the profile's patch (a
+# later layer replaces the whole value).
+- insert:
+    - id: deepsea-browser
+      name: "@deepsea/browser"
