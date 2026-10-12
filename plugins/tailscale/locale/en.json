@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Tailscale",
+    "description": "Serves the app on your tailnet, with Tailscale and Server settings and a QR code per session."
+  }
+}

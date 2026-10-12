@@ -1,0 +1,70 @@
+{
+  "name": "@deepsea/tailscale",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: the variant on the tailnet. An authenticating loopback proxy behind the variant's own Tailscale Serve path, the Tailscale and Server settings sections, a per-session QR code, loopback port forwarding for the DeepSea app on another Mac, and the deepseaSessionOwners service.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "forward.mjs",
+    "owners.mjs",
+    "proxy.mjs",
+    "server.mjs",
+    "state.mjs",
+    "tailscale.mjs",
+    "variant.mjs",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "deepsea": {
+    "requires": [
+      "embed-session"
+    ],
+    "machineWide": "Tailscale Serve: publishes and removes this variant's own Serve path (never another's)"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --test tests/*.test.mjs",
+    "prepare": "node build.mjs"
+  },
+  "dependencies": {
+    "@deepsea/logs": "link:../../packages/logs",
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths",
+    "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery",
+    "uqr": "^0.1.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-client-connection": "link:../../harness/packages/client/connection",
+    "@deepseek-ai/dsh-client-store": "link:../../harness/packages/client/store",
+    "@deepseek-ai/dsh-client-ui-conversation": "link:../../harness/packages/client/ui-conversation",
+    "@deepseek-ai/dsh-client-ui-primitives": "link:../../harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-settings": "link:../../harness/packages/client/ui-settings",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}
