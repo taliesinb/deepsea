@@ -1,0 +1,7 @@
+# Bundle patch, used when the package is installed into a profile.
+# The /ask command, the side-thread store and the control routes (host), and
+# the side panel and chat markers (browser half, lib/client.js). Config (all
+# optional): README.md.
+- insert:
+    - id: deepsea-ask
+      name: "@deepsea/ask"
