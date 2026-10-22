@@ -76,6 +76,80 @@ decides whether it is the main module by comparing `import.meta.url` with
 `argv[1]`, and under a symlinked directory (`/tmp` → `/private/tmp`) it would
 otherwise load and exit 0 — measured.
 
+## Thin clients: `--remote`
+
+```sh
+node apps/macos/bundle/assemble.mjs --remote <node>.example.ts.net/deepsea --name "DeepSea Office"
+node apps/macos/bundle/release.mjs  --remote … --name … --repo <org>/<private repo> [sign-in flags]
+```
+
+The same wrapper, DMG, icon and updater, with nothing inside: no Node,
+harness, relay or home. The window opens the given DeepSea over the
+tailnet, admitted by the Mac's Tailscale identity (the tailscale plugin's
+route). About 1 MB; the DMG 2 MB. Bundle id
+`io.github.taliesinb.deepsea.remote-<host-slug>`, blue whale (never
+mistaken for a local app), release channel `remote-<host-slug>`, so one
+repository publishes a thin client per host and per person beside the full
+app, and each updates only from its own channel. The name is yours
+(`--name`; default `DeepSea <Host>`); the DMG is `<Name-with-dashes>-…dmg`,
+which is also the updater's second lock on a release.
+
+### Private release feeds
+
+A thin client names its host in the channel and its person in the title,
+so its releases belong on a **private** repository, which GitHub refuses to
+serve anonymously. The updater authenticates **as the person**
+(`SignIn.swift`), trying in order: a stored sign-in → a built-in token
+(`--update-token-env VAR`, a fine-grained PAT scoped to the repo, Contents:
+read) → the person's own `gh auth token` → anonymous → **Sign in…**.
+
+*Sign in…* is GitHub's web application flow with PKCE and a **loopback
+callback**: the browser opens `github.com/login/oauth/authorize`, the
+person clicks Authorize, GitHub redirects to
+`http://127.0.0.1:47831/deepsea-updates/callback` — a listener the app
+runs for the duration — the code is exchanged, the app comes to the front
+with the token stored (0600, `~/Library/Application Support/<bundle id>/`;
+not the Keychain: an ad-hoc app's identity is its cdhash, different after
+every update). Fallback (`Use a Code Instead`, or no secret baked): the
+device flow — a code to type at `github.com/login/device`, polled on a
+background thread. Everything is a sheet on the window; the page keeps
+working.
+
+What to register, once: a **GitHub App** (`Contents: read` on the release
+repository, *Device Flow* on, *user token expiration* opted out), installed
+on that repository by an org owner; its **client id** (`--update-client-id`,
+public) and **client secret** (`--update-client-secret-env VAR`, baked in:
+GitHub requires it for the exchange even with PKCE, and with the callback
+pinned to loopback it lets nobody obtain anyone's code) go into the build;
+the **callback URL** above must be registered on the app exactly — GitHub
+matches it character for character, and a mismatch shows "redirect_uri is
+not associated with this application" (measured). People never see any of
+this: Sign in… → Authorize → done, once per Mac. Measured against a real
+private repository: anonymous feed 404 → signed-in 200 → asset through the
+API `url` with `Accept: application/octet-stream` (the browser URL of a
+private asset 404s) → install and relaunch. 401 on a stored sign-in deletes
+it and offers again; 404 on a valid one means the app is not installed on
+the repository yet, and says so.
+
+### Download page
+
+```sh
+node apps/macos/bundle/download-page.mjs --out downloads.html \
+  --app "DeepSea|taliesinb/deepsea|release|#000000" \
+  --app "DeepSea Office|<org>/<private repo>|remote-<host-slug>|#0090FF"
+```
+
+One self-contained HTML file: an icon per app, click to download the
+newest release of its channel, version and size underneath. GitHub has no
+stable "latest of this channel" URL, so the page is generated with each
+channel's current asset link (resolved through `gh api` with the updater's
+two locks) and regenerated after each release; a variant with no readable
+release renders greyed out with the reason in its tooltip. Private links
+work in a browser signed in to GitHub with access to the repository. The
+icons are what macOS itself draws (`Tools/app-icon-png.swift`,
+`NSWorkspace.icon(forFile:)` on a throwaway *registered* bundle — an
+unregistered `.app` yields the generic document icon).
+
 ## Updates
 
 `Updater.swift` reads `GET /repos/<repo>/releases?per_page=30` ten seconds

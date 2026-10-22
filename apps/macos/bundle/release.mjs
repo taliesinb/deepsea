@@ -4,6 +4,12 @@
  *
  *   node apps/macos/bundle/release.mjs [--variant release] [--repo owner/name] [--notes "text"]
  *                                      [--draft] [--dry-run] [--skip-pack] [--no-build] [--build N]
+ *   node apps/macos/bundle/release.mjs --remote <host[/path]|URL> --name "DeepSea Office" [--repo …]
+ *                                      [--update-client-id ID] [--update-client-secret-env VAR] [--update-token-env VAR]
+ *
+ * `--remote`: a thin client (assemble.mjs --remote): no harness stage, no Node;
+ * the channel is `remote-<host-slug>`, never marked Latest. The update flags
+ * pass through to assemble.mjs for a private release repository.
  *
  * The variant is the release channel (Updater.swift): tags are
  * `<variant>-<build>`, so `DeepSea.app` (variant `release`) and a `DeepSea
@@ -38,11 +44,18 @@ const REPO_DIR = resolve(HERE, '..', '..', '..')
 const args = process.argv.slice(2)
 const opt = (name, fallback) => { const i = args.indexOf(name); return i === -1 ? fallback : args[i + 1] }
 const REPO = opt('--repo', 'taliesinb/deepsea')
-const VARIANT = opt('--variant', 'release')
+const REMOTE = opt('--remote') ?? null
+const remoteSlug = () => { const raw = REMOTE.trim(); const u = new URL(/^[a-z]+:\/\//i.test(raw) ? raw : `https://${raw}`); return u.host.replace(/[^a-z0-9]+/gi, '-').toLowerCase() }
+const VARIANT = REMOTE ? `remote-${remoteSlug()}` : opt('--variant', 'release')
 const DRY = args.includes('--dry-run')
 const DRAFT = args.includes('--draft')
 const OUT = join(REPO_DIR, 'dist', 'bundle')
-const NAME = VARIANT === 'release' ? 'DeepSea' : `DeepSea ${VARIANT.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')}`
+const NAME = opt('--name') ?? (REMOTE
+  ? `DeepSea ${new URL(/^[a-z]+:\/\//i.test(REMOTE) ? REMOTE : `https://${REMOTE}`).hostname.split('.')[0].replace(/^./, c => c.toUpperCase())}`
+  : VARIANT === 'release' ? 'DeepSea' : `DeepSea ${VARIANT.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')}`)
+/** Flags assemble.mjs understands that are passed through as given. */
+const PASSTHROUGH = ['--update-client-id', '--update-client-secret-env', '--update-token-env', '--update-feed', '--glyph-color', '--sign']
+  .flatMap(f => (opt(f) ? [f, opt(f)] : []))
 
 function log(msg) { process.stderr.write(`[release] ${msg}\n`) }
 async function sh(cmd, argv, opts = {}) {
@@ -77,9 +90,13 @@ async function main() {
   log(`build ${build} (tag ${tag}${previous ? `, previous ${VARIANT}-${previous}` : ', first release of this channel'})`)
 
   if (!args.includes('--no-build')) {
-    await run('node', [join(HERE, 'fetch-node.mjs')])
-    await run('node', [join(HERE, 'stage.mjs'), ...(args.includes('--skip-pack') ? ['--skip-pack'] : [])])
-    await run('node', [join(HERE, 'assemble.mjs'), '--variant', VARIANT, '--build', String(build), '--update-repo', REPO])
+    if (REMOTE) {
+      await run('node', [join(HERE, 'assemble.mjs'), '--remote', REMOTE, '--name', NAME, '--build', String(build), '--update-repo', REPO, ...PASSTHROUGH])
+    } else {
+      await run('node', [join(HERE, 'fetch-node.mjs')])
+      await run('node', [join(HERE, 'stage.mjs'), ...(args.includes('--skip-pack') ? ['--skip-pack'] : [])])
+      await run('node', [join(HERE, 'assemble.mjs'), '--variant', VARIANT, '--build', String(build), '--update-repo', REPO, ...PASSTHROUGH])
+    }
   }
   const manifest = JSON.parse(await readFile(join(OUT, `${NAME}.app`, 'Contents', 'Resources', 'deepsea-release.json'), 'utf8'))
   if (manifest.build !== build) throw new Error(`built app carries build ${manifest.build}, expected ${build} (pass --no-build only after building with --build ${build})`)
@@ -96,7 +113,8 @@ async function main() {
     notes = [
       `${NAME} ${manifest.version} — build ${build}`,
       '',
-      `harness ${manifest.harness} · node ${manifest.node} · ${manifest.plugins.length} plugins · ad-hoc signed (first launch: right-click → Open)`,
+      REMOTE ? `Opens ${manifest.remote} · ad-hoc signed (first launch: right-click → Open)`
+        : `harness ${manifest.harness} · node ${manifest.node} · ${manifest.plugins.length} plugins · ad-hoc signed (first launch: right-click → Open)`,
       '',
       subjects || '- (no commits since the previous release)',
     ].join('\n')

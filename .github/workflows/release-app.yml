@@ -1,7 +1,9 @@
 # Build and publish the bundled macOS app (apps/macos/bundle) as a GitHub Release.
 #
-# Runs on `Run workflow` (variant, notes, draft), or on a push to the default
-# branch whose head commit subject starts with `release:`. What runs is exactly
+# Runs on `Run workflow` (flavour app|remote, variant or remote URL + name,
+# notes, draft), or on a push to the default branch whose head commit subject
+# starts with `release:` (the full app). A `remote` run builds a thin client
+# (apps/macos/bundle/README.md § Thin clients) — no harness build, a minute. What runs is exactly
 # `node apps/macos/bundle/release.mjs`: the pinned harness built by dsd, the
 # plugins packed and installed into a production closure, Node fetched and
 # verified, the app assembled, pruned and ad-hoc signed, the styled DMG made,
@@ -15,6 +17,20 @@ name: Release app
 on:
   workflow_dispatch:
     inputs:
+      flavour:
+        description: What to release
+        required: true
+        type: choice
+        options: [app, remote]
+        default: app
+      remote:
+        description: 'remote flavour: the DeepSea it opens (host[/path] or URL)'
+        required: false
+        type: string
+      name:
+        description: 'remote flavour: the app name (default DeepSea <Host>)'
+        required: false
+        type: string
       variant:
         description: "Variant to build (release channel; release is marked Latest)"
         required: true
@@ -45,6 +61,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      DEEPSEA_UPDATE_CLIENT_SECRET: ${{ secrets.DEEPSEA_UPDATE_CLIENT_SECRET }}
       npm_config_manage_package_manager_versions: 'false'
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +69,7 @@ jobs:
           path: deepsea
           fetch-depth: 0
       - name: Harness at the pinned commit
+        if: inputs.flavour != 'remote'
         working-directory: deepsea
         run: |
           commit=$(awk '$1 == "commit" { print $2 }' harness.lock)
@@ -65,16 +83,27 @@ jobs:
         with:
           node-version: 24
       - name: Build the harness and link it
+        if: inputs.flavour != 'remote'
         working-directory: deepsea
         run: |
           node tools/dsd/bin/dsd.mjs builds make
           node tools/dsd/bin/dsd.mjs link
       - name: pnpm 12 for the bundle stage
+        if: inputs.flavour != 'remote'
         run: npm install -g pnpm@12 --prefix "$HOME/.pnpm12" && echo "$HOME/.pnpm12/bin" >> "$GITHUB_PATH"
       - name: Build and publish
         working-directory: deepsea
         run: |
-          args=(--variant "${{ inputs.variant || 'release' }}" --repo "$GITHUB_REPOSITORY")
+          if [ "${{ inputs.flavour }}" = "remote" ]; then
+            [ -n "${{ inputs.remote }}" ] || { echo "::error::the remote flavour needs the remote input"; exit 1; }
+            args=(--remote "${{ inputs.remote }}" --repo "$GITHUB_REPOSITORY")
+            [ -n "${{ inputs.name }}" ] && args+=(--name "${{ inputs.name }}")
+            # A private feed's sign-in: repository variable + secret, when set.
+            [ -n "${{ vars.DEEPSEA_UPDATE_CLIENT_ID }}" ] && args+=(--update-client-id "${{ vars.DEEPSEA_UPDATE_CLIENT_ID }}")
+            [ -n "$DEEPSEA_UPDATE_CLIENT_SECRET" ] && args+=(--update-client-secret-env DEEPSEA_UPDATE_CLIENT_SECRET)
+          else
+            args=(--variant "${{ inputs.variant || 'release' }}" --repo "$GITHUB_REPOSITORY")
+          fi
           [ -n "${{ inputs.notes }}" ] && args+=(--notes "${{ inputs.notes }}")
           [ "${{ inputs.draft }}" = "true" ] && args+=(--draft)
           node apps/macos/bundle/release.mjs "${args[@]}"

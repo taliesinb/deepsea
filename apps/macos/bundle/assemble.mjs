@@ -9,7 +9,18 @@
  *
  *   node apps/macos/bundle/assemble.mjs [--variant release] [--build N] [--glyph-color #hex]
  *        [--sign IDENTITY] [--update-repo owner/name] [--update-feed URL] [--no-update]
+ *        [--update-client-id ID] [--update-client-secret-env VAR] [--update-token-env VAR]
  *        [--ports 3200] [--out DIR] [--inputs DIR] [--relay DIR] [--no-dmg] [--no-prune] [--with-office]
+ *   node apps/macos/bundle/assemble.mjs --remote <host[/path] | URL> --name "DeepSea Office" [same update flags]
+ *
+ * `--remote`: a THIN CLIENT — the same wrapper, DMG, icon and updater, but no Node,
+ * harness, relay or home inside: the window opens the given DeepSea over the
+ * tailnet, admitted by the Mac's Tailscale identity (the tailscale plugin's
+ * route). About 5 MB. Bundle id `io.github.taliesinb.deepsea.remote-<host-slug>`,
+ * blue whale, release channel `remote-<host-slug>`; the name is yours
+ * (`--name`, default from the host). A remote variant's host and the names of
+ * its users belong to whoever runs it, so its releases typically go to a private
+ * repository: the update flags below make the updater sign the person in.
  *
  * The app IS a variant (LAYOUT.md §1): `--variant release` → `DeepSea.app`,
  * bundle id `io.github.taliesinb.deepsea.release`, home `~/.deepsea/release`,
@@ -57,15 +68,27 @@ const RELAY_DIR = resolve(opt('--relay', join(REPO, 'apps', 'relay')))
 /** The harness build (for the whale glyph, as dsd takes it): the `harness` link dsd keeps, or `--harness DIR`. */
 const HARNESS = resolve(opt('--harness', join(REPO, 'harness')))
 const GLYPH_SVG = join(HARNESS, 'apps', 'web', 'public', 'favicon.svg')
-/** The variant this app is (LAYOUT.md §1): name, bundle id, home and ports all follow from it. */
-const VARIANT = opt('--variant', 'release')
+/** `host[/path]` or a URL → `https://host/path/` (the wrapper wants the trailing slash). */
+function normalizeRemote(text) {
+  const raw = String(text).trim()
+  const u = new URL(/^[a-z]+:\/\//i.test(raw) ? raw : `https://${raw}`)
+  if (!u.pathname.endsWith('/')) u.pathname += '/'
+  return u.toString()
+}
+const REMOTE = opt('--remote') ? normalizeRemote(opt('--remote')) : null
+const REMOTE_SLUG = REMOTE ? new URL(REMOTE).host.replace(/[^a-z0-9]+/gi, '-').toLowerCase() : null
+/** The variant this app is (LAYOUT.md §1): name, bundle id, home and ports all follow from it. A thin client's is `remote-<host-slug>`. */
+const VARIANT = REMOTE ? `remote-${REMOTE_SLUG}` : opt('--variant', 'release')
 if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(VARIANT) || /-[0-9a-f]{6}$/.test(VARIANT)) throw new Error(`--variant ${VARIANT}: lowercase letters, digits and single dashes, not ending in six hex digits`)
 const ROOT_ID = 'io.github.taliesinb.deepsea'
 const BUNDLE_ID = `${ROOT_ID}.${VARIANT}`
-/** `release` → DeepSea; `canary` → DeepSea Canary (dsd's displayName). */
-const NAME = VARIANT === 'release' ? 'DeepSea' : `DeepSea ${VARIANT.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')}`
-/** Black whale for the release, like the shipped GUI; red for canaries unless told otherwise. */
-const GLYPH = opt('--glyph-color', VARIANT === 'release' ? '#000000' : '#D93025')
+/** `release` → DeepSea; `canary` → DeepSea Canary (dsd's displayName); a thin client: `--name`, else DeepSea <Host>. */
+const NAME = opt('--name') ?? (REMOTE
+  ? `DeepSea ${new URL(REMOTE).hostname.split('.')[0].replace(/^./, c => c.toUpperCase())}`
+  : VARIANT === 'release' ? 'DeepSea' : `DeepSea ${VARIANT.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')}`)
+if (!/^[A-Za-z0-9 ._-]+$/.test(NAME)) throw new Error(`--name ${JSON.stringify(NAME)}: letters, digits, spaces, . _ - only`)
+/** Black whale for the release, like the shipped GUI; blue for a thin client (never mistaken for a local one); red for canaries. */
+const GLYPH = opt('--glyph-color', REMOTE ? '#0090FF' : VARIANT === 'release' ? '#000000' : '#D93025')
 /** The default port block (LAYOUT.md §7: ten ports; dsh web +0, relay +3, proxy +4); variant.yml wins at run time. */
 const PORTS = Number(opt('--ports', VARIANT === 'release' ? '3200' : '3210'))
 const SIGN = opt('--sign', '-')
@@ -76,6 +99,29 @@ const WITH_OFFICE = args.includes('--with-office')
 const UPDATES = !args.includes('--no-update')
 /** GitHub owner/repo whose Releases the app polls for updates (Updater.swift); the channel is the variant. */
 const REPO_SLUG = opt('--update-repo', 'taliesinb/deepsea')
+/**
+ * Private release feeds (SignIn.swift). `--update-client-id ID`: a GitHub App with Contents: read
+ * on the release repo and Device Flow enabled — a public value; the updater offers "Sign in…" with
+ * it. `--update-client-secret-env VAR`: that app's client secret from $VAR, for the web sign-in
+ * (browser → Authorize → straight back into the app on a loopback callback; GitHub requires the
+ * secret for the exchange even with PKCE, and with the callback pinned to 127.0.0.1 it lets nobody
+ * obtain anyone's code) — without it the device flow (a code to type) is used. `--update-token-env
+ * VAR`: an optional built-in read-only token (a fine-grained PAT scoped to the repo). Only variable
+ * NAMES ever appear in command lines and logs.
+ */
+const fromEnv = (flag) => {
+  const v = opt(flag)
+  if (!v) return null
+  const value = process.env[v]
+  if (!value) throw new Error(`${flag} ${v}: that variable is empty`)
+  return value
+}
+const UPDATE_AUTH = {
+  ...(opt('--update-client-id') ? { clientId: opt('--update-client-id') } : {}),
+  ...(fromEnv('--update-client-secret-env') ? { clientSecret: fromEnv('--update-client-secret-env') } : {}),
+  ...(fromEnv('--update-token-env') ? { token: fromEnv('--update-token-env') } : {}),
+  ...(opt('--update-oauth-base') ? { oauthBase: opt('--update-oauth-base') } : {}),
+}
 
 const wrapper = await import(pathToFileURL(join(MACOS, 'build.mjs')).href)
 
@@ -93,14 +139,14 @@ const readJson = async p => JSON.parse(await readFile(p, 'utf8'))
 async function version() {
   const build = Number(opt('--build', '0'))
   if (!Number.isSafeInteger(build) || build < 0) throw new Error(`--build must be a non-negative integer, got ${opt('--build')}`)
-  const stage = await readJson(join(STAGE, 'package.json'))
+  const stage = REMOTE ? null : await readJson(join(STAGE, 'package.json'))
   const { stdout } = await execFileAsync('git', ['rev-parse', '--short', 'HEAD'], { cwd: REPO })
   let short = opt('--version')
   if (!short) {
     const m = /^(\d{4})(\d{2})(\d{2})(\d{2})$/.exec(String(build))
     short = m ? `${Number(m[1])}.${Number(m[2])}.${Number(m[3])}${Number(m[4]) > 1 ? `.${Number(m[4])}` : ''}` : '0.0.0'
   }
-  return { build, short, full: `${short} (build ${build}, harness ${stage.version}, ${stdout.trim()})` }
+  return { build, short, full: stage ? `${short} (build ${build}, harness ${stage.version}, ${stdout.trim()})` : `${short} (build ${build}, ${stdout.trim()})` }
 }
 
 /** Every Mach-O inside the resources that must carry a signature of its own. */
@@ -249,25 +295,35 @@ async function setVolumeIconFlag(mount) {
 }
 
 async function main() {
-  const stagePkg = await readJson(join(STAGE, 'package.json'))
-  const nodeInfo = await readJson(join(NODE_DIR, 'current.json'))
+  const stagePkg = REMOTE ? null : await readJson(join(STAGE, 'package.json'))
+  const nodeInfo = REMOTE ? null : await readJson(join(NODE_DIR, 'current.json'))
   const ver = await version()
-  if (!(await stat(join(RELAY_DIR, 'relay.mjs')).catch(() => null))) throw new Error(`no relay at ${RELAY_DIR} (apps/relay is topic/relay; build from integration/base, or pass --relay DIR)`)
+  if (!REMOTE && !(await stat(join(RELAY_DIR, 'relay.mjs')).catch(() => null))) throw new Error(`no relay at ${RELAY_DIR} (apps/relay is topic/relay; build from integration/base, or pass --relay DIR)`)
   const app = join(OUT, `${NAME}.app`)
   const contents = join(app, 'Contents')
   const resources = join(contents, 'Resources')
-  const plugins = stagePkg.dshBundle.plugins
-  log(`building ${app} (${ver.full}, node ${nodeInfo.version}, ${plugins.length} plugins)`)
+  const plugins = stagePkg?.dshBundle.plugins ?? []
+  log(REMOTE ? `building ${app} (thin client for ${REMOTE}, ${ver.full})` : `building ${app} (${ver.full}, node ${nodeInfo.version}, ${plugins.length} plugins)`)
 
   // The wrapper exactly as dsd builds it for this variant (compiled into the shared cache), then the runtime inside.
   await rm(app, { recursive: true, force: true })
   await mkdir(OUT, { recursive: true })
   const built = wrapper.build({
-    out: OUT, name: NAME, bundleId: BUNDLE_ID, glyph: GLYPH_SVG,
-    glyphColor: GLYPH, url: `http://127.0.0.1:${PORTS + 3}/`, fallbackUrl: `http://127.0.0.1:${PORTS + 3}/`,
+    out: OUT, name: NAME, bundleId: BUNDLE_ID, glyph: GLYPH_SVG, glyphColor: GLYPH,
+    ...(REMOTE ? { url: REMOTE } : { url: `http://127.0.0.1:${PORTS + 3}/`, fallbackUrl: `http://127.0.0.1:${PORTS + 3}/` }),
     version: ver.short, build: String(ver.build), cache: opt('--cache', join(process.env.HOME ?? '', '.deepsea', '_builds')),
   })
   const icns = join(resources, 'AppIcon.icns')
+  const update = UPDATES ? { update: { repo: REPO_SLUG, channel: VARIANT, intervalHours: 6, feed: opt('--update-feed') ?? null, ...UPDATE_AUTH } } : {}
+
+  if (REMOTE) {
+    // A thin client: the wrapper's own config plus the update block, nothing else inside.
+    const config = { name: NAME, url: REMOTE, glyphColor: GLYPH, ...update }
+    await writeFile(join(resources, 'deepsea-app.json'), JSON.stringify(config, null, 2) + '\n')
+    await writeFile(join(resources, 'deepsea-release.json'), JSON.stringify({ variant: VARIANT, build: ver.build, version: ver.short, remote: REMOTE, builtAt: new Date().toISOString() }, null, 2) + '\n')
+    await finish({ app, contents, resources, icns, ver })
+    return
+  }
 
   log('copying node')
   await mkdir(join(resources, 'node', 'bin'), { recursive: true })
@@ -310,13 +366,18 @@ async function main() {
       homeSetup: 'home-setup.mjs',
       proxy: plugins.some(p => p.name === '@deepsea/tailscale'),
     },
-    ...(UPDATES ? { update: { repo: REPO_SLUG, channel: VARIANT, intervalHours: 6, feed: opt('--update-feed') ?? null } } : {}),
+    ...update,
   }
   await writeFile(join(resources, 'deepsea-app.json'), JSON.stringify(config, null, 2) + '\n')
   await writeFile(join(resources, 'deepsea-release.json'), JSON.stringify({
     variant: VARIANT, build: ver.build, version: ver.short, harness: stagePkg.version, node: nodeInfo.version, plugins, builtAt: new Date().toISOString(),
   }, null, 2) + '\n')
 
+  await finish({ app, contents, resources, icns, ver })
+}
+
+/** Shared tail of both shapes: Info.plist touches, signing, the DMG. */
+async function finish({ app, contents, resources, icns, ver }) {
   // One instance per variant (its home and ports are one), and the full version string for Get Info.
   let plist = await readFile(join(contents, 'Info.plist'), 'utf8')
   plist = plist.replace('<key>NSHighResolutionCapable</key>',
