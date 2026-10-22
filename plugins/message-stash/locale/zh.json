@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "消息暂存",
+    "description": "Ctrl+S 暂存草稿，Ctrl+R 取回暂存的消息；连按两次 Ctrl+S 打开暂存列表。"
+  }
+}
