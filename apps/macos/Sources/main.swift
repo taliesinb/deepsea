@@ -44,6 +44,10 @@
 //   { "name": "DeepSea", "url": "https://<node>.example.ts.net/deepsea/",
 //     "fallbackUrl": "http://127.0.0.1:3203/", "tokenFile": "<home>/plugins/tailscale/state.json",
 //     "glyphColor": "#30A46C" }
+// A bundled build (apps/macos/bundle) adds `embedded` — the app runs the variant's
+// relay and server from its own Resources (EmbeddedServer.swift); url, fallbackUrl
+// and tokenFile are then derived from the variant at launch — and `update`, the
+// GitHub Releases feed it checks (Updater.swift).
 //
 // Launch flags (test builds started by dsd; an installed app gets none):
 //   --url <url>             load this URL instead of the configured entry points
@@ -62,6 +66,10 @@ struct AppConfig: Decodable {
     var fallbackUrl: String?
     var tokenFile: String?
     var glyphColor: String?
+    /// Bundled build: run the variant's relay and server from Contents/Resources (EmbeddedServer.swift).
+    var embedded: EmbeddedSpec?
+    /// Bundled build: check GitHub Releases for newer builds (Updater.swift).
+    var update: UpdateSpec?
 
     /// Product title the shipped client uses for the wordmark and `document.title`.
     static let genericProductTitle = "DSH Local Build"
@@ -80,7 +88,7 @@ struct AppConfig: Decodable {
 
     /// The bundle's configuration, with the launch options applied (`--url` replaces every entry point).
     static func load(_ options: LaunchOptions) -> AppConfig {
-        var config = AppConfig(name: "DeepSea", url: "http://127.0.0.1:3200/", fallbackUrl: nil, tokenFile: nil, glyphColor: nil)
+        var config = AppConfig(name: "DeepSea", url: "http://127.0.0.1:3200/", fallbackUrl: nil, tokenFile: nil, glyphColor: nil, embedded: nil, update: nil)
         if let url = Bundle.main.url(forResource: "deepsea-app", withExtension: "json"),
            let data = try? Data(contentsOf: url),
            let decoded = try? JSONDecoder().decode(AppConfig.self, from: data) {
@@ -92,6 +100,16 @@ struct AppConfig: Decodable {
             config.tokenFile = nil
         }
         return config
+    }
+}
+
+extension AppConfig {
+    /// A bundled build after home-setup: every entry point is the relay on this machine, tokened from its state file.
+    mutating func adopt(_ server: EmbeddedServer) {
+        guard let relay = server.relayURL, let token = server.tokenFile else { return }
+        url = relay.absoluteString
+        fallbackUrl = relay.absoluteString
+        tokenFile = token.path
     }
 }
 
@@ -242,6 +260,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var lastForwardAlert: [Int: Date] = [:]
     var titleObservation: NSKeyValueObservation?
     var showingOfflinePage = false
+    /// Bundled build: the relay and server this process runs, and the update checker.
+    var embedded: EmbeddedServer?
+    var embeddedRestarts = 0
+    var embeddedSetupError: String?
+    var updater: Updater?
     /// A page (not the offline page) has finished loading at least once.
     var pageLoaded = false
     var retryTimer: Timer?
@@ -258,6 +281,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NSApp.setActivationPolicy(options.hidden ? .accessory : .regular)
         appendLog("launch: \(Bundle.main.bundlePath) url \(config.url)\(options.ephemeral ? " ephemeral" : "")\(options.hidden ? " hidden" : "")\(options.automation.map { " automation \($0)" } ?? "")")
         installSnapshotSignal()
+        if let spec = config.embedded, options.url == nil {
+            let server = EmbeddedServer(spec: spec, resources: Bundle.main.resourceURL!, log: { [weak self] line in self?.appendLog(line) })
+            do {
+                try server.prepareHome()
+                config.adopt(server)
+                server.onExit = { [weak self] status, tail in
+                    guard let self else { return }
+                    let detail = tail.isEmpty ? "" : " Last output: " + tail.suffix(4).joined(separator: " | ")
+                    self.showOffline(title: "\(self.config.name)'s relay exited", reason: "Status \(status). Log: \(server.relayLog?.path ?? "")." + detail, url: server.relayLog, autoRetry: true)
+                }
+                embedded = server
+            } catch {
+                appendLog("embedded: \(error.localizedDescription)")
+                embeddedSetupError = error.localizedDescription
+            }
+        }
+        if let spec = config.update {
+            let updater = Updater(spec: spec, appName: config.name, log: { [weak self] line in self?.appendLog(line) })
+            updater.schedule()
+            self.updater = updater
+        }
         scope = Scope(urls: [remoteURL] + (fallbackBase.map { [$0] } ?? []))
         forwarder = PortForwarder(endpointBase: { [weak self] in self?.currentMountBase() }, log: { [weak self] line in self?.appendLog(line) })
         buildMenu()
@@ -754,6 +798,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func applicationWillTerminate(_ notification: Notification) {
         forwarder.closeAll()
         automation?.stop()
+        embedded?.stop()
+    }
+
+    @objc func checkForUpdates() { updater?.checkNow() }
+
+    /// AppKit asks before showing the menu: the update item is live only with a feed configured.
+    @objc func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(checkForUpdates) { return updater != nil }
+        return true
+    }
+
+    /// `deepsea-release.json` written by assemble.mjs, as one line for the About panel.
+    func releaseSummary() -> String? {
+        guard let url = Bundle.main.url(forResource: "deepsea-release", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let plugins = (json["plugins"] as? [[String: Any]])?.count ?? 0
+        return "build \(json["build"] ?? "?") · harness \(json["harness"] ?? "?") · node \(json["node"] ?? "?") · \(plugins) plugins"
     }
 
     /// Whether the server is another machine, so its loopback links need forwarding: the page comes
@@ -809,6 +871,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     @objc func connect() {
         if connecting { return }
+        if let error = embeddedSetupError {
+            showOffline(title: "\(config.name) could not set up its home", reason: error, autoRetry: false)
+            return
+        }
+        if let server = embedded, server.process?.isRunning != true, !server.relayListening() {
+            embeddedRestarts += 1
+            if embeddedRestarts > 1 { appendLog("embedded: relay start #\(embeddedRestarts)") }
+            server.start()
+        }
         connecting = true
         retryTimer?.invalidate()
         // A variant without a tailnet URL has only its relay on this machine: log in through it at once.
@@ -1309,7 +1380,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     @objc func showAbout() {
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: config.name,
-            .credits: NSAttributedString(string: config.url),
+            .credits: NSAttributedString(string: releaseSummary().map { "\($0)\n\(config.url)" } ?? config.url),
         ])
     }
 
@@ -1324,6 +1395,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         // The standard macOS chord. Safari cannot give ⌘, to a page (it is Safari's own Settings…);
         // here the menu bar is ours, so it drives the GUI's Settings panel instead.
         app.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        if config.embedded != nil || config.update != nil {
+            // A bundled build always lists the item; without a feed (a throwaway build) it is disabled.
+            let item = app.addItem(withTitle: config.update != nil ? "Check for Updates…" : "Check for Updates… (off in this build)", action: #selector(checkForUpdates), keyEquivalent: "u")
+            item.keyEquivalentModifierMask = [.command, .shift]
+            item.target = self
+        }
         app.addItem(.separator())
         app.addItem(withTitle: "Hide \(config.name)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = app.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")

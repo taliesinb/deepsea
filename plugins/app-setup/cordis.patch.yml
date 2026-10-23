@@ -1,0 +1,5 @@
+# Bundle patch: installed into the bundled macOS app's profile (apps/macos/bundle). Both halves
+# register nothing unless the app's DEEPSEA_APP_BUNDLE environment is present.
+- insert:
+    - id: deepsea-app-setup
+      name: "@deepsea/app-setup"

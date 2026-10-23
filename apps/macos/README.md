@@ -17,7 +17,11 @@ position, preferences and logs.
 | `Resources/desktop-branding.js` | the page-side identity: wordmark, whale colour, window title |
 | `Resources/element-inspector.js` | `__DEEPSEA_INSPECT__`: describe or pick an element (selector, rect, styles, slots, React chain, accessibility) |
 | `ServerHost/main.swift` | the server host (`DeepSea[ <V>] Server.app`): spawns the relay and forwards signals, so macOS charges agents' privacy prompts to the variant (below) |
+| `Sources/EmbeddedServer.swift` | bundled build: starts the variant's relay from the bundle, stops it on quit (bundle/README.md) |
+| `Sources/Updater.swift` | bundled build: in-app updates from GitHub Releases (bundle/README.md) |
 | `Tools/make-icon.swift` | renders the glyph on a macOS tile, every iconset size |
+| `Tools/make-dmg-background.swift`, `Tools/make-dmg-icon.swift` | the DMG window's backdrop and the disk-image icon |
+| `bundle/` | the self-contained app and its DMG: Node, the harness and plugins inside the bundle; see [bundle/README.md](bundle/README.md) |
 | `Tools/ax-drive.swift` | drives one app's menus by pid through Accessibility (manual tests) |
 | `build.mjs` | compiles and assembles one variant's app, and installs its server host |
 
@@ -39,6 +43,15 @@ per variant. The bundle carries `Contents/Resources/deepsea-app.json`: the
 name, the URL, an optional fallback URL with the token file whose standing
 token it uses, and the glyph colour. It is signed ad hoc, with the bundle id
 as its identifier.
+
+## The bundled app
+
+A build of this wrapper that carries its variant's runtime inside — Node, the
+harness and plugin closure, the relay — so a DMG is all a person needs:
+[bundle/README.md](bundle/README.md). Its `deepsea-app.json` adds an
+`embedded` block (what EmbeddedServer.swift runs) and an `update` block (the
+release feed); the home, profile, ports and logs are the variant's own, as
+`dsd` would make them.
 
 ## The server host
 
