@@ -68,6 +68,10 @@ const TOKEN_QUERY = 'token'
 /** Public shell files DSH itself serves unauthenticated; browsers fetch a manifest without cookies. */
 const PUBLIC_PATHS = new Set(['/manifest.webmanifest', '/favicon.svg'])
 const UPSTREAM_COOKIE_TTL_MS = 6 * 60 * 60 * 1000
+/** A request for an unknown tailnet name re-reads this node's names at most this often (it never supplies one). */
+const HOST_REFRESH_MIN_MS = 5_000
+/** How long such a request waits for the re-read before the fence decides. */
+const HOST_REFRESH_WAIT_MS = 5_000
 const MAX_REQUEST_BYTES = 64 * 1024 * 1024
 /** Runs before any other head script: `https://node/deepsea` → `https://node/deepsea/`. */
 const TRAILING_SLASH_GUARD = '<script data-deepsea-tailscale>(function(){var p=location.pathname;'
@@ -156,6 +160,12 @@ export function canonicalAuthority(value, scheme = 'https') {
  * @param {Set<string>} allowedHosts canonical authorities (see {@link canonicalAuthority})
  * @returns {{ status: number, message: string } | undefined}
  */
+/** Whether a Host names a Tailscale MagicDNS name (`<node>.<tailnet>.ts.net`, any port). */
+export function isTailnetHost(host) {
+  const name = String(host ?? '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '')
+  return /^[a-z0-9-]+(?:\.[a-z0-9-]+)+\.ts\.net$/.test(name)
+}
+
 export function originRejection(req, allowedHosts) {
   const scheme = requestIsHttps(req) ? 'https' : 'http'
   const host = canonicalAuthority(req.headers.host, scheme)
@@ -320,6 +330,27 @@ export async function startProxy(spec) {
     }
     return hosts
   }
+  // A tailnet switch or rename changes the node's name between periodic re-reads: a request
+  // for a tailnet name the fence does not know asks for one re-read (single-flight, rate-limited)
+  // and is fenced again with whatever Tailscale itself then reports.
+  let hostsRefresh
+  let hostsRefreshedAt = 0
+  const refreshHostsOnce = () => {
+    if (hostsRefresh !== undefined) return hostsRefresh
+    if (Date.now() - hostsRefreshedAt < HOST_REFRESH_MIN_MS) return Promise.resolve()
+    hostsRefreshedAt = Date.now()
+    let timer
+    hostsRefresh = Promise.race([
+      Promise.resolve().then(() => spec.refreshHosts()),
+      new Promise(resolve => { timer = setTimeout(resolve, HOST_REFRESH_WAIT_MS); timer.unref?.() }),
+    ]).catch((error) => {
+      spec.warn?.(`tailscale: re-reading this node's names failed: ${String(error?.message ?? error)}`)
+    }).finally(() => { clearTimeout(timer); hostsRefresh = undefined })
+    return hostsRefresh
+  }
+  /** Whether the fence would refuse this request's tailnet name, so a re-read could still admit it. */
+  const unknownTailnetHost = req => spec.refreshHosts !== undefined && isTailnetHost(req.headers.host) && originRejection(req, allowedHosts())?.status === 421
+
   let upstreamCookie = await bootstrapUpstreamCookie(spec.connection, backendAuthority)
   let upstreamCookieAt = Date.now()
   let refreshing
@@ -375,6 +406,11 @@ export async function startProxy(spec) {
   const setCookieHeader = (req, value, maxAge) => `${spec.cookieName}=${value}; Max-Age=${String(maxAge)}; Path=${viaServe(req) ? `${mount}/` : '/'}; HttpOnly; SameSite=Lax${requestIsHttps(req) ? '; Secure' : ''}`
 
   const onRequest = (req, res) => {
+    if (!unknownTailnetHost(req)) { handleRequest(req, res); return }
+    void refreshHostsOnce().then(() => handleRequest(req, res))
+  }
+
+  const handleRequest = (req, res) => {
     const path = pathnameOf(req.url)
     const method = req.method ?? 'GET'
     const isControl = path === spec.controlPrefix || path.startsWith(`${spec.controlPrefix}/`)
@@ -491,6 +527,10 @@ export async function startProxy(spec) {
   server.on('connection', track)
   server.on('upgrade', (req, socket, head) => {
     track(socket)
+    if (!unknownTailnetHost(req)) { handleUpgrade(req, socket, head); return }
+    void refreshHostsOnce().then(() => handleUpgrade(req, socket, head))
+  })
+  const handleUpgrade = (req, socket, head) => {
     const path = pathnameOf(req.url)
     const fence = originRejection(req, allowedHosts())
     if (fence !== undefined) {
@@ -539,7 +579,7 @@ export async function startProxy(spec) {
     up.on('error', () => socket.destroy())
     socket.on('error', () => up.destroy())
     up.end()
-  })
+  }
 
   await new Promise((resolve, reject) => {
     server.once('error', reject)
