@@ -3,9 +3,11 @@
 //
 // What it does beyond loading a URL:
 //   - picks the entry point on every launch: the configured URL when it answers
-//     (any HTTP status: an always-on relay answers 503 while the server boots),
+//     (any HTTP status: an always-on relay answers 503 while the server boots;
+//     but 421, the variant refusing that tailnet name, counts as no answer),
 //     else the fallback URL with the standing token from the token file, else
-//     an offline page that retries;
+//     an offline page that retries; a page load the tailnet address answers
+//     with 421 goes to the fallback URL too;
 //   - sets `globalThis.__DSH_TRANSPORT__ = { ownsHost: true }` at document
 //     start so the shell treats the page as the operator's machine
 //     (`ctx.connection.isLoopback`: Settings persist on the host);
@@ -783,15 +785,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     // MARK: entry point selection
 
-    /// Probe the tailnet URL; any HTTP answer (even the relay's 503 splash) means "reachable".
+    /// Probe the tailnet URL; any HTTP answer (even the relay's 503 splash) means "reachable",
+    /// except 421 Misdirected Request: something answers at that name, but not this variant (its
+    /// Tailscale fence knows another name for this node, e.g. just after a tailnet switch).
     func probe(_ url: URL, completion: @escaping (Bool) -> Void) {
         var request = URLRequest(url: url)
         request.httpMethod = "HEAD"
         request.timeoutInterval = 4
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let session = URLSession(configuration: .ephemeral)
-        session.dataTask(with: request) { _, response, _ in
-            DispatchQueue.main.async { completion(response is HTTPURLResponse) }
+        session.dataTask(with: request) { [weak self] _, response, _ in
+            let http = response as? HTTPURLResponse
+            DispatchQueue.main.async {
+                if http?.statusCode == 421 { self?.appendLog("[probe] HTTP 421 Misdirected Request: \(url.absoluteString)") }
+                completion(http != nil && http?.statusCode != 421)
+            }
             session.finishTasksAndInvalidate()
         }.resume()
     }
@@ -1033,6 +1041,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let url = http.url ?? webView.url ?? remoteURL
             let phrase = HTTPURLResponse.localizedString(forStatusCode: http.statusCode).capitalized
             appendLog("[navigation] HTTP \(http.statusCode) \(phrase): \(url.absoluteString)")
+            // 421 at the tailnet address: the variant does not serve that name (yet); its local
+            // relay serves it regardless, so go there instead of showing an error.
+            if http.statusCode == 421, url.host == remoteURL.host, url.port == remoteURL.port, let fallback = fallbackURL() {
+                decisionHandler(.cancel)
+                appendLog("[navigation] the tailnet address refused this variant; loading the local relay")
+                DispatchQueue.main.async { [weak self] in
+                    self?.showingOfflinePage = false
+                    self?.webView.load(URLRequest(url: fallback))
+                }
+                return
+            }
             decisionHandler(.cancel)
             DispatchQueue.main.async { [weak self] in
                 self?.showOffline(

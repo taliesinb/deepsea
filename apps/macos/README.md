@@ -40,6 +40,13 @@ name, the URL, an optional fallback URL with the token file whose standing
 token it uses, and the glyph colour. It is signed ad hoc, with the bundle id
 as its identifier.
 
+The app loads the URL when it answers at all (the relay's 503 while the
+server boots counts), else the fallback URL, else an offline page that
+retries. A 421 from the URL (the variant's Tailscale fence refusing that
+name, as just after a tailnet switch) counts as no answer, at launch and on
+any later page load, so the window goes to the local relay rather than an
+error page; `[probe]` and `[navigation]` lines in the app log say so.
+
 ## The server host
 
 `DeepSea[ <V>] Server.app` (bundle id `<variant name>.server`, background
