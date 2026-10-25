@@ -121,7 +121,8 @@ attached `Origin` must equal that Host, else 403. Then exactly one of:
    request looks like a Serve peer (loopback socket, the rightmost
    `x-forwarded-for` in `100.64.0.0/10` or `fd7a:115c:a1e0::/48`), and the
    lower-cased login is in the allowed list **or is this node's own login**
-   (`tailscale status --json`; a tagged node has none). Serve injects the
+   (`tailscale status --json`, re-read when such a login is refused; a
+   tagged node has none). Serve injects the
    node's login for the node's requests to itself: the DeepSea app and a
    browser on this Mac get in with no token.
 2. **The token.** `GET /?token=<standing token>` (the QR code) sets the
@@ -334,8 +335,21 @@ curl -H 'Host: node.example.ts.net' -H 'X-Forwarded-Proto: https' \
 
 ## Limits
 
-- Tailscale facts (the node's name, own login and addresses) are read at start
-  and then every minute until known, every ten minutes after; until then the
-  fence knows no tailnet name and tailnet requests get 421.
+- Tailscale facts (the node's name, own login and addresses) are read at start,
+  then every 15 seconds until Tailscale runs and every two minutes while it
+  does; until the name is known the fence knows no tailnet name and tailnet
+  requests get 421. A request for a `*.ts.net` name the fence does not know (a
+  tailnet switch, a renamed node), or one whose Serve-vouched login admission
+  refuses (Tailscale started after the server, a relogin), first re-reads them,
+  at most every five seconds and waiting at most five: the request never
+  supplies the name or the login, `tailscale status` does. A change of name is
+  logged (`this node is now …`). A login the node moved away from stays
+  admitted until the next re-read: two minutes at most, or the new login's
+  first request.
+- While the facts come from a Tailscale that was not running at the last read
+  (stopped, still starting), a refused tailnet login gets 401 "Tailscale is
+  still starting on this machine. Try again in a few seconds." with
+  `Retry-After: 5` (the HTML page reloads itself then); every other refusal
+  says "Scan the QR code in Settings ▸ Tailscale."
 - The token is a credential: whoever holds it drives an agent that runs
   commands on this machine.

@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { createServer, request as httpRequest } from 'node:http'
 import { after, before, describe, it } from 'node:test'
-import { bootstrapUpstreamCookie, canonicalAuthority, cookieValueFor, isOperatorRequest, isSelfRequest, originRejection, startProxy } from '../proxy.mjs'
+import { bearsIdentity, bootstrapUpstreamCookie, canonicalAuthority, cookieValueFor, isOperatorRequest, isSelfRequest, isTailnetHost, originRejection, startProxy } from '../proxy.mjs'
 
 const LAUNCH_TOKEN = 'launch-token-xyz'
 const DSH_COOKIE = 'dsh-auth-abc=v1.payload.sig'
@@ -383,5 +383,151 @@ describe('websocket', () => {
     assert.match(text, /x-deepsea-forward-error: reserved/i)
     assert.match(text, /content-length: 0/i)
     assert.doesNotMatch(text, /reserved\n$/)
+  })
+})
+
+describe('a tailnet switch (the node\'s name changes between re-reads)', () => {
+  it('recognises MagicDNS names only', () => {
+    assert.equal(isTailnetHost('node.example.ts.net'), true)
+    assert.equal(isTailnetHost('Node.Example.ts.net:443'), true)
+    assert.equal(isTailnetHost('ts.net'), false)
+    assert.equal(isTailnetHost('evil.example'), false)
+    assert.equal(isTailnetHost('node.example.ts.net.evil.example'), false)
+    assert.equal(isTailnetHost(undefined), false)
+  })
+
+  it('re-reads the names once for an unknown tailnet name, admits it if Tailscale now reports it, else 421', async () => {
+    let names = ['old.example.ts.net']
+    let next = names
+    let reads = 0
+    const switched = await startProxy({
+      listenHost: '127.0.0.1', listenPort: 0, backendHost: '127.0.0.1', backendPort,
+      connection: { authenticatedUrl: base => `${base}/?token=${LAUNCH_TOKEN}` },
+      token: () => token, allowedUsers: () => allowedUsers, selfLogin: () => selfLogin, selfAddresses: () => [SELF_ADDRESS],
+      identityOperators: () => false,
+      publicHosts: () => names,
+      refreshNode: async () => { reads++; names = next },
+      cookieName: 'deepsea-tailscale-switch', controlPrefix: '/deepsea-tailscale', servePath: '/deepsea-lab',
+    })
+    const get = host => new Promise((resolve, reject) => {
+      const req = httpRequest({ hostname: '127.0.0.1', port: switched.port, path: '/api/whoami', headers: { ...servePeer('alice@example.com'), host, 'x-forwarded-host': host } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)) })
+      req.on('error', reject)
+      req.end()
+    })
+    try {
+      assert.equal(await get('old.example.ts.net'), 200)
+      assert.equal(reads, 0, 'a known name needs no re-read')
+      assert.equal(await get('evil.example'), 421)
+      assert.equal(reads, 0, 'a name outside ts.net never triggers a re-read')
+      next = ['new.example.ts.net']
+      assert.equal(await get('new.example.ts.net'), 200, 'the switch is seen on the first request')
+      assert.equal(reads, 1)
+      assert.equal(await get('old.example.ts.net'), 421, 'the old name is gone')
+      assert.equal(await get('other.example.ts.net'), 421)
+      assert.equal(reads, 1, 'unknown names re-read at most every few seconds')
+    } finally { await switched.close() }
+  })
+})
+
+describe('Tailscale started after the proxy (this node\'s own login not known yet)', () => {
+  /** A proxy whose node facts start empty and not ready; `reread` is what a re-read of `tailscale status` finds. */
+  const startLate = async (reread) => {
+    const node = { selfLogin: undefined, ready: false, reads: 0 }
+    const late = await startProxy({
+      listenHost: '127.0.0.1', listenPort: 0, backendHost: '127.0.0.1', backendPort,
+      connection: { authenticatedUrl: base => `${base}/?token=${LAUNCH_TOKEN}` },
+      token: () => token, allowedUsers: () => [], selfLogin: () => node.selfLogin, selfAddresses: () => [],
+      identityOperators: () => true,
+      publicHosts: () => ['node.example.ts.net'],
+      refreshNode: async () => { node.reads++; Object.assign(node, reread) },
+      nodeReady: () => node.ready,
+      cookieName: 'deepsea-tailscale-late', controlPrefix: '/deepsea-tailscale', servePath: '/deepsea-lab',
+    })
+    const get = (login, { path = '/api/whoami', headers = {} } = {}) => new Promise((resolve, reject) => {
+      const req = httpRequest({ hostname: '127.0.0.1', port: late.port, path, headers: { ...servePeer(login), ...headers } }, (res) => {
+        let body = ''
+        res.on('data', chunk => { body += chunk })
+        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }))
+      })
+      req.on('error', reject)
+      req.end()
+    })
+    return { node, late, get }
+  }
+
+  it('bearsIdentity: a login Serve vouches for, allowed or not', () => {
+    const fake = (headers, remoteAddress = '127.0.0.1') => ({ headers, socket: { remoteAddress } })
+    assert.equal(bearsIdentity(fake({ 'x-forwarded-for': '100.101.102.103', 'tailscale-user-login': 'bob@example.com' })), true)
+    assert.equal(bearsIdentity(fake({ 'x-forwarded-for': '100.101.102.103' })), false, 'no login')
+    assert.equal(bearsIdentity(fake({ 'x-forwarded-for': '192.0.2.5', 'tailscale-user-login': 'bob@example.com' })), false, 'not from a tailnet address')
+    assert.equal(bearsIdentity(fake({ 'x-forwarded-for': '100.101.102.103', 'tailscale-user-login': 'bob@example.com' }, '192.0.2.5')), false, 'not via Serve')
+  })
+
+  it('the owner\'s first request re-reads the node and gets in; a stranger never does', async () => {
+    const { node, late, get } = await startLate({ selfLogin: 'user@example.com', ready: true })
+    try {
+      const owner = await get('User@Example.com')
+      assert.equal(owner.status, 200, owner.body)
+      assert.equal(JSON.parse(owner.body).headers['x-deepsea-tailscale-login'], 'user@example.com')
+      assert.equal(node.reads, 1)
+      assert.equal((await get('User@Example.com')).status, 200)
+      assert.equal(node.reads, 1, 'a known login needs no re-read')
+      const stranger = await get('mallory@example.com')
+      assert.equal(stranger.status, 401)
+      assert.equal(stranger.body, 'unauthorized: Scan the QR code in Settings ▸ Tailscale.\n')
+      assert.equal(stranger.headers['retry-after'], undefined)
+      assert.equal(node.reads, 1, 'refused logins re-read at most every few seconds')
+    } finally { await late.close() }
+  })
+
+  it('while Tailscale is still starting, a tailnet login is told to wait, and the page retries by itself', async () => {
+    const { node, late, get } = await startLate({})
+    try {
+      const text = await get('user@example.com')
+      assert.equal(text.status, 401)
+      assert.equal(text.body, 'unauthorized: Tailscale is still starting on this machine. Try again in a few seconds.\n')
+      assert.equal(text.headers['retry-after'], '5')
+      assert.equal(node.reads, 1)
+      const page = await get('user@example.com', { path: '/', headers: { accept: 'text/html' } })
+      assert.equal(page.status, 401)
+      assert.match(page.body, /<meta http-equiv="refresh" content="5">/)
+      assert.match(page.body, /still starting/)
+      const anonymous = await get(undefined)
+      assert.equal(anonymous.status, 401)
+      assert.match(anonymous.body, /Scan the QR code/, 'no tailnet login: the QR flow, as ever')
+      node.selfLogin = 'user@example.com'
+      node.ready = true
+      assert.equal((await get('user@example.com')).status, 200, 'once the facts arrive (the periodic re-read)')
+    } finally { await late.close() }
+  })
+
+  it('a cookie holder or an anonymous request never triggers a re-read', async () => {
+    const { node, late, get } = await startLate({ selfLogin: 'user@example.com', ready: true })
+    try {
+      const cookie = await get('guest@example.com', { headers: { cookie: `deepsea-tailscale-late=${cookieValueFor(token)}` } })
+      assert.equal(cookie.status, 200)
+      assert.equal((await get(undefined)).status, 401)
+      assert.equal((await get('user@example.com', { headers: { 'x-forwarded-for': '192.0.2.5' } })).status, 401, 'a login not vouched for by Serve')
+      assert.equal(node.reads, 0)
+    } finally { await late.close() }
+  })
+
+  it('an upgrade re-reads too', async () => {
+    const { node, late } = await startLate({ selfLogin: 'user@example.com', ready: true })
+    const { connect } = await import('node:net')
+    try {
+      const text = await new Promise((resolve) => {
+        const socket = connect(late.port, '127.0.0.1', () => {
+          socket.write('GET /api/remote.mux HTTP/1.1\r\nHost: node.example.ts.net\r\nX-Forwarded-Proto: https\r\nX-Forwarded-For: 100.101.102.103\r\nTailscale-User-Login: user@example.com\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: abc\r\nSec-WebSocket-Version: 13\r\n\r\n')
+        })
+        let received = ''
+        socket.on('data', (chunk) => {
+          received += chunk.toString()
+          if (received.includes('hello-from-dsh') || /^HTTP\/1\.1 4\d\d/.test(received)) { socket.destroy(); resolve(received) }
+        })
+      })
+      assert.match(text, /^HTTP\/1\.1 101/)
+      assert.equal(node.reads, 1)
+    } finally { await late.close() }
   })
 })

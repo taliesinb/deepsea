@@ -192,7 +192,10 @@ export function apply(ctx, config) {
   let lastRoute
   const routeStatus = async () => {
     const route = await serve.status()
-    if (route.dnsName !== undefined) lastRoute = route
+    if (route.dnsName !== undefined) {
+      if (lastRoute?.dnsName !== undefined && lastRoute.dnsName !== route.dnsName) log(`host-tailscale: this node is now ${route.dnsName} (was ${lastRoute.dnsName})`)
+      lastRoute = route
+    }
     return route
   }
   const publicHosts = () => lastRoute?.dnsName === undefined ? [] : [lastRoute.dnsName, `${lastRoute.dnsName}:${String(SERVE_PORT)}`]
@@ -214,6 +217,11 @@ export function apply(ctx, config) {
         selfAddresses: () => lastRoute?.selfAddresses ?? [],
         identityOperators: () => config.identityOperators,
         publicHosts,
+        // A request for a tailnet name not (yet) known, or a tailnet login admission refuses,
+        // re-reads this node's facts first; until they come from a running Tailscale, such a
+        // login is told to wait rather than to scan the QR code.
+        refreshNode: () => refreshFacts(),
+        nodeReady: () => lastRoute?.backendState === 'Running',
         cookieName: settings.cookieName,
         controlPrefix: CONTROL_CHANNEL,
         servePath: settings.servePath ?? '/',

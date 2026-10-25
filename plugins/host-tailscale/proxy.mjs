@@ -66,6 +66,14 @@ const DROPPED_REQUEST_HEADERS = new Set([
 ])
 const TOKEN_QUERY = 'token'
 const UPSTREAM_COOKIE_TTL_MS = 6 * 60 * 60 * 1000
+/** A request for an unknown tailnet name, or one whose login is refused, re-reads this node's facts at most this often (it never supplies them). */
+const NODE_REFRESH_MIN_MS = 5_000
+/** How long such a request waits for the re-read before the fence or admission decides. */
+const NODE_REFRESH_WAIT_MS = 5_000
+/** The 401 for a tailnet login while this node's own facts come from a Tailscale that is not running yet. */
+const STARTING_MESSAGE = 'Tailscale is still starting on this machine. Try again in a few seconds.'
+const SIGN_IN_MESSAGE = 'Scan the QR code in Settings ▸ Tailscale.'
+const STARTING_RETRY_S = 5
 const MAX_REQUEST_BYTES = 64 * 1024 * 1024
 /** Runs before any other head script: `https://node/deepsea` → `https://node/deepsea/`. */
 const TRAILING_SLASH_GUARD = '<script data-deepsea-tailscale>(function(){var p=location.pathname;'
@@ -95,13 +103,22 @@ export function looksLikeServePeer(req) {
   return last !== undefined && isTailscaleAddress(last)
 }
 
+function loginHeaderOf(req) {
+  const raw = req.headers[TAILSCALE_LOGIN_HEADER]
+  return normalizeLogin(Array.isArray(raw) ? raw[0] : raw)
+}
+
 /** Verified login of an allowlisted tailnet user, or undefined. */
 export function identityOf(req, allowedUsers) {
   if (allowedUsers.length === 0) return undefined
-  const raw = req.headers[TAILSCALE_LOGIN_HEADER]
-  const login = normalizeLogin(Array.isArray(raw) ? raw[0] : raw)
+  const login = loginHeaderOf(req)
   if (login === '' || !allowedUsers.includes(login)) return undefined
   return looksLikeServePeer(req) ? login : undefined
+}
+
+/** Whether the request carries a login Serve vouches for (allowed or not). */
+export function bearsIdentity(req) {
+  return loginHeaderOf(req) !== '' && looksLikeServePeer(req)
 }
 
 /** The rightmost forwarded address, or the socket peer for a direct connection. */
@@ -154,6 +171,12 @@ export function canonicalAuthority(value, scheme = 'https') {
  * @param {Set<string>} allowedHosts canonical authorities (see {@link canonicalAuthority})
  * @returns {{ status: number, message: string } | undefined}
  */
+/** Whether a Host names a Tailscale MagicDNS name (`<node>.<tailnet>.ts.net`, any port). */
+export function isTailnetHost(host) {
+  const name = String(host ?? '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '')
+  return /^[a-z0-9-]+(?:\.[a-z0-9-]+)+\.ts\.net$/.test(name)
+}
+
 export function originRejection(req, allowedHosts) {
   const scheme = requestIsHttps(req) ? 'https' : 'http'
   const host = canonicalAuthority(req.headers.host, scheme)
@@ -208,16 +231,19 @@ function sendText(res, status, body, headers = {}) {
   res.end(body)
 }
 
-function unauthorizedPage(res, req, message) {
+/** The 401; with `retryAfter` (seconds) it says so, and the HTML page reloads itself then. */
+function unauthorizedPage(res, req, message, retryAfter) {
   const accept = String(req.headers.accept ?? '')
+  const retry = retryAfter === undefined ? {} : { 'retry-after': String(retryAfter) }
   if (req.method === 'GET' && accept.includes('text/html')) {
-    res.writeHead(401, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    res.writeHead(401, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...retry })
     res.end('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>DeepSea</title>'
+      + (retryAfter === undefined ? '' : `<meta http-equiv="refresh" content="${String(retryAfter)}">`)
       + '<body style="font:16px -apple-system,system-ui,sans-serif;padding:2em;max-width:36em;margin:auto">'
       + `<h1 style="font-size:1.3em">Not signed in</h1><p>${message}</p></body>`)
     return
   }
-  sendText(res, 401, `unauthorized: ${message}\n`)
+  sendText(res, 401, `unauthorized: ${message}\n`, retry)
 }
 
 function forwardHeaders(req, backendAuthority, upstreamCookie, extra = {}) {
@@ -290,11 +316,15 @@ export function bootstrapUpstreamCookie(connection, authority) {
  *   selfLogin?: () => string | undefined, selfAddresses?: () => string[],
  *   identityOperators?: () => boolean,
  *   publicHosts?: () => string[],
+ *   refreshNode?: () => Promise<unknown>, nodeReady?: () => boolean,
  *   cookieName: string, controlPrefix: string, servePath?: string,
  *   log?: (line: string) => void, warn?: (line: string) => void,
  * }} spec
  *   `publicHosts` are the authorities clients may name in `Host` besides the
  *   listener itself (the tailnet FQDN, with and without the Serve port).
+ *   `refreshNode` re-reads this node's facts (`publicHosts`, `selfLogin`,
+ *   `selfAddresses`); `nodeReady` says whether they come from a running
+ *   Tailscale (false: it was stopped or starting at the last read).
  */
 export async function startProxy(spec) {
   const backendAuthority = `${spec.backendHost}:${String(spec.backendPort)}`
@@ -319,6 +349,34 @@ export async function startProxy(spec) {
     }
     return hosts
   }
+  // A tailnet switch or rename changes the node's name between periodic re-reads, and Tailscale
+  // started after this server (or a relogin) its own login: a request for a tailnet name the fence
+  // does not know, or a Serve peer's login admission refuses, asks for one re-read (single-flight,
+  // rate-limited) and is fenced or admitted again with whatever Tailscale itself then reports.
+  let nodeRefresh
+  let nodeRefreshedAt = 0
+  const refreshNodeOnce = () => {
+    if (nodeRefresh !== undefined) return nodeRefresh
+    if (Date.now() - nodeRefreshedAt < NODE_REFRESH_MIN_MS) return Promise.resolve()
+    nodeRefreshedAt = Date.now()
+    let timer
+    nodeRefresh = Promise.race([
+      Promise.resolve().then(() => spec.refreshNode()),
+      new Promise(resolve => { timer = setTimeout(resolve, NODE_REFRESH_WAIT_MS); timer.unref?.() }),
+    ]).catch((error) => {
+      spec.warn?.(`host-tailscale: re-reading this node's facts failed: ${String(error?.message ?? error)}`)
+    }).finally(() => { clearTimeout(timer); nodeRefresh = undefined })
+    return nodeRefresh
+  }
+  /** Whether the fence would refuse this request's tailnet name, so a re-read could still admit it. */
+  const unknownTailnetHost = req => spec.refreshNode !== undefined && isTailnetHost(req.headers.host) && originRejection(req, allowedHosts())?.status === 421
+  /** Whether admission refuses a login Serve vouches for, so a re-read of this node's own login could still admit it. */
+  const identityRefused = req => spec.refreshNode !== undefined && bearsIdentity(req) && identityOf(req, allowedLogins()) === undefined
+  /** What a refused request is told: a tailnet login while this node's facts predate a running Tailscale waits, anything else signs in. */
+  const refusal = req => bearsIdentity(req) && spec.nodeReady?.() === false
+    ? { message: STARTING_MESSAGE, retryAfter: STARTING_RETRY_S }
+    : { message: SIGN_IN_MESSAGE, retryAfter: undefined }
+
   let upstreamCookie = await bootstrapUpstreamCookie(spec.connection, backendAuthority)
   let upstreamCookieAt = Date.now()
   let refreshing
@@ -374,10 +432,22 @@ export async function startProxy(spec) {
   const setCookieHeader = (req, value, maxAge) => `${spec.cookieName}=${value}; Max-Age=${String(maxAge)}; Path=${viaServe(req) ? `${mount}/` : '/'}; HttpOnly; SameSite=Lax${requestIsHttps(req) ? '; Secure' : ''}`
 
   const onRequest = (req, res) => {
+    if (!unknownTailnetHost(req)) { handleRequest(req, res, false); return }
+    void refreshNodeOnce().then(() => handleRequest(req, res, true))
+  }
+
+  /** `reread`: this node's facts were re-read for this request already. Nothing is answered before a refusal re-reads them, so the request can start over. */
+  const handleRequest = (req, res, reread) => {
+    const rereadFirst = () => {
+      if (reread || !identityRefused(req)) return false
+      void refreshNodeOnce().then(() => handleRequest(req, res, true))
+      return true
+    }
     const path = pathnameOf(req.url)
     const method = req.method ?? 'GET'
     const isControl = path === spec.controlPrefix || path.startsWith(`${spec.controlPrefix}/`)
     if (isControl && !isOperator(req)) {
+      if (rereadFirst()) return
       // A token or cookie holder (or, without identityOperators, any other
       // device) may see the sections but not change the Serve path, read the
       // token or act in the Server pane.
@@ -412,13 +482,10 @@ export async function startProxy(spec) {
     }
     const admitted = admit(req)
     if (admitted === undefined) {
+      if (rereadFirst()) return
       drain(req)
-      unauthorizedPage(res, req, 'Scan the QR code in Settings ▸ Tailscale.')
-      return
-    }
-    if (isControl && admitted === undefined) {
-      drain(req)
-      unauthorizedPage(res, req, 'Scan the QR code in Settings ▸ Tailscale.')
+      const { message, retryAfter } = refusal(req)
+      unauthorizedPage(res, req, message, retryAfter)
       return
     }
     proxyRequest(req, res, path, admitted)
@@ -490,15 +557,25 @@ export async function startProxy(spec) {
   server.on('connection', track)
   server.on('upgrade', (req, socket, head) => {
     track(socket)
+    if (!unknownTailnetHost(req)) { handleUpgrade(req, socket, head, false); return }
+    void refreshNodeOnce().then(() => handleUpgrade(req, socket, head, true))
+  })
+  const handleUpgrade = (req, socket, head, reread) => {
     const path = pathnameOf(req.url)
     const fence = originRejection(req, allowedHosts())
     if (fence !== undefined) {
       socket.end(`HTTP/1.1 ${String(fence.status)} ${fence.status === 421 ? 'Misdirected Request' : 'Forbidden'}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`)
       return
     }
-    const admitted = path.startsWith(spec.controlPrefix) ? undefined : admit(req)
+    const isControl = path.startsWith(spec.controlPrefix)
+    const admitted = isControl ? undefined : admit(req)
     if (admitted === undefined) {
-      socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+      if (!isControl && !reread && identityRefused(req)) {
+        void refreshNodeOnce().then(() => handleUpgrade(req, socket, head, true))
+        return
+      }
+      const { retryAfter } = refusal(req)
+      socket.end(`HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n${retryAfter === undefined ? '' : `Retry-After: ${String(retryAfter)}\r\n`}Content-Length: 0\r\n\r\n`)
       return
     }
     const headers = forwardHeaders(req, backendAuthority, cookieForUpstream(), {
@@ -538,7 +615,7 @@ export async function startProxy(spec) {
     up.on('error', () => socket.destroy())
     socket.on('error', () => up.destroy())
     up.end()
-  })
+  }
 
   await new Promise((resolve, reject) => {
     server.once('error', reject)
