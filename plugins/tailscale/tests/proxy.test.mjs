@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { createServer, request as httpRequest } from 'node:http'
 import { after, before, describe, it } from 'node:test'
-import { bootstrapUpstreamCookie, canonicalAuthority, cookieValueFor, isOperatorRequest, isSelfRequest, originRejection, startProxy } from '../proxy.mjs'
+import { bootstrapUpstreamCookie, canonicalAuthority, cookieValueFor, isOperatorRequest, isSelfRequest, isTailnetHost, originRejection, startProxy } from '../proxy.mjs'
 
 const LAUNCH_TOKEN = 'launch-token-xyz'
 const DSH_COOKIE = 'dsh-auth-abc=v1.payload.sig'
@@ -382,5 +382,48 @@ describe('websocket', () => {
     assert.match(text, /x-deepsea-forward-error: reserved/i)
     assert.match(text, /content-length: 0/i)
     assert.doesNotMatch(text, /reserved\n$/)
+  })
+})
+
+describe('a tailnet switch (the node\'s name changes between re-reads)', () => {
+  it('recognises MagicDNS names only', () => {
+    assert.equal(isTailnetHost('node.example.ts.net'), true)
+    assert.equal(isTailnetHost('Node.Example.ts.net:443'), true)
+    assert.equal(isTailnetHost('ts.net'), false)
+    assert.equal(isTailnetHost('evil.example'), false)
+    assert.equal(isTailnetHost('node.example.ts.net.evil.example'), false)
+    assert.equal(isTailnetHost(undefined), false)
+  })
+
+  it('re-reads the names once for an unknown tailnet name, admits it if Tailscale now reports it, else 421', async () => {
+    let names = ['old.example.ts.net']
+    let next = names
+    let reads = 0
+    const switched = await startProxy({
+      listenHost: '127.0.0.1', listenPort: 0, backendHost: '127.0.0.1', backendPort,
+      connection: { authenticatedUrl: base => `${base}/?token=${LAUNCH_TOKEN}` },
+      token: () => token, allowedUsers: () => allowedUsers, selfLogin: () => selfLogin, selfAddresses: () => [SELF_ADDRESS],
+      identityOperators: () => false,
+      publicHosts: () => names,
+      refreshHosts: async () => { reads++; names = next },
+      cookieName: 'deepsea-tailscale-switch', controlPrefix: '/deepsea-tailscale', servePath: '/deepsea-lab',
+    })
+    const get = host => new Promise((resolve, reject) => {
+      const req = httpRequest({ hostname: '127.0.0.1', port: switched.port, path: '/api/whoami', headers: { ...servePeer('alice@example.com'), host, 'x-forwarded-host': host } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)) })
+      req.on('error', reject)
+      req.end()
+    })
+    try {
+      assert.equal(await get('old.example.ts.net'), 200)
+      assert.equal(reads, 0, 'a known name needs no re-read')
+      assert.equal(await get('evil.example'), 421)
+      assert.equal(reads, 0, 'a name outside ts.net never triggers a re-read')
+      next = ['new.example.ts.net']
+      assert.equal(await get('new.example.ts.net'), 200, 'the switch is seen on the first request')
+      assert.equal(reads, 1)
+      assert.equal(await get('old.example.ts.net'), 421, 'the old name is gone')
+      assert.equal(await get('other.example.ts.net'), 421)
+      assert.equal(reads, 1, 'unknown names re-read at most every few seconds')
+    } finally { await switched.close() }
   })
 })

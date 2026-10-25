@@ -325,7 +325,10 @@ curl -H 'Host: node.example.ts.net' -H 'X-Forwarded-Proto: https' \
 
 - Tailscale facts (the node's name, own login and addresses) are read at start
   and then every minute until known, every ten minutes after; until then the
-  fence knows no tailnet name and tailnet requests get 421.
+  fence knows no tailnet name and tailnet requests get 421. A request for a
+  `*.ts.net` name the fence does not know (a tailnet switch, a renamed node)
+  first re-reads them, at most every five seconds: the request never supplies
+  the name, `tailscale status` does. A change is logged (`this node is now …`).
 - iOS "Add to Home Screen" keeps its own cookie store, and the saved URL is
   the one after the exchange, without the token.
 - The token is a credential: whoever holds it drives an agent that runs
