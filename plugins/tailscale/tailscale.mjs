@@ -66,7 +66,7 @@ export async function resolveTailscaleBinary(configuredPath = '') {
     const candidate = join(dir, 'tailscale')
     if (await executable(candidate)) return candidate
   }
-  for (const candidate of [MAC_APP_BINARY, '/usr/local/bin/tailscale', '/opt/homebrew/bin/tailscale', '/usr/bin/tailscale']) {
+  for (const candidate of [MAC_APP_BINARY, '/usr/local/bin/tailscale', '/opt/homebrew/bin/tailscale', '/usr/bin/tailscale', '/run/current-system/sw/bin/tailscale']) {
     if (await executable(candidate)) return candidate
   }
   return undefined
