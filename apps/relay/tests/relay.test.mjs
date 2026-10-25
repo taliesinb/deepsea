@@ -8,7 +8,7 @@ import { createServer as createTcpServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createRelay, isTailnetAddress, isTailnetRequest, parseCommandLine, parseRequestHead, standingToken } from '../relay.mjs'
+import { createRelay, isTailnetAddress, isTailnetRequest, loginShell, parseCommandLine, parseRequestHead, standingToken } from '../relay.mjs'
 
 const RELAY = fileURLToPath(new URL('../relay.mjs', import.meta.url))
 const made = []
@@ -57,6 +57,19 @@ test('pure parts: tailnet addresses and requests, launch tokens, request heads, 
   assert.deepEqual([args.variant, args.proxy, args.command], ['lab', undefined, ['node', 'bin.ts', '--port', '3210']])
   assert.throws(() => parseCommandLine(['--variant', 'lab']), /required/)
   assert.throws(() => parseCommandLine(['--bogus', 'x']), /unexpected/)
+})
+
+test('the login shell: $SHELL when POSIX, else zsh or bash (at /bin, then on PATH), else /bin/sh', () => {
+  const only = (...paths) => p => paths.includes(p)
+  assert.deepEqual(loginShell({ SHELL: '/usr/local/bin/zsh' }, only('/usr/local/bin/zsh')), { shell: '/usr/local/bin/zsh' })
+  // NixOS: nushell as login shell, no /bin/bash, bash in the profile on PATH.
+  const nix = { SHELL: '/run/current-system/sw/bin/nu', PATH: '/run/wrappers/bin:/home/u/.nix-profile/bin:/run/current-system/sw/bin' }
+  assert.deepEqual(loginShell(nix, only('/run/current-system/sw/bin/nu', '/home/u/.nix-profile/bin/bash', '/run/current-system/sw/bin/bash', '/bin/sh')),
+    { shell: '/home/u/.nix-profile/bin/bash', why: '/run/current-system/sw/bin/nu is not a POSIX shell' })
+  assert.deepEqual(loginShell({ SHELL: '/usr/bin/fish' }, only('/usr/bin/fish', '/bin/zsh', '/bin/bash')), { shell: '/bin/zsh', why: '/usr/bin/fish is not a POSIX shell' })
+  assert.deepEqual(loginShell({}, only('/bin/bash')), { shell: '/bin/bash', why: 'SHELL is not set' })
+  assert.deepEqual(loginShell({ SHELL: '/x/nu', PATH: '/a:/b' }, only('/a/zsh', '/b/bash')), { shell: '/b/bash', why: '/x/nu is not a POSIX shell' })
+  assert.deepEqual(loginShell({ SHELL: '/bin/zsh' }, only('/bin/sh')), { shell: '/bin/sh', why: '/bin/zsh does not exist' })
 })
 
 test('the standing token: created once, 0600, reused', () => {
