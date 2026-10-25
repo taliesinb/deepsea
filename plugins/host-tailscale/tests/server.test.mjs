@@ -132,6 +132,22 @@ describe('processes and actions', () => {
     assert.deepEqual(await relayJob('x', fakeRun().run), { loaded: false })
   })
 
+  it('relayJob on Linux reads the systemd user unit: loaded while it runs, and its pid', async () => {
+    const show = stdout => fakeRun({ 'systemctl --user': { code: 0, stdout } })
+    const running = show('LoadState=loaded\nActiveState=active\nMainPID=4321\n')
+    assert.deepEqual(await relayJob('io.github.taliesinb.deepsea.lab.relay', running.run, 'linux'), { loaded: true, pid: 4321, unit: 'io.github.taliesinb.deepsea.lab.relay.service' })
+    assert.deepEqual(running.calls[0], ['systemctl', '--user', 'show', 'io.github.taliesinb.deepsea.lab.relay.service', '--property=LoadState,ActiveState,MainPID'])
+    assert.deepEqual(await relayJob('x', show('LoadState=loaded\nActiveState=inactive\nMainPID=0\n').run, 'linux'), { loaded: false })
+    assert.deepEqual(await relayJob('x', show('LoadState=not-found\nActiveState=inactive\nMainPID=0\n').run, 'linux'), { loaded: false })
+    const rows = await processTable({ relay: { url: 'http://127.0.0.1:3203/', label: 'x', job: { loaded: true, pid: 9, unit: 'x.service' }, listening: true }, port: 3200, home: '/h', run: fakeRun(ps).run })
+    assert.equal(rows[0].details[0], 'systemd unit x.service')
+    const deferred = []
+    const { run, calls } = fakeRun()
+    await performAction({ target: 'relay', action: 'restart' }, { relayLabel: 'x', relayLoaded: true, relayListening: true, deferSelf: fn => deferred.push(fn), log: () => {}, run, platform: 'linux' })
+    deferred.shift()()
+    assert.deepEqual(calls.at(-1), ['systemctl', '--user', 'restart', 'x.service'])
+  })
+
   it('rows: the relay with restart only when its job is loaded; dsh web quits, and restarts only behind a relay; the app launches or quits', async () => {
     const { run } = fakeRun({ ...ps, 'pgrep -f': { code: 0, stdout: '777\n' } })
     const rows = await processTable({
@@ -153,7 +169,7 @@ describe('processes and actions', () => {
     const deferred = []
     const killed = []
     const { run, calls } = fakeRun()
-    const deps = { relayLabel: 'io.github.taliesinb.deepsea.lab.relay', relayLoaded: true, relayListening: true, appPath: '/Users/USER/Applications/DeepSea Lab.app', appName: 'DeepSea Lab', deferSelf: fn => deferred.push(fn), log: () => {}, run, kill: (pid, signal) => killed.push([pid, signal]) }
+    const deps = { relayLabel: 'io.github.taliesinb.deepsea.lab.relay', relayLoaded: true, relayListening: true, appPath: '/Users/USER/Applications/DeepSea Lab.app', appName: 'DeepSea Lab', deferSelf: fn => deferred.push(fn), log: () => {}, run, kill: (pid, signal) => killed.push([pid, signal]), platform: 'darwin' }
     assert.equal((await performAction({ target: 'relay', action: 'restart' }, deps)).message, 'Relay restarting.')
     assert.equal(calls.length, 0, 'nothing runs before the answer')
     deferred.shift()()

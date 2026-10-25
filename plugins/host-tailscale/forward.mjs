@@ -36,6 +36,7 @@
  */
 import { execFile as execFileCallback } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { connect } from 'node:net'
 import { HEADER } from './proxy.mjs'
 
@@ -128,7 +129,8 @@ export function parseLsofListeners(text) {
  */
 export function lookupListeners(port, options = {}) {
   const execFile = options.execFile ?? execFileCallback
-  const lsof = options.lsofPath ?? '/usr/sbin/lsof'
+  // macOS keeps it in /usr/sbin; elsewhere (NixOS has no /usr/sbin) it is found on PATH.
+  const lsof = options.lsofPath ?? (existsSync('/usr/sbin/lsof') ? '/usr/sbin/lsof' : 'lsof')
   return new Promise((resolve, reject) => {
     execFile(lsof, ['-nP', `-iTCP:${String(port)}`, '-sTCP:LISTEN', '-F', 'pcun'], { timeout: LSOF_TIMEOUT_MS, maxBuffer: 1024 * 1024 }, (error, stdout) => {
       // lsof exits 1 when nothing matches; that is "no listener", not a failure.
