@@ -23,7 +23,8 @@
  *     header is gone.
  *
  * `dsh web` runs through the person's login shell (`$SHELL -lc 'exec "$@"'`,
- * so agents get their PATH), detached in its own process group, with
+ * so agents get their PATH; a non-POSIX `$SHELL` such as nu or fish gives way
+ * to zsh, bash or sh: `loginShell`), detached in its own process group, with
  * `DSH_HOME`, `DSH_LAUNCH_TOKEN`, `DEEPSEA_VARIANT` and `DEEPSEA_RELAY` (this
  * relay's URL) set. `--log-dir` is the variant's log directory (LAYOUT.md
  * §5): the relay's run log goes to `relay/`, each server start's to
@@ -288,6 +289,28 @@ export function createRelay(options) {
   }
 }
 
+/** Shells that run `-lc 'exec "$@"'` as the relay means it. */
+const POSIX_SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'ksh93', 'oksh', 'ash', 'yash'])
+
+/**
+ * The login shell `dsh web` runs through: `$SHELL` when it is a POSIX shell, else (unset, missing,
+ * or one such as nu or fish, which reads `-lc` and `"$@"` its own way) the first that exists of
+ * /bin/zsh, /bin/bash, then bash and zsh on PATH (NixOS has neither under /bin), else /bin/sh. `why`
+ * says why `$SHELL` was not used.
+ * @returns {{ shell: string, why?: string }}
+ */
+export function loginShell(env = process.env, exists = existsSync) {
+  const own = env.SHELL
+  const name = own ? own.split('/').pop() : ''
+  if (own && POSIX_SHELLS.has(name) && exists(own)) return { shell: own }
+  const why = !own ? 'SHELL is not set' : !POSIX_SHELLS.has(name) ? `${own} is not a POSIX shell` : `${own} does not exist`
+  const onPath = String(env.PATH ?? '').split(':').filter(Boolean)
+  for (const candidate of ['/bin/zsh', '/bin/bash', ...['bash', 'zsh'].flatMap(n => onPath.map(dir => `${dir}/${n}`)), '/bin/sh']) {
+    if (exists(candidate)) return { shell: candidate, why }
+  }
+  return { shell: '/bin/sh', why }
+}
+
 /** Signal a detached child's whole process group (login shell and server). */
 export function killGroup(child, signal) {
   if (child.exitCode !== null || child.pid === undefined) return
@@ -330,7 +353,7 @@ async function main() {
     process.stderr.write(`${text}\n`)
   }
   let lastLog
-  const shell = process.env.SHELL && existsSync(process.env.SHELL) ? process.env.SHELL : '/bin/zsh'
+  const { shell, why } = loginShell()
   const standing = standingToken(args.home)
   const relay = createRelay({
     listen, dsh, proxy: args.proxy ? endpoint(args.proxy) : undefined,
@@ -350,7 +373,7 @@ async function main() {
     },
   })
   const port = await relay.listen()
-  say(`listening on ${listen.host}:${port}; dsh ${dsh.host}:${dsh.port}${args.proxy ? `, proxy ${args.proxy}` : ''}`)
+  say(`listening on ${listen.host}:${port}; dsh ${dsh.host}:${dsh.port}${args.proxy ? `, proxy ${args.proxy}` : ''}; login shell ${shell}${why ? ` (${why})` : ''}`)
   const shutdown = (signal) => {
     say(`${signal}: stopping`)
     void relay.close({ stopChild: true }).then(() => process.exit(0))
