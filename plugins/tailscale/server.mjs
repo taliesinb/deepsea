@@ -15,6 +15,7 @@
  * Rows expire after IDLE_MS without a request or an open socket.
  */
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { connect } from 'node:net'
 import { join } from 'node:path'
@@ -202,19 +203,29 @@ export function parseEtime(text) {
   return Number(days) * 86400 + Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)
 }
 
-/** `ps` facts for one pid: elapsed seconds, rss KB, parent, command. */
+/** `ps` (at /bin, else on PATH: NixOS has no /bin/ps) facts for one pid: elapsed seconds, rss KB, parent, command. */
 export async function psFacts(pid, run = runCommand) {
-  const result = await run('/bin/ps', ['-o', 'etime=,rss=,ppid=,command=', '-p', String(pid)])
+  const result = await run(existsSync('/bin/ps') ? '/bin/ps' : 'ps', ['-o', 'etime=,rss=,ppid=,command=', '-p', String(pid)])
   if (result.code !== 0) return undefined
   const match = /^\s*(\S+)\s+(\d+)\s+(\d+)\s+(.*)$/.exec(result.stdout.trim())
   if (match === null) return undefined
   return { pid, uptimeSeconds: parseEtime(match[1]), rssKb: Number(match[2]), ppid: Number(match[3]), command: match[4] }
 }
 
-/** `launchctl print` (read-only) for the relay's job: loaded, and its pid when running. */
-export async function relayJob(label, run = runCommand) {
+/**
+ * The relay's job (read-only): loaded, and its pid when running. macOS: `launchctl print` of the
+ * LaunchAgent `<label>`; Linux: `systemctl --user show` of the unit `<label>.service` (loaded =
+ * running, as dsd installs it).
+ */
+export async function relayJob(label, run = runCommand, platform = process.platform) {
+  if (platform === 'linux') {
+    const result = await run('systemctl', ['--user', 'show', `${label}.service`, '--property=LoadState,ActiveState,MainPID'])
+    if (result.code !== 0 || !/^LoadState=loaded$/m.test(result.stdout) || !/^ActiveState=(active|activating|reloading)$/m.test(result.stdout)) return { loaded: false }
+    const pid = Number(/^MainPID=(\d+)$/m.exec(result.stdout)?.[1] ?? 0)
+    return { loaded: true, pid: pid > 0 ? pid : undefined, unit: `${label}.service` }
+  }
   const uid = typeof process.getuid === 'function' ? process.getuid() : undefined
-  if (uid === undefined || process.platform !== 'darwin') return { loaded: false }
+  if (uid === undefined || platform !== 'darwin') return { loaded: false }
   const result = await run('/bin/launchctl', ['print', `gui/${String(uid)}/${label}`])
   if (result.code !== 0) return { loaded: false }
   const pid = /^\s*pid = (\d+)\s*$/m.exec(result.stdout)?.[1]
@@ -249,7 +260,7 @@ export async function processTable(spec) {
       id: 'relay',
       title: 'Relay',
       details: [
-        ...(relay.job.loaded && relay.label !== undefined ? [`LaunchAgent ${relay.label}`] : []),
+        ...(relay.job.loaded && relay.label !== undefined ? [relay.job.unit !== undefined ? `systemd unit ${relay.job.unit}` : `LaunchAgent ${relay.label}`] : []),
         `${relay.url}${relay.listening ? '' : ' (not answering)'}`,
       ],
       command: facts?.command,
@@ -301,7 +312,7 @@ export async function processTable(spec) {
  * the response has gone out.
  * @param {{ target: string, action: string }} request
  * @param {{ relayLabel?: string, relayLoaded: boolean, relayListening: boolean, appPath?: string, appName?: string,
- *   deferSelf: (fn: () => void) => void, log: (line: string) => void, run?: typeof runCommand, kill?: (pid: number, signal: string) => void }} deps
+ *   deferSelf: (fn: () => void) => void, log: (line: string) => void, run?: typeof runCommand, kill?: (pid: number, signal: string) => void, platform?: string }} deps
  */
 export async function performAction(request, deps) {
   const run = deps.run ?? runCommand
@@ -310,6 +321,11 @@ export async function performAction(request, deps) {
   switch (key) {
     case 'relay/restart': {
       if (!deps.relayLoaded || deps.relayLabel === undefined) throw new Error('no relay job to restart')
+      if ((deps.platform ?? process.platform) === 'linux') {
+        deps.log(`tailscale: Server pane restarts the relay (systemctl --user restart ${deps.relayLabel}.service)`)
+        deps.deferSelf(() => { void run('systemctl', ['--user', 'restart', `${deps.relayLabel}.service`]) })
+        return { message: 'Relay restarting.' }
+      }
       const uid = process.getuid?.()
       deps.log(`tailscale: Server pane restarts the relay (launchctl kickstart -k ${deps.relayLabel})`)
       // kickstart -k ends this server too (the relay stops its process group): answer first.

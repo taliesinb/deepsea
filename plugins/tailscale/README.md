@@ -51,7 +51,7 @@ With no config the plugin takes everything from the variant it runs in
 | Serve path | `variant.yml` `servePath`, when `serve: true` | `servePath` |
 | Serve target | the relay, `DEEPSEA_RELAY` (set by the relay for the server it starts); else the proxy itself | — |
 | cookie | `deepsea-tailscale-<v>`, `Path=<serve path>/` | — |
-| tailscale CLI | `tailscalePath`, else PATH, then `/Applications/Tailscale.app/Contents/MacOS/Tailscale`, `/usr/local/bin`, `/opt/homebrew/bin`, `/usr/bin` | `tailscalePath` |
+| tailscale CLI | `tailscalePath`, else PATH, then `/Applications/Tailscale.app/Contents/MacOS/Tailscale`, `/usr/local/bin`, `/opt/homebrew/bin`, `/usr/bin`, `/run/current-system/sw/bin` (NixOS) | `tailscalePath` |
 
 A throwaway records neither a port block nor a Serve path, and a stock home
 has no `variant.yml`: no Serve path, and a proxy only when `proxyPort` is
@@ -168,7 +168,9 @@ forwards it for operators only.
 
 - **Processes.** The relay, when `DEEPSEA_RELAY` names one: its LaunchAgent
   `<variant name>.relay` read with `launchctl print` (pid, running), and
-  **Restart** = `launchctl kickstart -k`, which restarts the relay and the
+  **Restart** = `launchctl kickstart -k` (on Linux: its systemd user unit
+  `<variant name>.relay.service`, read with `systemctl --user show`,
+  **Restart** = `systemctl --user restart`), which restarts the relay and the
   server it started (the page comes back through the relay's starting page);
   a throwaway's relay has no job and no action. **dsh web**: this process,
   **Quit** = SIGTERM to itself, and **Restart** (the same SIGTERM) only when a
@@ -249,7 +251,8 @@ exact-path upgrade route behind DSH's own gate):
    `identityOperators` identity-admitted users), or `off`. A direct loopback
    caller (no proxy headers) passes.
 2. **Reserved ports**: this variant's server, proxy and relay ports are 403.
-3. **The uid guard**: `lsof -nP -iTCP:<port> -sTCP:LISTEN -F pcun` must show
+3. **The uid guard**: `lsof -nP -iTCP:<port> -sTCP:LISTEN -F pcun`
+   (`/usr/sbin/lsof`, else `lsof` on PATH) must show
    the listener and every visible one must belong to the uid running this
    server; other accounts' listeners are invisible to an unprivileged `lsof`.
 
