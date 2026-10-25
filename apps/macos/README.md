@@ -40,6 +40,31 @@ name, the URL, an optional fallback URL with the token file whose standing
 token it uses, and the glyph colour. It is signed ad hoc, with the bundle id
 as its identifier.
 
+Entry points, on every launch:
+
+- **With a fallback URL and a token file** (an installed variant: its relay
+  on this Mac), the app loads the relay with the standing token whenever it
+  answers at all (its 503 while the server boots counts). WebKit keeps
+  `localStorage` per origin, and the web client keeps the open session,
+  drafts and layouts there, so the window always uses the one origin; with
+  the tailnet URL first, the session restored after a relaunch depended on
+  whether Tailscale answered. The tailnet URL is the second choice, used only
+  when it serves the page: a 401 (this Mac not admitted by its login), a 421
+  (the variant's Tailscale fence refusing that name, as just after a tailnet
+  switch) or Serve's 502 leaves the offline page, which retries.
+- **With the URL only** (a thin client of another Mac's server, or a test
+  build's `--url`), the app loads it on any answer but a 421, else the
+  offline page.
+
+A page load the tailnet address answers with 401 or 421 goes to the local
+relay rather than an error page; `[connect]`, `[probe]` and `[navigation]`
+lines in the app log say which entry point was used and why. Loaded from the
+relay, the page is admitted by DSH's own cookie, not by Tailscale identity,
+and is this Mac's own (@deepsea/host-tailscale's Settings sections and
+loopback links work as for any local page). View ▸ Copy Address and Open in
+Browser give the same page at the tailnet URL, the address other devices
+use, and never carry the token.
+
 ## The server host
 
 `DeepSea[ <V>] Server.app` (bundle id `<variant name>.server`, background

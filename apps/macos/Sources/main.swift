@@ -2,10 +2,15 @@
 // GUI of one variant. Its bundle id is the variant name (LAYOUT.md §1).
 //
 // What it does beyond loading a URL:
-//   - picks the entry point on every launch: the configured URL when it answers
-//     (any HTTP status: an always-on relay answers 503 while the server boots),
-//     else the fallback URL with the standing token from the token file, else
-//     an offline page that retries;
+//   - picks the entry point on every launch: with a local relay (a fallback URL
+//     and a token file, as an installed variant has), the relay with its
+//     standing token whenever it answers at all (its 503 while the server boots
+//     counts), so the page keeps one origin and one localStorage; the tailnet
+//     URL only when the relay does not answer, and only when it serves the page
+//     (a 401, 421 or 502 counts as no answer); without one (a thin client), the
+//     configured URL on any answer but 421; else an offline page that retries.
+//     A page load the tailnet address answers with 401 or 421 goes to the
+//     local relay;
 //   - sets `globalThis.__DSH_TRANSPORT__ = { ownsHost: true }` at document
 //     start so the shell treats the page as the operator's machine
 //     (`ctx.connection.isLoopback`: Settings persist on the host);
@@ -872,15 +877,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     // MARK: entry point selection
 
-    /// Probe the tailnet URL; any HTTP answer (even the relay's 503 splash) means "reachable".
-    func probe(_ url: URL, completion: @escaping (Bool) -> Void) {
+    /// What a probe counts as an answer.
+    enum ProbeRule {
+        /// Any HTTP status (even the relay's 503 splash while the server boots), except 421
+        /// Misdirected Request: something answers at that name, but not this variant (its Tailscale
+        /// fence knows another name for this node, e.g. just after a tailnet switch).
+        case anyAnswer
+        /// The page itself: a 2xx or 3xx, or one of the relay's own pages (`x-deepsea-relay`). For the
+        /// tailnet URL behind a local relay that did not answer: a 401 (this Mac not admitted, as when
+        /// the variant has not learned this node's login yet), a 421 or Serve's 502 then leaves the
+        /// offline page, which retries the relay, rather than an error page that does not.
+        case page
+    }
+
+    func probe(_ url: URL, rule: ProbeRule = .anyAnswer, completion: @escaping (Bool) -> Void) {
         var request = URLRequest(url: url)
         request.httpMethod = "HEAD"
         request.timeoutInterval = 4
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let session = URLSession(configuration: .ephemeral)
-        session.dataTask(with: request) { _, response, _ in
-            DispatchQueue.main.async { completion(response is HTTPURLResponse) }
+        session.dataTask(with: request) { [weak self] _, response, _ in
+            let http = response as? HTTPURLResponse
+            DispatchQueue.main.async {
+                guard let http else { completion(false); return }
+                let usable: Bool
+                switch rule {
+                case .anyAnswer: usable = http.statusCode != 421
+                case .page: usable = (200...399).contains(http.statusCode) || http.value(forHTTPHeaderField: "x-deepsea-relay") != nil
+                }
+                if !usable {
+                    let phrase = HTTPURLResponse.localizedString(forStatusCode: http.statusCode).capitalized
+                    self?.appendLog("[probe] HTTP \(http.statusCode) \(phrase): \(self?.withoutToken(url).absoluteString ?? "")")
+                }
+                completion(usable)
+            }
             session.finishTasksAndInvalidate()
         }.resume()
     }
@@ -966,7 +996,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 self.showOffline(reason: "The local relay does not answer. Is it running?")
                 return
             }
-            self.probe(self.remoteURL) { [weak self] reachable in
+            self.probe(self.remoteURL, rule: .page) { [weak self] reachable in
                 guard let self else { return }
                 self.connecting = false
                 if reachable {
@@ -1173,6 +1203,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let url = http.url ?? webView.url ?? remoteURL
             let phrase = HTTPURLResponse.localizedString(forStatusCode: http.statusCode).capitalized
             appendLog("[navigation] HTTP \(http.statusCode) \(phrase): \(url.absoluteString)")
+            // 421 or 401 at the tailnet address: the variant does not serve that name (yet), or does
+            // not admit this Mac by its login (yet); its local relay serves it regardless, so go there
+            // instead of showing an error. (Not when the configured URL is the relay itself.)
+            if [401, 421].contains(http.statusCode), url.host == remoteURL.host, url.port == remoteURL.port,
+               !isFallbackOrigin(remoteURL), let fallback = fallbackURL() {
+                decisionHandler(.cancel)
+                appendLog("[navigation] the tailnet address refused this Mac; loading the local relay")
+                DispatchQueue.main.async { [weak self] in
+                    self?.showingOfflinePage = false
+                    self?.webView.load(URLRequest(url: fallback))
+                }
+                return
+            }
             decisionHandler(.cancel)
             DispatchQueue.main.async { [weak self] in
                 self?.showOffline(
