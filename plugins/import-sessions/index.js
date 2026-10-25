@@ -282,7 +282,7 @@ export function apply(ctx, config) {
           for (const selection of selections) {
             try {
               const imported = await importDshFamily(ctx, scan, selection.file, selection.destination, signal)
-              results.push({ file: selection.file, ok: true, sessionId: imported.result.sessionId, title: imported.title, workspace: { id: imported.workspace.id, title: imported.workspace.title }, counts: { turns: imported.family.root.events.filter(event => event.type === 'turn/start').length, steps: 0, toolCalls: imported.family.root.events.filter(event => event.type === 'tool/call').length, toolResults: 0, images: 0, imagesImported: 0, truncatedResults: 0, droppedRecords: 0, orphanResults: 0, children: imported.family.children.length } })
+              results.push({ file: selection.file, ok: true, sessionId: imported.result.sessionId, title: imported.title, workspace: { id: imported.workspace.id, title: imported.workspace.title }, counts: { turns: imported.family.root.events.filter(event => event.type === 'turn/start').length, steps: 0, toolCalls: imported.family.root.events.filter(event => event.type === 'tool/call').length, toolResults: 0, images: imported.attachments.images + imported.attachments.files, imagesImported: imported.attachments.copied + imported.attachments.present, truncatedResults: 0, droppedRecords: 0, orphanResults: 0, children: imported.family.children.length } })
             } catch (error) { results.push({ file: selection.file, ok: false, error: String(error?.message ?? error) }) }
           }
           await scan.selection.cleanup()

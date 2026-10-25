@@ -9,7 +9,7 @@ workspace whose directory matches the transcript's working directory.
 |---|---|---|
 | Claude Code | `~/.claude/projects/<slug>/<uuid>.jsonl` (+ `<uuid>/subagents/agent-*.jsonl`) | `claude-<uuid>` (children `claude-<uuid>-agent-…`) |
 | pi | `~/.pi/agent/sessions/--<path>--/<ts>_<uuid>.jsonl` | `pi-<uuid>` |
-| another home | `<home>/sessions/<workspace>/<session>/`, or a @deepsea/backup-restore `.backup.dsh.zip` / `.rollback.dsh.zip` | kept |
+| another home | `<home>/sessions/<workspace>/<session>/`, or a @deepsea/backup-restore `.backup.deepsea.zip` / `.rollback.deepsea.zip` (or the earlier `.backup.dsh.zip`) | kept |
 
 ## What the person sees
 
@@ -87,9 +87,15 @@ many already imported). `/import-dsh` works through the dialog only.
 - Another home's sessions are read with the harness's JSONL persistence and
   stored through the Session Controller's `storeSessionLogs` (harness topic
   `session-relocation`), keeping their ids, each root with its subagent
-  descendants, into a workspace. Their attachments are not copied: images
-  render only where those attachments already exist. The home the server
-  runs on is refused.
+  descendants, into a workspace. The attachments their logs reference are
+  copied first, from the source's `attachments/v1/` (in a backup, read from
+  the archive) through the attachment service: images (`objects/`) with
+  `saveImage`, which reproduces their id because stored images are already
+  normalized, and verbatim files (`files/`) with `saveFile`. Bytes whose
+  digest is not their id are not saved; attachments this home has are left
+  alone. The summary counts them with the images (`3/5 images`: two were not
+  in the source; the server log names each one). The home the server runs on
+  is refused.
 
 ## Where it reads and writes
 
@@ -98,7 +104,7 @@ many already imported). `/import-dsh` works through the dialog only.
   while the dialog is open and are deleted after the import (or swept after
   a day); only file names that look like transcripts of the chosen source
   are accepted, with sanitized relative paths.
-- A backup archive's `dsh/sessions/` is extracted to
+- A backup archive's `home/sessions/` (`dsh/sessions/` in the earlier layout) is extracted to
   `$TMPDIR/deepsea-import-sessions-…` for the scan and removed after the
   import.
 - New workspaces are created at `<base>/<basename of the original cwd>` on
