@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+<title>Connect</title>
+<link rel="stylesheet" href="style.css">
+<main>
+  <h1>Connect to a DeepSea server</h1>
+  <form>
+    <label for="server">Server</label>
+    <input id="server" name="server" type="text" placeholder="host, user@host or https://node.example.ts.net/deepsea/" autocomplete="off" spellcheck="false" required autofocus>
+    <button id="connect" type="submit">Connect</button>
+    <p id="error" role="alert"></p>
+  </form>
+</main>
+<script src="connect.js"></script>
+</html>
