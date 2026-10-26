@@ -5,6 +5,7 @@
 import { execFileSync } from 'node:child_process'
 import { adoptCommand } from '../commands/adopt.mjs'
 import { check } from '../commands/check.mjs'
+import { client } from '../commands/client.mjs'
 import { drive } from '../commands/drive.mjs'
 import { logs } from '../commands/logs.mjs'
 import { buildsCommand, gc, link, list, stop } from '../commands/manage.mjs'
@@ -26,7 +27,8 @@ const HELP = `dsd — DeepSea developer CLI (tools/dsd/README.md)
   dsd sim [status] | start | stop | accounts [<provider>] | account <provider> <credential> [--set <json>] | fixtures
   dsd new <v> [--source <ref>] [--color <hex>] [--plugins <names|all>] [--no-serve]
   dsd build <v> [--install [--dock]] [--self]
-  dsd run <v> [--no-app]   (an installed named variant)
+  dsd run <v> [--no-app]   (an installed named variant; a thin client: its app)
+  dsd client <v> [<server>] [--source <ref>] [--color <hex>] [--dock]   (macOS: the app for a server elsewhere)
   dsd remove <v> [--home] [--self]
   dsd adopt <old home> (<variant> | --throwaway [run options…]) [--move-sign-ins] [--dry-run]
   dsd run <variant> --throwaway | --throwaway-app | --throwaway-server [--visible] [--detach] [--scripted] [--plugins <names|all>]
@@ -48,7 +50,7 @@ A <variant> reference is a full id, a unique part of a throwaway's hex, or
 nothing when exactly one of your throwaways is running.
 `
 
-const COMMANDS = { new: newVariant, build, remove, adopt: adoptCommand, sim, play, run, stop, list, logs, gc, builds: buildsCommand, link, drive, script, worktree, topics, check, __supervise: supervise }
+const COMMANDS = { new: newVariant, client, build, remove, adopt: adoptCommand, sim, play, run, stop, list, logs, gc, builds: buildsCommand, link, drive, script, worktree, topics, check, __supervise: supervise }
 
 /**
  * Warn when this dsd is run inside another checkout of the same repository:

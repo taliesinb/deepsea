@@ -266,6 +266,25 @@ test('install: the relay plist, Serve path choice (stepping aside), Dock entries
   assert.equal(dockHas('<plist></plist>', '/Users/USER/Applications/DeepSea Lab.app'), false)
 })
 
+test('thin clients: the server as typed becomes its mount URL; the suffix is asked only for a short name', async () => {
+  const { resolveServer } = await import('../commands/client.mjs')
+  let asked = 0
+  const suffix = () => { asked += 1; return 'example.ts.net' }
+  assert.equal(resolveServer('node', suffix), 'https://node.example.ts.net/deepsea/')
+  assert.equal(resolveServer('user@node', suffix), 'https://node.example.ts.net/deepsea-user/')
+  assert.equal(resolveServer('node/deepsea-lab', suffix), 'https://node.example.ts.net/deepsea-lab/')
+  assert.equal(resolveServer('node:8443', suffix), 'https://node.example.ts.net:8443/')
+  assert.equal(resolveServer('https://node/deepsea-lab', suffix), 'https://node.example.ts.net/deepsea-lab/')
+  assert.equal(asked, 5)
+  assert.equal(resolveServer('node.example.ts.net', suffix), 'https://node.example.ts.net/deepsea/')
+  assert.equal(resolveServer('https://box.example.com/x/', suffix), 'https://box.example.com/x/')
+  assert.equal(resolveServer('localhost:3203', suffix), 'http://localhost:3203/')
+  assert.equal(resolveServer('127.0.0.1:3203', suffix), 'http://127.0.0.1:3203/')
+  assert.equal(asked, 5, 'full and loopback names need no suffix')
+  assert.throws(() => resolveServer('node', () => undefined), /MagicDNS suffix is unknown/)
+  for (const bad of ['', 'a b', 'user@node/x', 'https://node/?token=1', 'ftp://node/']) assert.throws(() => resolveServer(bad, suffix), undefined, bad)
+})
+
 test('install on Linux: the relay unit, its quoting, a named Serve path, the support directory', async () => {
   const { relayUnit, systemdQuote } = await import('../lib/systemd.mjs')
   const { chooseServePath, supportDirOf } = await import('../lib/install.mjs')

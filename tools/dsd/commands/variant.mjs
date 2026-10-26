@@ -29,6 +29,7 @@ import { buildsDir, homeOf, logDirOf, variantName } from '../lib/paths.mjs'
 import { installBundles, selectPlugins } from '../lib/plugins.mjs'
 import { linuxLeftovers, macosLeftovers, refuseOwnHome } from '../lib/remove.mjs'
 import { lingering, UNIT_NAME } from '../lib/systemd.mjs'
+import { openClient } from './client.mjs'
 import { ensureSourceBuild, resolveSourceCommit } from '../lib/source.mjs'
 import { DsdError, isoLocal, note, onlyFlags, parseArgs, printJson, sleep, usage } from '../lib/util.mjs'
 import { checkNamedId, displayName, listVariants, readVariant, writeVariant } from '../lib/variants.mjs'
@@ -142,6 +143,7 @@ export async function build(argv) {
   if (args.dock && !args.install) usage('--dock goes with --install')
   if (args.dock && !DARWIN) usage('--dock is for macOS')
   const config = namedConfig(id)
+  if (config.client) usage(`${id} is a thin client: dsd client ${id} rebuilds its app`)
   if (args.install && !args.self) refuseOwnHome(id)
   const home = homeOf(id)
   const commit = resolveSourceCommit(config.source)
@@ -200,6 +202,7 @@ export async function namedStatus(id, config) {
 /** dsd run <v> for a named variant: load and start its relay, then open its app (macOS). */
 export async function runNamed(id, args) {
   const config = namedConfig(id)
+  if (config.client) return openClient(id, config)
   if (!relayService.installed(id)) throw new DsdError(`${id} is not installed (dsd build ${id} --install)`)
   await relayService.start(id)
   const port = ports(config)
@@ -211,7 +214,7 @@ export async function runNamed(id, args) {
 
 /** dsd stop <v> for a named variant: stop its relay job, which stops the relay and its server. */
 export async function stopNamed(id, args) {
-  namedConfig(id)
+  if (namedConfig(id).client) usage(`${id} is a thin client: it has no server here; quit its app`)
   if (!args.self) refuseOwnHome(id)
   const stopped = await relayService.stop(id)
   printJson({ id, stopped, note: `the ${DARWIN ? 'LaunchAgent' : 'systemd unit'} stays installed: it starts again at login or with dsd run` })
@@ -226,7 +229,7 @@ export async function remove(argv) {
   const config = namedConfig(id)
   if (!args.self) refuseOwnHome(id)
   const removed = []
-  const job = await relayService.remove(id)
+  const job = config.client ? {} : await relayService.remove(id)
   if (job.file) removed.push(job.file)
   if (config.serve && config.servePath) {
     try { if (removeServePath(config.servePath, ports(config).relay, config.tailscaleSocket)) removed.push(`Serve path ${config.servePath}`) } catch (error) {

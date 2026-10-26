@@ -44,6 +44,12 @@ id `io.github.taliesinb.deepsea`) and installer logs
 (`~/Library/Logs/io.github.taliesinb.deepsea/`). Variant ids cannot contain a
 dot, so nothing collides and no variant id is reserved.
 
+A **thin client** is a named variant with no server here: the DeepSea app
+for a server on another machine (`dsd client`). Its home holds only its
+`variant.yml` (`client: true`, the server's URL) and its `logs` link, and its
+app is named and identified like any variant's, so an id names either a
+server or a client, never both.
+
 **Throwaway variants** are made by `dsd` for development and tests: id
 `<parent>-<hex>`, six random hex digits after the variant whose
 configuration they inherit (`personal-3f9a1c`: variant name

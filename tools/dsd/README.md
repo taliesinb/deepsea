@@ -126,6 +126,34 @@ build: 2cb0966d55                # written by build --install: the commit instal
 machine-wide ones included, except the test-only `test-driver` and
 `scripted-model`; `server-log` is always first.
 
+**Thin clients** (`dsd client`, macOS) are named variants with no server
+here: the DeepSea app for a server elsewhere (another Mac, a Linux server).
+The home holds only `variant.yml` and the `logs` link:
+
+```yaml
+id: lab
+display: DeepSea Lab
+client: true
+url: https://node.example.ts.net/deepsea/   # the server, as `dsd client` resolved it
+color: "#30A46C"
+source: integration/base         # the commit its app is built from
+build: 2cb0966d55
+```
+
+```sh
+dsd client lab node --color '#30A46C'   # node → https://node.<suffix>/deepsea/
+dsd client lab                          # rebuild its app from its source
+dsd run lab                             # open it
+dsd remove lab --home                   # uninstall it
+```
+
+The server is a URL or the short forms of remote-workspaces' Add remote:
+`host` (`/deepsea/` on its MagicDNS name), `user@host` (`/deepsea-<user>/`),
+`host/<path>`, `host:<port>`; loopback addresses are `http`. The app is
+admitted as any device is, by Tailscale identity (the server's own login, or
+an allowed one). It forwards the server's loopback ports, a sign-in's
+callback included (apps/macos). On Linux the thin client is apps/linux.
+
 **Throwaway variants** (`--throwaway…`) are copies of a named variant's
 configuration with a fresh id `<parent>-<hex>` and an empty home. They take
 free ports, have no Serve path, no LaunchAgent or systemd unit and no LaunchServices
@@ -246,6 +274,7 @@ taken over. Build logs: `~/Library/Logs/io.github.taliesinb.deepsea/builds/`.
 |---|---|
 | `dsd play [--plugins <names\|all>] [--accounts <names\|standard\|none>] [--source <ref>] [--harness <ref>] [--patch <file>,…] [--real]` | a throwaway to try things in, for people: `run release --throwaway --visible --detach --scripted --source integration/base --plugins all --simulated --accounts standard` (the app in front of you, every plugin, every provider simulated with test accounts, the scripted model the default); `--real` uses the real providers and no accounts. Quitting the app throws it away |
 | `dsd new <v> [--source <ref>] [--color <hex>] [--plugins <names\|all>] [--no-serve \| --serve-path <path>] [--ports <first>[-<last>]] [--tailscale-socket <path>] [--after <unit>[,…]]` | create a named variant: home, `variant.yml` (port block: the first free one, inside `--ports` or `DEEPSEA_PORTS` when given; Serve path, stepping aside from another account's, or `--serve-path` as given unless another target holds it; the account's own tailscaled and the units its relay needs, when given), and the home's `logs` / `support` links (LAYOUT.md §4, §7); `--source` defaults to `integration/base`. The last three are for a machine shared by several accounts (Linux section) |
+| `dsd client <v> [<server>] [--source <ref>] [--color <hex>] [--dock]` | macOS: a thin client, the DeepSea app for a server elsewhere (above): the first run names the server and creates the variant (home with `variant.yml` and `logs` only); every run builds its app from its source (`--source` moves it, default `integration/base`) and installs it in `~/Applications`, and with `--dock` a Dock tile. A new server or `--color` replaces the old. `run` opens it, `remove` uninstalls it; `build` and `stop` refuse it |
 | `dsd build <v> [--install [--dock]] [--self]` | make sure the build of its source commit exists, install its plugins into its profile as bundles, and on macOS build its app (`apps/macos`); `--install` installs the app (`~/Applications`), the server host and relay link (Application Support), the relay LaunchAgent (loaded at once; LAYOUT.md §6) and the home's `source` link, and with `--dock` a Dock tile. The server host is replaced only when its signature changes, so privacy grants survive. On Linux (below): no app; `--install` installs the relay link and the relay's systemd user unit |
 | `dsd adopt <old home> (<v> \| --throwaway [run options…]) [--move-sign-ins] [--dry-run]` | bring an old DSH home (`~/.dsh…`) into a variant: copies sessions and attachments, the workspace registry, settings.yaml, API keys, each old plugin's state in its DeepSea place, the old profile's own rows and third-party bundles; re-runnable (it brings what is new or changed, and reports a conflict for anything changed on both sides); creates `<v>` as `new` would if missing (not built: `dsd build <v> --install` stays yours); `--throwaway` adopts into a fresh throwaway and starts it (run options pass through); `--move-sign-ins` moves Plan sign-ins out of the old home; `--dry-run` touches nothing (below) |
 | `dsd remove <v> [--home] [--self]` | uninstall a named variant: its LaunchAgent or systemd unit (stopping relay and server), its own Serve path, Dock tile, app, preferences and `~/Library` (Linux: XDG data and state) leftovers; the home stays unless `--home` |

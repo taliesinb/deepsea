@@ -170,7 +170,8 @@ export function tailnetFacts(socket) {
     for (const web of Object.values(serve?.Web ?? {})) {
       for (const [path, handler] of Object.entries(web?.Handlers ?? {})) mappings[path] = handler?.Proxy ?? handler?.Path ?? handler?.Text ?? '?'
     }
-    return { dnsName, running: status?.BackendState === 'Running', mappings }
+    const suffix = String(status?.MagicDNSSuffix ?? '').replace(/\.$/, '') || dnsName.split('.').slice(1).join('.') || undefined
+    return { dnsName, suffix, running: status?.BackendState === 'Running', mappings }
   } catch {
     return undefined
   }
@@ -210,6 +211,11 @@ export function installApp(id, builtApp) {
   renameSync(staging, target)
   spawnSync(LSREGISTER, ['-f', target], { stdio: 'ignore' })
   return target
+}
+
+/** Whether an app bundle's executable is running. */
+export function appRunning(appPath) {
+  return spawnSync('/usr/bin/pgrep', ['-f', `${appPath}/Contents/MacOS/`], { stdio: 'ignore' }).status === 0
 }
 
 /** Unregister and delete this variant's app. */

@@ -5,7 +5,7 @@ import { existsSync, lstatSync, readdirSync, readlinkSync, rmSync, statSync } fr
 import { basename, dirname, join } from 'node:path'
 import { buildPaths, buildReady, buildRecord, ensureBuild, harnessRepo, linkExtras, linkHarness, readLock, resolveHarnessCommit } from '../lib/harness.mjs'
 import { buildsDir, homeOf, mainCheckout, REPO } from '../lib/paths.mjs'
-import { listening } from '../lib/install.mjs'
+import { appPathOf, appRunning, listening } from '../lib/install.mjs'
 import { runningAs } from '../lib/processes.mjs'
 import { namedStatus, stopNamed } from './variant.mjs'
 import { removeVariant } from '../lib/remove.mjs'
@@ -44,7 +44,11 @@ export async function list(argv) {
     }
   }
   const namedLabel = s => !s.installed ? 'not installed' : s.server ? 'running' : s.relay ? 'relay only' : s.job ? 'starting' : 'stopped'
-  const rows = args.builds ? builds() : listVariants().map(v => ({
+  // A thin client is its app: running, installed, or not (yet).
+  const clientLabel = id => !existsSync(appPathOf(id)) ? 'not installed' : appRunning(appPathOf(id)) ? 'app running' : 'installed'
+  const rows = args.builds ? builds() : listVariants().map(v => v.config?.client && !v.throwaway ? {
+    id: v.id, kind: 'client', status: clientLabel(v.id), url: v.config.url,
+  } : ({
     id: v.id,
     kind: v.throwaway ? 'throwaway' : 'named',
     status: named.has(v.id) ? namedLabel(named.get(v.id)) : relayOnly.has(v.id) ? 'relay only' : v.running ? 'running' : appAlive(v.state) ? 'app only' : 'stopped',
@@ -56,7 +60,7 @@ export async function list(argv) {
   }))
   if (args.json) return printJson(rows)
   if (rows.length === 0) return void process.stdout.write(args.builds ? 'no builds\n' : 'no variants\n')
-  const columns = Object.keys(rows[0])
+  const columns = args.builds ? Object.keys(rows[0]) : ['id', 'kind', 'status', 'port', 'harness', 'owner', 'expires', 'url']
   const cell = (row, c) => String(row[c] ?? '-')
   const width = columns.map(c => Math.max(c.length, ...rows.map(r => cell(r, c).length)))
   const line = values => values.map((v, i) => v.padEnd(width[i])).join('  ').trimEnd()
