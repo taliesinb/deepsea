@@ -1,0 +1,139 @@
+/* Billing pill: first in the composer status dock (slot order -10, before the session stats at 0);
+   its click-open card wears the stat-dialog skin of the other composer pills (token usage). */
+.deepsea-billing-root {
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(360px, 100%);
+  flex-shrink: 1;
+  box-sizing: border-box;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
+}
+.deepsea-billing-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px 8px;
+  border: none;
+  border-radius: 24px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary, #737780);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  line-height: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.deepsea-billing-pill svg, .deepsea-billing-panel svg, .deepsea-billing-sheet svg, .deepsea-billing-command svg { width: 14px; height: 14px; flex: none; }
+.deepsea-billing-pill:hover, .deepsea-billing-pill[aria-expanded='true'] {
+  background: var(--dsw-alias-interactive-bg-hover, #8882);
+  color: var(--dsw-alias-label-secondary, #555b64);
+}
+.deepsea-billing-pill:focus-visible { outline: 2px solid var(--dsw-alias-label-tertiary, #737780); outline-offset: 2px; }
+.deepsea-billing-group { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.deepsea-billing-amount { display: inline-flex; align-items: center; gap: 6px; }
+/* Pill meter: window label, ContextMeter's ring and percent, 6px apart like ContextMeter. */
+.deepsea-billing-meter { display: inline-flex; align-items: center; gap: 6px; }
+.deepsea-billing-note { display: inline-flex; align-items: center; }
+
+.deepsea-billing-extra { color: var(--dsw-alias-state-warn-primary, #f59e0b); }
+.deepsea-billing-info { color: var(--dsw-alias-state-warn-primary, #f59e0b); }
+.deepsea-billing-danger { color: var(--dsw-alias-state-error-primary, #dc2626); }
+.deepsea-billing-muted { color: var(--dsw-alias-label-tertiary, #737780); }
+/* Stale: the reading stays legible; its rings dim. */
+.deepsea-billing-stale svg { opacity: .4; }
+/* Estimates are dim and carry `~`; an API-price equivalent, never charged, is dimmer and struck. */
+.deepsea-billing-estimate { opacity: .55; }
+.deepsea-billing-struck { text-decoration: line-through; text-decoration-thickness: 1px; opacity: .38; }
+.deepsea-billing-up { margin-right: 2px; }
+
+/* ContextMeter ring: border-l3 track, label-tertiary fill, 2px round stroke. */
+.deepsea-billing-ring-track { fill: none; stroke: var(--dsw-alias-border-l3, #8884); stroke-width: 2; }
+.deepsea-billing-ring-fill { fill: none; stroke: var(--dsw-alias-label-tertiary, #737780); stroke-width: 2; stroke-linecap: round; }
+
+/* Stat-dialog surface (ui-chat stat-dialog.module.css): menu surface, r12, 16px padding, 12/18 text,
+   width from content within 300–440px. */
+.deepsea-billing-panel, .deepsea-billing-sheet {
+  box-sizing: border-box;
+  padding: 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--dsw-specific-menu, white);
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary, #555b64);
+  cursor: default;
+}
+.deepsea-billing-panel {
+  position: fixed;
+  z-index: 1100;
+  width: max-content;
+  min-width: min(300px, calc(100vw - 24px));
+  max-width: min(440px, calc(100vw - 24px));
+  max-height: min(600px, calc(100dvh - 24px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-shadow: var(--dsw-elevation-prominent, 0 4px 24px #0003);
+}
+/* The card takes focus for Escape/Tab handling; like the other stat dialogs it draws no ring. */
+.deepsea-billing-panel:focus { outline: none; }
+.deepsea-billing-title { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 10px; color: var(--dsw-alias-label-primary); font-weight: 500; }
+.deepsea-billing-title-label { min-width: 0; }
+.deepsea-billing-title-items { display: inline-flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+/* Heading meters ("◔ 5h  ◔ 7d") on the panel's grey: brighter than the footer ring. */
+.deepsea-billing-head-meter { display: inline-flex; align-items: center; gap: 3px; color: var(--dsw-alias-label-secondary); font-weight: 400; }
+.deepsea-billing-head-meter .deepsea-billing-ring-track { stroke: var(--dsw-alias-border-l4); }
+.deepsea-billing-head-meter .deepsea-billing-ring-fill { stroke: var(--dsw-alias-label-primary); }
+.deepsea-billing-section-rule { margin: 14px 0; border-top: .5px solid var(--dsw-alias-border-l2); }
+.deepsea-billing-dt-icon { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Framed tables: runs of key/value rows separated by a rule. */
+.deepsea-billing-table { border: .5px solid var(--dsw-alias-border-l2); border-radius: 8px; overflow: hidden; }
+.deepsea-billing-table-run { margin: 0; padding: 5px 10px; }
+.deepsea-billing-table-run + .deepsea-billing-table-run { border-top: .5px solid var(--dsw-alias-border-l2); }
+.deepsea-billing-kv { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 1px 0; }
+.deepsea-billing-kv dt { flex: none; margin: 0; color: var(--dsw-alias-label-tertiary); }
+.deepsea-billing-kv dd { min-width: 0; margin: 0; text-align: right; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.deepsea-billing-kv .deepsea-billing-dt-icon { justify-content: flex-end; }
+/* Quota rows: time to reset, percent and ring in fixed columns so the windows line up. */
+.deepsea-billing-usage-line { display: grid; grid-template-columns: 32px 36px 14px; align-items: center; column-gap: 6px; }
+.deepsea-billing-usage-reset { justify-self: end; color: var(--dsw-alias-label-caption, #81858c); }
+.deepsea-billing-usage-pct { text-align: right; }
+.deepsea-billing-request-lines { display: inline-flex; flex-direction: column; align-items: flex-end; }
+
+/* Sources table: name, requests, money; the current source's row tinted. */
+.deepsea-billing-totals table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.deepsea-billing-totals td { padding: 5px 0 5px 10px; text-align: right; white-space: nowrap; vertical-align: middle; }
+.deepsea-billing-totals td:last-child { padding-right: 10px; }
+/* Number columns shrink to their content (width: 1px), so the name column takes the spare width
+   without making the table's own max-content width grow the panel. */
+.deepsea-billing-totals td:not(.deepsea-billing-total-name) { width: 1px; }
+.deepsea-billing-totals td.deepsea-billing-total-name { text-align: left; }
+.deepsea-billing-totals .deepsea-billing-total-name .deepsea-billing-dt-icon { display: flex; align-items: center; gap: 8px; }
+.deepsea-billing-total-row { color: var(--dsw-alias-label-secondary); }
+.deepsea-billing-total-row + .deepsea-billing-total-row td { border-top: .5px solid var(--dsw-alias-border-l2); }
+.deepsea-billing-total-provider { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deepsea-billing-total-money { display: inline-flex; gap: 6px; justify-content: flex-end; }
+.deepsea-billing-source-count { color: var(--dsw-alias-label-tertiary, #737780); }
+.deepsea-billing-total-current { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.deepsea-billing-total-sum { color: var(--dsw-alias-label-primary); }
+
+.deepsea-billing-note-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.deepsea-billing-note-row span { color: var(--dsw-alias-label-secondary, #555b64); }
+@media (max-width: 640px) { .deepsea-billing-root { max-width: 160px; } }
+.deepsea-billing-key { font-family: var(--dsh-font-mono, ui-monospace, monospace); }
+
+/* /billing in the transcript: a command row, then one card per provider, wrapping at the chat width. */
+.deepsea-billing-command { display: flex; min-width: 0; flex-direction: column; }
+.deepsea-billing-command-header { display: flex; min-width: 0; height: 32px; align-items: center; overflow: hidden; white-space: nowrap; color: var(--dsw-alias-label-tertiary); font-size: var(--dsh-content-font-size-secondary, 13px); }
+.deepsea-billing-command-icon { display: inline-flex; flex: none; margin-right: 8px; color: var(--dsw-alias-label-secondary); }
+.deepsea-billing-command[data-state='error'] .deepsea-billing-command-icon { color: var(--dsw-alias-state-error-primary, #dc2626); }
+.deepsea-billing-command-title { flex: none; color: var(--dsw-alias-label-primary); }
+.deepsea-billing-command-separator { flex: none; width: 2px; height: 2px; margin: 0 8px; border-radius: 1px; background: var(--dsw-alias-label-caption); }
+.deepsea-billing-command-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.deepsea-billing-command-cards { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; margin-top: 4px; }
+.deepsea-billing-command-cards > .deepsea-billing-sheet { flex: 1 1 280px; min-width: min(280px, 100%); max-width: 400px; border: .5px solid var(--dsw-alias-border-l2); }
