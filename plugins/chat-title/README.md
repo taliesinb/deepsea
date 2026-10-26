@@ -104,7 +104,7 @@ from the loader row of the harness's titler (`@deepseek-ai/dsh-session-title-llm
 `-first-prompt-llm` or `-all-prompts-llm`, whichever the profile mounts), so
 agent titles and automatic titles come out in one form: `slug` on a profile
 that sets `style: slug` on that row (an option of the harness topic
-`title-slug`), `natural` (the harness default) otherwise. The plugin runs on
+`title-slug`; @deepsea/session-title-slug sets it), `natural` (the harness default) otherwise. The plugin runs on
 stock DSH; there it inherits `natural`. The values are read when this row
 loads; after changing the titler row's style, reload this row (or restart).
 

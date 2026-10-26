@@ -1,7 +1,19 @@
 # Bundle patch, used when the package is installed into a profile.
 # Names a session from a `some-slug: ` prefix on its first prompt (host), and
 # previews the slug on the New Session row and keeps typed-into New Sessions
-# as ghost rows (browser half, lib/client.js). No config.
+# as ghost rows (browser half, lib/client.js). No config of its own.
 - insert:
     - id: deepsea-session-title-slug
       name: "@deepsea/session-title-slug"
+# Automatic titles in the same form (foo-bar-baz): the harness titler's row
+# (base bundle) with `style: slug` (harness topic `title-slug`). A patch layer
+# replaces the row's whole config, so the base bundle's values come along; a
+# profile that wants prose titles sets `style: natural` on this row.
+- id: session-title-llm
+  config:
+    targetWords: 5
+    targetCjkCharacters: 10
+    maxInputBytes: 4096
+    maxOutputTokens: 64
+    timeoutMs: 60000
+    style: slug
