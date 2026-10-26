@@ -52,6 +52,14 @@ With no config the plugin takes everything from the variant it runs in
 | Serve target | the relay, `DEEPSEA_RELAY` (set by the relay for the server it starts); else the proxy itself | — |
 | cookie | `deepsea-tailscale-<v>`, `Path=<serve path>/` | — |
 | tailscale CLI | `tailscalePath`, else PATH, then `/Applications/Tailscale.app/Contents/MacOS/Tailscale`, `/usr/local/bin`, `/opt/homebrew/bin`, `/usr/bin`, `/run/current-system/sw/bin` (NixOS) | `tailscalePath` |
+| tailscaled | `variant.yml` `tailscaleSocket` (`dsd new --tailscale-socket`), passed as `--socket` on every call; else the machine's | `tailscaleSocket` |
+
+A `tailscaleSocket` is a tailscaled of the account's own, a userspace one
+logged in as the person, on a machine whose own node is not theirs (a tagged
+server shared by several accounts): the variant then has that node's name,
+its owner's login as the node's own (admitted, operator), and a Serve path
+the account publishes without root. Its shields must be down, or it refuses
+the connections Serve would take.
 
 A throwaway records neither a port block nor a Serve path, and a stock home
 has no `variant.yml`: no Serve path, and a proxy only when `proxyPort` is
@@ -152,8 +160,13 @@ Index pages get a head script that turns `https://node/deepsea` into
 shell's document-relative asset URLs would resolve at the site root.
 
 **Threat model.** Any local process can connect to the loopback listener and
-forge the identity headers; that is local access, which a local process has
-anyway. The gate protects against the tailnet, not the machine.
+forge the identity headers. On a machine with one person's account that is
+local access, which a local process has anyway: the gate protects against the
+tailnet, not the machine. On a machine shared by several accounts it is not:
+another account could connect as this variant's owner. There the variant's
+port block must be one other accounts cannot connect to (a range the machine
+keeps for the account, by uid, and `dsd new --ports` or `DEEPSEA_PORTS`
+pointing into it; tools/dsd/README.md, Linux).
 
 ## The control channel
 
