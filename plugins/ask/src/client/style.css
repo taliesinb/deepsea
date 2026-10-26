@@ -1,0 +1,285 @@
+/* The /ask command row is replaced by the gutter marker. */
+div:has(> .deepsea-ask-row) { display: none; }
+
+/* Gutter markers: one "?" per side question, left of the turn's tail. */
+.deepsea-ask-marks {
+  position: relative;
+  display: flex;
+  height: 0;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* The tail's markers: a column in the gutter (about 30px wide with the right
+   sidebar open), its first marker level with the first line of the turn's
+   final response (top set from a measurement), running down from there. */
+.deepsea-ask-marks__stack {
+  position: absolute;
+  left: -27px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.deepsea-ask-mark {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-base, transparent);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+/* On a running turn's command row the marker sits level with the row's place in the flow. */
+.deepsea-ask-marks[data-deepsea-ask-inline] > .deepsea-ask-mark { top: -4px; left: -27px; }
+
+.deepsea-ask-mark:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.16));
+}
+
+.deepsea-ask-more {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The tab's link icon flashes the marker it scrolled to. */
+.deepsea-ask-mark[data-deepsea-ask-flash] { animation: deepsea-ask-pulse 460ms ease-out 3; }
+
+@keyframes deepsea-ask-pulse {
+  0% {
+    background: var(--dsw-alias-state-info-primary, #6e9cf7);
+    color: #fff;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-alias-state-info-primary, #6e9cf7) 70%, transparent);
+  }
+  100% { box-shadow: 0 0 0 9px transparent; }
+}
+
+.deepsea-ask-mark[data-state="answering"] { color: var(--dsw-alias-state-info-primary, #6e9cf7); }
+.deepsea-ask-mark[data-state="error"] { color: var(--dsw-alias-state-error-primary); }
+
+/* The sidebar tab. */
+.deepsea-ask__panel {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+}
+
+.deepsea-ask__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px 8px;
+}
+
+.deepsea-ask__empty {
+  margin-top: 24px;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+}
+
+.deepsea-ask__exchange {
+  margin: 0 -8px 18px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  transition: background-color 600ms ease;
+}
+
+.deepsea-ask__exchange[data-deepsea-ask-flash] {
+  background: color-mix(in srgb, var(--dsw-alias-state-info-primary, #6e9cf7) 22%, transparent);
+  transition: none;
+}
+
+.deepsea-ask__question {
+  width: fit-content;
+  max-width: 90%;
+  margin-left: auto;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.16));
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.deepsea-ask__meta {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11.5px;
+}
+
+.deepsea-ask__icon {
+  display: inline-flex;
+  padding: 2px;
+  align-items: center;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.deepsea-ask__icon:hover { color: var(--dsw-alias-label-primary); }
+.deepsea-ask__icon[data-deepsea-ask-copied] { color: var(--dsw-alias-state-positive, #4caf72); }
+
+/* The answer's copy icon floats at its bottom right and shows on hover. */
+.deepsea-ask__answer { position: relative; }
+
+.deepsea-ask__answer-copy {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  opacity: 0;
+  background: var(--dsw-alias-bg-base, transparent);
+  transition: opacity 120ms ease;
+}
+
+.deepsea-ask__exchange:hover .deepsea-ask__answer-copy,
+.deepsea-ask__answer-copy:focus-visible { opacity: 1; }
+
+/* The question's info row also shows only on hover (its space stays, so nothing moves). */
+.deepsea-ask__meta {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.deepsea-ask__exchange:hover .deepsea-ask__meta,
+.deepsea-ask__exchange[data-deepsea-ask-flash] .deepsea-ask__meta,
+.deepsea-ask__meta:focus-within { opacity: 1; }
+
+/* A zigzag rule: the next question starts a materially new context. */
+.deepsea-ask__tear {
+  height: 6px;
+  margin: 2px 0 18px;
+  background: var(--dsw-alias-border-l1);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6'%3E%3Cpolyline points='0,5 6,1 12,5' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") repeat-x left center / 12px 6px;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6'%3E%3Cpolyline points='0,5 6,1 12,5' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") repeat-x left center / 12px 6px;
+}
+
+.deepsea-ask__tools {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.deepsea-ask__tool {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  height: 22px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+.deepsea-ask__tool-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--dsw-alias-label-caption);
+}
+
+.deepsea-ask__tool[data-state="running"] .deepsea-ask__tool-dot { background: var(--dsw-alias-state-info-primary, #6e9cf7); }
+.deepsea-ask__tool[data-state="error"] .deepsea-ask__tool-dot,
+.deepsea-ask__tool[data-state="refused"] .deepsea-ask__tool-dot { background: var(--dsw-alias-state-error-primary); }
+
+.deepsea-ask__tool-name { flex: none; color: var(--dsw-alias-label-secondary); }
+.deepsea-ask__tool-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--dsw-font-mono, ui-monospace, monospace); }
+
+.deepsea-ask__answer { line-height: 1.6; }
+
+.deepsea-ask__error { margin: 6px 0; color: var(--dsw-alias-state-error-primary); }
+.deepsea-ask__muted { margin: 6px 0; color: var(--dsw-alias-label-tertiary); }
+
+.deepsea-ask__link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.deepsea-ask__link:hover { color: var(--dsw-alias-label-primary); }
+
+.deepsea-ask__composer {
+  flex: none;
+  padding: 8px 12px 12px;
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.deepsea-ask__input {
+  box-sizing: border-box;
+  width: 100%;
+  resize: none;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.deepsea-ask__input:focus { border-color: var(--dsw-alias-state-info-primary, #6e9cf7); }
+
+.deepsea-ask__composer-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.deepsea-ask__send {
+  height: 26px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 13px;
+  background: var(--dsw-alias-state-info-primary, #6e9cf7);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.deepsea-ask__send:disabled { opacity: 0.4; cursor: default; }
+
+.deepsea-ask__cancel { background: var(--dsw-alias-state-error-primary, #e5484d); }
+
+.deepsea-ask__outline {
+  border: 0.5px solid var(--dsw-alias-label-tertiary);
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.deepsea-ask__outline:hover:not(:disabled) { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-secondary); }
+
+.deepsea-ask__spacer { flex: 1 1 auto; }
+
+.deepsea-ask__danger,
+.deepsea-ask__danger:hover {
+  border-color: var(--dsw-alias-state-error-primary, #e5484d);
+  background: var(--dsw-alias-state-error-primary, #e5484d);
+}
+
+.deepsea-ask__dialog {
+  padding: 4px 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
