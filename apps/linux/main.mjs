@@ -32,7 +32,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { openRunLog } from '../../packages/logs/index.mjs'
-import { describeForwardError, Forwarder, ForwardError, loopbackPort, onLocalPort, startLoopbackProxy } from './forward.mjs'
+import { describeForwardError, Forwarder, ForwardError, loopbackPort, loopbackRedirectPort, onLocalPort, startLoopbackProxy } from './forward.mjs'
 import { cleanName, configDirectory, logDirectory, partitionOf, readConfig, ROOT_NAME, writeConfig } from './paths.mjs'
 import { magicDnsSuffix, parseServerInput, Scope } from './resolve.mjs'
 
@@ -110,9 +110,25 @@ let current
 let setupWindow
 const configured = new WeakSet()
 
-function identityFor(state, href) {
+/**
+ * What the preload gives a page of the server: the whole identity in a main frame; in a frame
+ * (a remote session framed through remote-workspaces) only `openExternal`, so a sign-in there
+ * asks with its own server's address. Nothing for a page of any other origin.
+ */
+function identityFor(state, href, frame) {
   if (state === undefined || !state.scope.contains(href)) return null
+  if (frame) return { frame: true }
   return { name: config.name ?? '', glyphColor: config.glyphColor ?? '', view: config.view }
+}
+
+/**
+ * The DeepSea server a page belongs to: the app's own for a main frame, else the directory of a
+ * frame of the server's origin, another server's page framed through remote-workspaces
+ * (`<mount>deepsea-remote-workspaces/servers/<id>/`, whose egress reaches that server).
+ */
+function pageServer(state, frame) {
+  if (frame === null || frame === undefined || frame.parent === null) return state.url
+  return new URL('.', frame.url).href
 }
 
 function userAgent() {
@@ -225,6 +241,9 @@ function makeWindow(state) {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      // The preload runs in frames too (still sandboxed, no Node): a frame of the server's origin
+      // gets `openExternal` (identityFor); any other frame gets nothing.
+      nodeIntegrationInSubFrames: true,
       webviewTag: false,
     },
   })
@@ -359,23 +378,33 @@ function openExternal(url) {
 function openPopup(state, url) {
   const popup = new BrowserWindow({
     width: 960, height: 720, autoHideMenuBar: true, title: config.name || APP_NAME,
-    webPreferences: { session: state.session, preload: here('./preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false },
+    webPreferences: { session: state.session, preload: here('./preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, nodeIntegrationInSubFrames: true, webviewTag: false },
   })
   wireContents(state, popup.webContents, false)
   void popup.loadURL(url).catch(() => {})
 }
 
-/** A URL the page wants opened (window.open of a foreign URL, `__DEEPSEA_APP__.openExternal`). */
-function openFromPage(state, raw) {
+/**
+ * A URL a page wants opened (window.open of a foreign URL, `__DEEPSEA_APP__.openExternal`), on
+ * behalf of the server at `mount` (pageServer; default: the app's own).
+ */
+function openFromPage(state, raw, mount = state.url) {
   let url
   try { url = new URL(String(raw)) } catch { return }
   if (!['http:', 'https:', 'mailto:'].includes(url.protocol)) return
   if (!state.scope.contains(url) && loopbackPort(url) !== undefined) {
-    void forwardLoopback(state, url.href).then((local) => {
+    void forwardLoopback(state, url.href, mount).then((local) => {
       if (local === undefined) return
       if (state.scope.contains(local)) openPopup(state, local)
       else openExternal(local)
     })
+    return
+  }
+  // A sign-in page whose redirect goes to a loopback callback: that callback listens on the
+  // server's machine, so its port is forwarded here first.
+  const callback = state.scope.contains(url) ? undefined : loopbackRedirectPort(url)
+  if (callback !== undefined) {
+    void forwardCallback(state, callback, mount).then(() => openExternal(url.href))
     return
   }
   if (state.scope.contains(url)) openPopup(state, url.href)
@@ -383,22 +412,37 @@ function openFromPage(state, raw) {
 }
 
 /**
- * Forward the server's port a loopback URL names; resolves the URL to use
- * here (the same, or on the substitute local port), the server's own page
- * for its own port (`reserved`), or undefined when refused (an alert says why).
+ * Forward the port a loopback URL names from the server at `mount`; resolves the URL to use
+ * here (the same, or on the substitute local port), that server's own page for its own port
+ * (`reserved`), or undefined when refused (an alert says why).
  */
-async function forwardLoopback(state, raw) {
+async function forwardLoopback(state, raw, mount = state.url) {
   const port = loopbackPort(raw)
   try {
-    const row = await state.forwarder.ensure(port)
+    const row = await state.forwarder.ensure(port, { mount })
     return onLocalPort(raw, row.localPort)
   } catch (error) {
     if (error instanceof ForwardError && error.code === 'reserved') {
       const url = new URL(raw)
-      return state.scope.resolve(`${url.pathname}${url.search}`)
+      return new URL(`${url.pathname.replace(/^\//, '')}${url.search}`, mount).href
     }
     reportForwardFailure(state, port, error)
     return undefined
+  }
+}
+
+/**
+ * Forward a sign-in's callback port from the server at `mount`, on exactly that port and for one
+ * use. A port taken here is the sign-in's own listener (the server is on this machine after all),
+ * and any other failure leaves the sign-in's own fallback (pasting the address the browser ended
+ * on), so it never fails: the page opens either way.
+ */
+async function forwardCallback(state, port, mount) {
+  try {
+    const row = await state.forwarder.ensure(port, { mount, exact: true, singleUse: true })
+    note(`forward: sign-in callback 127.0.0.1:${String(row.localPort)} → port ${String(port)} via ${mount}`)
+  } catch (error) {
+    note(`forward: sign-in callback ${String(port)} not forwarded (${String(error.code ?? '')} ${error.message}); opening the page as it is`)
   }
 }
 
@@ -520,12 +564,13 @@ const fromAppPage = (event) => String(event.senderFrame?.url ?? '').startsWith(P
 
 function registerIpc() {
   ipcMain.on('deepsea-client:identity', (event, href) => {
-    event.returnValue = current !== undefined && event.sender.session === current.session ? identityFor(current, String(href)) : null
+    const frame = event.senderFrame !== null && event.senderFrame?.parent !== null
+    event.returnValue = current !== undefined && event.sender.session === current.session ? identityFor(current, String(href), frame) : null
   })
   ipcMain.on('deepsea-client:open-external', (event, raw) => {
     const state = current
     if (state === undefined || event.sender.session !== state.session || !state.scope.contains(event.senderFrame?.url ?? '')) return
-    openFromPage(state, raw)
+    openFromPage(state, raw, pageServer(state, event.senderFrame))
   })
   ipcMain.handle('deepsea-client:connect', async (event, input) => {
     if (!fromAppPage(event) || setupWindow === undefined || event.sender !== setupWindow.webContents) throw new Error('not the connection form')
