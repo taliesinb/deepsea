@@ -1,7 +1,7 @@
 'use strict'
 /*
  * The one preload of every window (sandboxed, context-isolated), run at
- * document start in main frames only:
+ * document start in every frame:
  *
  *   - the app's own pages (pages/*.html, file:) get `window.deepseaClient`:
  *     connect, retry, change server, details;
@@ -13,7 +13,10 @@
  *     wordmark and colours the whale (the macOS app's desktop-branding.js).
  *     `openExternal` reaches the main process through the one bridged
  *     function `__DEEPSEA_APP_NATIVE__.openExternal`, which accepts http,
- *     https and mailto only.
+ *     https and mailto only;
+ *   - a frame of the server's origin (a remote session framed through
+ *     remote-workspaces) gets only `openExternal`, which the main process
+ *     answers on behalf of that frame's own server.
  *
  * Anything else (another site, a loopback preview) gets nothing.
  */
@@ -67,6 +70,14 @@ function applyIdentity(identity) {
   document.addEventListener('DOMContentLoaded', install, { once: true })
 }
 
+/** A framed page of the server: `openExternal` only (runs in the page's own world, serialized). */
+function applyOpener() {
+  const native = globalThis.__DEEPSEA_APP_NATIVE__
+  globalThis.__DEEPSEA_APP__ = Object.assign(globalThis.__DEEPSEA_APP__ || {}, {
+    openExternal: (url) => { try { native.openExternal(String(url)) } catch { /* bridge gone */ } },
+  })
+}
+
 if (location.protocol === 'file:') {
   contextBridge.exposeInMainWorld('deepseaClient', {
     connect: (input) => ipcRenderer.invoke('deepsea-client:connect', String(input)),
@@ -80,10 +91,11 @@ if (location.protocol === 'file:') {
     contextBridge.exposeInMainWorld('__DEEPSEA_APP_NATIVE__', {
       openExternal: (url) => ipcRenderer.send('deepsea-client:open-external', String(url)),
     })
+    const install = identity.frame ? applyOpener : applyIdentity
     if (typeof contextBridge.executeInMainWorld === 'function') {
-      contextBridge.executeInMainWorld({ func: applyIdentity, args: [identity] })
+      contextBridge.executeInMainWorld({ func: install, args: [identity] })
     } else {
-      void webFrame.executeJavaScript(`(${applyIdentity.toString()})(${JSON.stringify(identity)})`)
+      void webFrame.executeJavaScript(`(${install.toString()})(${JSON.stringify(identity)})`)
     }
   }
 }

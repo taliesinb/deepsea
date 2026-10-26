@@ -4,7 +4,7 @@ import { once } from 'node:events'
 import { createServer as createHttpServer, request } from 'node:http'
 import { connect, createServer } from 'node:net'
 import { test } from 'node:test'
-import { describeForwardError, forwardEndpoint, Forwarder, loopbackPort, onLocalPort, startLoopbackProxy } from '../forward.mjs'
+import { describeForwardError, forwardEndpoint, Forwarder, loopbackPort, loopbackRedirectPort, onLocalPort, startLoopbackProxy } from '../forward.mjs'
 import { attachEcho, createFakeHost } from './fake-host.mjs'
 
 async function listen(server) {
@@ -166,6 +166,31 @@ test('the fixture\'s WebSocket side agrees with Node\'s own WebSocket client', {
   assert.equal(event.data, 'hello')
   ws.close()
   await once(ws, 'close')
+})
+
+test('sign-in callbacks: the redirect port, through the asking server, exact and single-use', async (t) => {
+  const { forwarder, host, echoPort } = await setup(t)
+  assert.equal(loopbackRedirectPort('https://claude.ai/oauth/authorize?code=true&redirect_uri=http%3A%2F%2Flocalhost%3A53692%2Fcallback&state=x'), 53692)
+  assert.equal(loopbackRedirectPort('https://x.example/a?redirect_uri=https%3A%2F%2Fapp.example%2Fcb'), undefined)
+  assert.equal(loopbackRedirectPort('https://x.example/a'), undefined)
+  // Through another server's mount (a framed remote session's directory): that server is asked, not the app's own.
+  const other = await createFakeHost({ mount: '/deepsea-test/deepsea-remote-workspaces/servers/other/', cookie: 'session=test' })
+  other.ports.add(echoPort)
+  t.after(() => other.close())
+  const before = host.requests.length
+  const viaOther = await forwarder.ensure(echoPort, { mount: other.url })
+  assert.equal(viaOther.mount, other.url)
+  assert.equal(host.requests.length, before)
+  assert.ok(other.requests.length > 0)
+  // Exact: the port is taken here (the sign-in's own listener, on this machine), so it fails at once, asking nobody.
+  const asked = other.requests.length
+  await assert.rejects(forwarder.ensure(echoPort, { mount: other.url.replace('/other/', '/another/'), exact: true }), { code: 'listen' })
+  assert.equal(other.requests.length, asked)
+  // Single use: closed a moment after its connection ends; other forwards stay.
+  const used = await forwarder.ensure(echoPort, { mount: host.url, singleUse: true })
+  assert.equal(await roundTrip(used.localPort, Buffer.from('callback')).then(b => b.toString()), 'callback')
+  await new Promise(resolve => setTimeout(resolve, 2600))
+  assert.deepEqual(forwarder.rows.map(row => row.mount), [other.url])
 })
 
 test('idle forwards close; a disposed forwarder refuses', async (t) => {

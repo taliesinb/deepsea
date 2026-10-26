@@ -143,6 +143,18 @@ by binary frames both ways.
   the default browser at the forwarded address: `http://127.0.0.1:<local
   port>/…` when the port was remapped. A dev server that hard-codes its port in
   its HMR socket then works only inside the window.
+- **Sign-in callbacks.** A sign-in page whose `redirect_uri` is a loopback
+  address (pi-ai's Anthropic flow: `http://localhost:53692/callback`) has its
+  callback on the server's machine: before the page opens, exactly that port
+  is forwarded, for one use (closed a moment after the callback has gone
+  through, or after ten idle minutes). When it is taken here the sign-in is
+  this machine's own and the page just opens; any other failure leaves the
+  sign-in's paste fallback (`/login <flow> <address>`).
+- **The asking page's server.** The preload also runs in frames: a frame of
+  the server's origin (another server's session framed through
+  remote-workspaces, `<mount>deepsea-remote-workspaces/servers/<id>/`) gets
+  `openExternal` alone, and its forwards go through that directory, whose
+  egress reaches its server.
 - The server's own port (`reserved`) means the GUI itself: the client opens the
   matching page under the mount instead. Other refusals raise an alert naming
   the reason, at most once per port every 30 seconds: `nothing-listening`,
@@ -165,7 +177,9 @@ without `<webview>`. The one preload gives three kinds of page different things:
 
 - **The server's pages** (scope checked again in the main process) get
   `__DEEPSEA_APP__` and one bridged function,
-  `__DEEPSEA_APP_NATIVE__.openExternal`.
+  `__DEEPSEA_APP_NATIVE__.openExternal`; a frame of the server's origin gets
+  `openExternal` alone (`nodeIntegrationInSubFrames` runs the preload there;
+  still sandboxed, without Node).
 - **The app's own pages** (`pages/`) get `deepseaClient`: connect, retry,
   change server and details. Each IPC call checks the sender's frame URL.
 - **Every other page** gets nothing.
