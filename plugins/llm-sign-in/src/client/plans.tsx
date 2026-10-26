@@ -44,6 +44,8 @@ export interface SignInStatus {
   readonly url?: string
   readonly code?: string
   readonly question?: SignInQuestion
+  /** The flow also takes the address the browser ended on (a browser on another machine). */
+  readonly paste?: boolean
   readonly error?: string
   readonly account?: { readonly email?: string; readonly name?: string; readonly organization?: string; readonly plan?: string }
 }
@@ -91,12 +93,14 @@ export function shortUrl(url: string): string {
 }
 
 /** The body for one flow's sign-in state. */
-function SignInBody({ flow, status, onAnswer }: {
+function SignInBody({ flow, status, onAnswer, onPaste }: {
   flow: SignInFlow
   status: SignInStatus | undefined
   onAnswer: (value: string) => void
+  onPaste: (value: string) => void
 }): ReactNode {
   const [text, setText] = useState('')
+  const [pasted, setPasted] = useState('')
   if (status === undefined || status.state === 'starting' || status.state === 'idle') {
     return <p className="deepsea-login-plan-status">Starting…</p>
   }
@@ -154,6 +158,23 @@ function SignInBody({ flow, status, onAnswer }: {
           ? null
           : <p className="deepsea-login-plan-code"><span>Code</span><code>{status.code}</code></p>}
         <p className="deepsea-login-plan-status" role="status">Waiting for authorization…</p>
+        {status.paste === true
+          ? (
+            <form
+              className="deepsea-login-plan-answer"
+              onSubmit={(event) => { event.preventDefault(); if (pasted.trim() !== '') { onPaste(pasted.trim()); setPasted('') } }}
+            >
+              <input
+                className="deepsea-login-plan-input"
+                value={pasted}
+                placeholder="Address the browser ended on"
+                aria-label="Address the browser ended on"
+                onChange={(event) => { setPasted(event.target.value) }}
+              />
+              <Button type="submit" variant="outline" disabled={pasted.trim() === ''}>Continue</Button>
+            </form>
+          )
+          : null}
       </div>
     )
   }
@@ -210,6 +231,10 @@ function AddLoginDialog({ open, onClose, initial }: { open: boolean; onClose: ()
     if (flow === undefined || status?.question === undefined) return
     post(`${API}/answer`, { flow: flow.name, id: status.question.id, value }).then(setStatus, (failure: unknown) => { setError(message(failure)) })
   }
+  const paste = (value: string): void => {
+    if (flow === undefined || status?.paste !== true) return
+    post(`${API}/answer`, { flow: flow.name, paste: value }).then(setStatus, (failure: unknown) => { setError(message(failure)) })
+  }
   // Closing never leaves a sign-in running behind the dialog.
   const close = (): void => { void cancel(); onClose() }
   // A card's Log in has no list to go back to.
@@ -251,7 +276,7 @@ function AddLoginDialog({ open, onClose, initial }: { open: boolean; onClose: ()
           : (
             <>
               {error === undefined ? null : <p className="deepsea-login-plan-status deepsea-login-plan-status--error" role="alert">{error}</p>}
-              <SignInBody flow={flow} status={status} onAnswer={answer} />
+              <SignInBody flow={flow} status={status} onAnswer={answer} onPaste={paste} />
             </>
           )}
       </div>
