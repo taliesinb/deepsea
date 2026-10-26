@@ -7,7 +7,8 @@ Session with a slug and a colon,
 foo-bar-baz: rename the widget and add tests
 ```
 
-and the session is titled `foo-bar-baz`. While you type, the session's
+and the session is titled `foo-bar-baz`. Without a slug, the automatic
+title takes the same form (below). While you type, the session's
 **New Session** row in the sidebar previews the slug; if the prefix stops
 matching, the row goes back to "New Session". The model receives the prompt
 **without the prefix** (`rename the widget and add tests`): the slug is the
@@ -69,8 +70,14 @@ including a remote shell framing one of this server's sessions:
    title service treats it as pinned, so the pending automatic title
    generation is superseded and later prompts schedule none.
 
-To make unslugged prompts get `foo-bar-baz` titles too, set `style: slug`
-on the `session-title-llm` row (the harness topic `title-slug`).
+**Automatic titles are slugs too.** The bundle patch also sets `style: slug`
+on the harness titler's row, `session-title-llm` (harness topic
+`title-slug`), so a prompt without a slug gets a `foo-bar-baz` title as well,
+and tool-rename-chat's `rename_chat` (which inherits that style) agrees. A patch
+layer replaces a row's whole config, so the row restates the base bundle's
+values (a test keeps them equal). A profile that prefers prose titles sets
+`style: natural` on that row in its own `cordis.patch.yml`, with the same
+other values.
 
 **Browser half** (`src/client/`):
 
