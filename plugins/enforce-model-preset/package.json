@@ -1,0 +1,28 @@
+{
+  "name": "@deepsea/enforce-model-preset",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: an agent preset per selected model. Rules map providers and models to presets, and blank sessions are switched to the matching preset when they select (or start on) such a model.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": ["index.js", "cordis.patch.yml", "README.md", "locale/*.json"],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@deepsea/logs": "link:../../packages/logs",
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths"
+  }
+}

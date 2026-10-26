@@ -1,0 +1,17 @@
+# Bundle patch, used when the package is installed into a profile.
+# Default: the AFM server behind the `apple` provider (Apple Foundation,
+# on-device), on the port the provider's baseURL names. A profile override of
+# `config` replaces the whole value. Run logs go to the variant's log
+# directory, plugins/local-model-supervisor/<id>/.
+- insert:
+    - id: deepsea-local-model-supervisor
+      name: "@deepsea/local-model-supervisor"
+      config:
+        servers:
+          - id: afm
+            providers: [apple]
+            command: afm
+            args: ['--port', '9997']
+            healthUrl: http://127.0.0.1:9997/v1/models
+            idleMinutes: 15
+            startupTimeoutMs: 90000

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Preset per Model",
+    "description": "Switches a new session to the agent preset its chosen model needs."
+  }
+}
