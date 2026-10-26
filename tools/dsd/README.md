@@ -63,13 +63,46 @@ checks the node running dsd.
   enable-linger`, which usually needs an administrator). `build --install`
   says so when it does not.
 - Logs follow LAYOUT.md §5 under `${XDG_STATE_HOME:-~/.local/state}`.
-- On a machine shared by several accounts, `dsd new <v> --serve-path
-  /deepsea-<user>` gives the variant a path of the person's own. Publishing
-  it takes a Tailscale operator (`tailscale set --operator=<user>`, as root),
-  or root publishing it once (`tailscale serve --bg --https=443
-  --set-path=<path> http://127.0.0.1:<block+3>`): tailscaled keeps it, and
-  the tailscale plugin counts a path that points at its relay as its own.
 - Listening sockets are read from `/proc` (lsof elsewhere).
+
+### A machine shared by several accounts
+
+On a machine with several people's accounts, everything below a variant's
+relay listens on loopback, where every account can connect: another account
+could send the tailscale plugin's proxy a forged identity header. And the
+machine's own tailscaled is often a tagged node that only root may publish
+Serve paths on. Three settings of `dsd new` fit such a machine without dsd
+knowing anything about it:
+
+- `--ports <first>-<last>` (or `DEEPSEA_PORTS` in the environment, for
+  `new` and throwaways alike): choose the port block, and a throwaway's
+  ports, inside a range the machine gives the account, one whose ports other
+  accounts cannot connect to (a firewall rule by uid, for example).
+  `--ports <first>` takes the one block starting there.
+- `--tailscale-socket <path>`: serve the variant from a tailscaled of the
+  account's own, a userspace one (`tailscaled --tun=userspace-networking
+  --socket=<path>`) logged in as the person: dsd and the tailscale plugin
+  pass it `--socket`, so the variant gets that node's name, its owner's login
+  (admitted without a list) and a Serve path the account publishes itself;
+  the node is the person's alone, so the default path does. Its shields must
+  be down, or it refuses the connections Serve would take.
+- `--after <unit>[,<unit>…]`: systemd user units the relay unit needs
+  running first (`Wants=`, `After=`), such as that tailscaled when nothing
+  else starts it.
+
+```sh
+export DEEPSEA_PORTS=<first>-<last>              # the machine's range for this account
+dsd new release --tailscale-socket <its socket> --after <its unit>.service
+dsd build release --install
+```
+
+Without a tailscaled of its own, `dsd new <v> --serve-path /deepsea-<user>`
+gives the variant a path of the person's own on the machine's node:
+publishing it takes a Tailscale operator (`tailscale set
+--operator=<user>`, as root), or root publishing it once (`tailscale serve
+--bg --https=443 --set-path=<path> http://127.0.0.1:<block+3>`): tailscaled
+keeps it, and the tailscale plugin counts a path that points at its relay as
+its own.
 
 ## Variants
 
@@ -84,6 +117,8 @@ source: integration/base         # a commit or ref, run as an immutable build
 plugins: all                     # or a list of plugin names
 serve: true                      # Tailscale is available: the variant has a Serve path
 servePath: /deepsea-personal     # chosen by dsd new (LAYOUT.md §7)
+tailscaleSocket: /run/…/tailscaled.sock   # dsd new --tailscale-socket: the account's own tailscaled (Linux section)
+after: a.service,b.service       # dsd new --after: units the relay unit needs first (Linux)
 build: 2cb0966d55                # written by build --install: the commit installed
 ```
 
@@ -210,7 +245,7 @@ taken over. Build logs: `~/Library/Logs/io.github.taliesinb.deepsea/builds/`.
 | Command | Does |
 |---|---|
 | `dsd play [--plugins <names\|all>] [--accounts <names\|standard\|none>] [--source <ref>] [--harness <ref>] [--patch <file>,…] [--real]` | a throwaway to try things in, for people: `run release --throwaway --visible --detach --scripted --source integration/base --plugins all --simulated --accounts standard` (the app in front of you, every plugin, every provider simulated with test accounts, the scripted model the default); `--real` uses the real providers and no accounts. Quitting the app throws it away |
-| `dsd new <v> [--source <ref>] [--color <hex>] [--plugins <names\|all>] [--no-serve \| --serve-path <path>]` | create a named variant: home, `variant.yml` (port block: the first free one; Serve path, stepping aside from another account's, or `--serve-path` as given unless another target holds it), and the home's `logs` / `support` links (LAYOUT.md §4, §7); `--source` defaults to `integration/base` |
+| `dsd new <v> [--source <ref>] [--color <hex>] [--plugins <names\|all>] [--no-serve \| --serve-path <path>] [--ports <first>[-<last>]] [--tailscale-socket <path>] [--after <unit>[,…]]` | create a named variant: home, `variant.yml` (port block: the first free one, inside `--ports` or `DEEPSEA_PORTS` when given; Serve path, stepping aside from another account's, or `--serve-path` as given unless another target holds it; the account's own tailscaled and the units its relay needs, when given), and the home's `logs` / `support` links (LAYOUT.md §4, §7); `--source` defaults to `integration/base`. The last three are for a machine shared by several accounts (Linux section) |
 | `dsd build <v> [--install [--dock]] [--self]` | make sure the build of its source commit exists, install its plugins into its profile as bundles, and on macOS build its app (`apps/macos`); `--install` installs the app (`~/Applications`), the server host and relay link (Application Support), the relay LaunchAgent (loaded at once; LAYOUT.md §6) and the home's `source` link, and with `--dock` a Dock tile. The server host is replaced only when its signature changes, so privacy grants survive. On Linux (below): no app; `--install` installs the relay link and the relay's systemd user unit |
 | `dsd adopt <old home> (<v> \| --throwaway [run options…]) [--move-sign-ins] [--dry-run]` | bring an old DSH home (`~/.dsh…`) into a variant: copies sessions and attachments, the workspace registry, settings.yaml, API keys, each old plugin's state in its DeepSea place, the old profile's own rows and third-party bundles; re-runnable (it brings what is new or changed, and reports a conflict for anything changed on both sides); creates `<v>` as `new` would if missing (not built: `dsd build <v> --install` stays yours); `--throwaway` adopts into a fresh throwaway and starts it (run options pass through); `--move-sign-ins` moves Plan sign-ins out of the old home; `--dry-run` touches nothing (below) |
 | `dsd remove <v> [--home] [--self]` | uninstall a named variant: its LaunchAgent or systemd unit (stopping relay and server), its own Serve path, Dock tile, app, preferences and `~/Library` (Linux: XDG data and state) leftovers; the home stays unless `--home` |

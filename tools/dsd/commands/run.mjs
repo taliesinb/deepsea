@@ -35,7 +35,7 @@ import { join, resolve } from 'node:path'
 import { appSocketOf, appSource, buildThrowawayApp, launchApp, waitAppReady } from '../lib/app.mjs'
 import { appRequest } from '../lib/appsocket.mjs'
 import { componentSource } from '../lib/components.mjs'
-import { harnessRefuses } from '../lib/install.mjs'
+import { harnessRefuses, parsePorts, PORT_BLOCK } from '../lib/install.mjs'
 import { ensureSourceBuild, resolveSourceCommit } from '../lib/source.mjs'
 import { runNamed } from './variant.mjs'
 import { credentialsDocument, ensureSim, provisionAccounts } from '../lib/sim.mjs'
@@ -46,7 +46,7 @@ import { homeOf, logDirOf, REPO, variantName } from '../lib/paths.mjs'
 import { alive, freePort, listenerPids } from '../lib/processes.mjs'
 import { removeVariant, SERVER_ENTRY } from '../lib/remove.mjs'
 import { DsdError, isoLocal, note, onlyFlags, parseArgs, printJson, sleep, usage } from '../lib/util.mjs'
-import { checkNamedId, currentOwner, displayName, parseThrowaway, writeState, writeVariant } from '../lib/variants.mjs'
+import { checkNamedId, currentOwner, displayName, listVariants, parseThrowaway, writeState, writeVariant } from '../lib/variants.mjs'
 
 /**
  * Rows every throwaway's web profile gets: no telemetry leaves the machine,
@@ -198,10 +198,21 @@ async function waitServerThroughRelay(child, { url, serverLog }, timeoutMs) {
   throw new DsdError(`no server through the relay within ${Math.round(timeoutMs / 1000)} s; log: ${serverLog}\n${tail(serverLog, 25)}`)
 }
 
-/** Two distinct free ports. */
+/**
+ * Distinct free ports: any, or with DEEPSEA_PORTS (a range the machine gives this account) inside
+ * that range, clear of the blocks named variants record there.
+ */
 async function freePorts(count) {
+  const range = process.env.DEEPSEA_PORTS ? parsePorts(process.env.DEEPSEA_PORTS, 'DEEPSEA_PORTS') : undefined
   const ports = new Set()
-  while (ports.size < count) ports.add(await freePort())
+  const exclude = new Set()
+  if (range) {
+    for (const v of listVariants()) {
+      if (v.throwaway || !v.config?.ports) continue
+      for (let p = Number(v.config.ports); p < Number(v.config.ports) + PORT_BLOCK; p++) exclude.add(p)
+    }
+  }
+  while (ports.size < count) ports.add(await freePort({ range, exclude: new Set([...exclude, ...ports]) }))
   return [...ports]
 }
 

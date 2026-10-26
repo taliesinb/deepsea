@@ -101,15 +101,33 @@ function procListenerPids(port) {
   return pids
 }
 
-/** A port nothing is listening on, on 127.0.0.1. */
-export function freePort() {
-  return new Promise((resolve, reject) => {
+/** Whether 127.0.0.1:<port> can be bound now (0: any port); resolves the port bound, or undefined. */
+function bindable(port) {
+  return new Promise((resolve) => {
     const server = createServer()
     server.unref()
-    server.on('error', reject)
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address()
-      server.close(() => resolve(port))
+    server.once('error', () => resolve(undefined))
+    server.listen(port, '127.0.0.1', () => {
+      const bound = server.address().port
+      server.close(() => resolve(bound))
     })
   })
+}
+
+/**
+ * A port nothing is listening on, on 127.0.0.1: any the kernel gives, or with `range` (`{ first,
+ * last }`, DEEPSEA_PORTS) the first free one there not in `exclude`.
+ */
+export async function freePort({ range, exclude = new Set() } = {}) {
+  if (range === undefined) {
+    for (;;) {
+      const port = await bindable(0)
+      if (port === undefined) throw new Error('no free port on 127.0.0.1')
+      if (!exclude.has(port)) return port
+    }
+  }
+  for (let port = range.first; port <= range.last; port++) {
+    if (!exclude.has(port) && (await bindable(port)) !== undefined) return port
+  }
+  throw new Error(`no free port in ${range.first}-${range.last}`)
 }

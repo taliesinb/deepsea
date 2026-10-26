@@ -288,6 +288,45 @@ test('install on Linux: the relay unit, its quoting, a named Serve path, the sup
   assert.match(supportDirOf('lab', 'darwin'), /\/Library\/Application Support\/io\.github\.taliesinb\.deepsea\.lab$/)
 })
 
+test('a machine-given port range, the account\'s own tailscaled, units the relay needs', async () => {
+  const { choosePortBlock, parsePorts, tailscaleCommand } = await import('../lib/install.mjs')
+  const { relayUnit } = await import('../lib/systemd.mjs')
+  const { freePort } = await import('../lib/processes.mjs')
+  const { createServer } = await import('node:net')
+  assert.deepEqual(parsePorts('22300-22399'), { first: 22300, last: 22399 })
+  assert.deepEqual(parsePorts('22300'), { first: 22300, last: 22309 })
+  for (const bad of ['22300-22305', '80-200', '65530-65600', 'x', '']) assert.throws(() => parsePorts(bad), /--ports takes/, bad)
+  assert.throws(() => parsePorts('1', 'DEEPSEA_PORTS'), /DEEPSEA_PORTS takes/)
+  // The first block of the range that no variant records and nothing listens on.
+  const held = createServer()
+  const base = await new Promise((resolve) => {
+    const tryAt = (p) => { held.once('error', () => tryAt(p + 10)); held.listen(p + 2, '127.0.0.1', () => resolve(p)) }
+    tryAt(41000)
+  })
+  try {
+    assert.equal(await choosePortBlock(new Set(), { first: base, last: base + 29 }), base + 10)
+    assert.equal(await choosePortBlock(new Set([base + 10]), { first: base, last: base + 29 }), base + 20)
+    await assert.rejects(choosePortBlock(new Set([base + 10]), { first: base, last: base + 19 }), /no free port block in/)
+    // Throwaways: free ports inside the range, skipping excluded and held ones.
+    assert.equal(await freePort({ range: { first: base, last: base + 9 }, exclude: new Set([base, base + 1]) }), base + 3)
+    await assert.rejects(freePort({ range: { first: base + 2, last: base + 2 } }), /no free port in/)
+  } finally { held.close() }
+  assert.ok((await freePort()) > 0)
+  const cmd = tailscaleCommand('/run/user/1000/ts/tailscaled.sock')
+  if (cmd) {
+    assert.equal(cmd.at(-1), '--socket=/run/user/1000/ts/tailscaled.sock')
+    assert.equal(tailscaleCommand(undefined).length, 1)
+  }
+  const unit = relayUnit({ description: 'd', programArguments: ['x'], log: '/l', after: ['my-tailscaled.service', 'a@b.socket'] }) // dsd-check: allow
+  assert.match(unit, /^Wants=my-tailscaled\.service a@b\.socket$/m)
+  assert.match(unit, /^After=my-tailscaled\.service a@b\.socket$/m)
+  assert.ok(unit.indexOf('Wants=') < unit.indexOf('[Service]'))
+  assert.throws(() => relayUnit({ description: 'd', programArguments: ['x'], log: '/l', after: ['x; rm'] }), /not a systemd unit name/)
+  assert.doesNotMatch(relayUnit({ description: 'd', programArguments: ['x'], log: '/l' }), /^(Wants|After)=/m)
+  const yaml = formatFlatYaml({ tailscaleSocket: '/run/user/1000/ts/tailscaled.sock', after: 'a.service,b.service' })
+  assert.deepEqual(parseFlatYaml(yaml), { tailscaleSocket: '/run/user/1000/ts/tailscaled.sock', after: 'a.service,b.service' })
+})
+
 test('Linux: listening sockets from /proc/net/tcp, leftovers in the XDG directories, executables on PATH', async () => {
   const { listeningInodes } = await import('../lib/processes.mjs')
   const { linuxLeftovers } = await import('../lib/remove.mjs')

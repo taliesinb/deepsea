@@ -28,13 +28,22 @@ export function systemdQuote(arg, { dollars = true } = {}) {
   return `"${dollars ? quoted.replace(/\$/g, '$$$$') : quoted}"`
 }
 
-/** The relay unit: started with the user manager, restarted when it exits, its own stdout/stderr file. */
-export function relayUnit({ description, programArguments, log, environment = {} }) {
+/** A systemd unit name (`name.service`, a template's instance, …), as `dsd new --after` takes it. */
+export const UNIT_NAME = /^[A-Za-z0-9:_.@\\-]+\.(?:service|socket|target|mount|path|timer)$/
+
+/**
+ * The relay unit: started with the user manager, restarted when it exits, its own stdout/stderr
+ * file. `after`: units it needs running first (Wants= and After=), such as a daemon of the account's
+ * that nothing else starts.
+ */
+export function relayUnit({ description, programArguments, log, environment = {}, after = [] }) {
+  for (const unit of after) if (!UNIT_NAME.test(unit)) throw new DsdError(`not a systemd unit name: ${JSON.stringify(unit)}`)
   const env = Object.entries(environment).map(([k, v]) => `Environment=${systemdQuote(`${k}=${v}`, { dollars: false })}\n`).join('')
+  const needs = after.length ? `Wants=${after.join(' ')}\nAfter=${after.join(' ')}\n` : ''
   return `# written by dsd (tools/dsd/lib/systemd.mjs)
 [Unit]
 Description=${description.replace(/[\n\r]/g, ' ')}
-
+${needs}
 [Service]
 Type=simple
 ExecStart=${programArguments.map(systemdQuote).join(' ')}

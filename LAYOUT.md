@@ -329,3 +329,8 @@ launchd ── <variant name>.relay (RunAtLoad, KeepAlive)
   3220, …), clear of a stock DSH on 3080-31xx: `dsh web` on the block's first
   port, relay on `+3`, Tailscale proxy on `+4`. The block is recorded in the
   variant's `variant.yml`, nowhere else. Throwaways take free ports instead.
+  A machine may give each account a range of its own (`dsd new --ports`,
+  `DEEPSEA_PORTS`): blocks and throwaways' ports are then taken there.
+- A variant may be served from a tailscaled of the account's own
+  (`tailscaleSocket` in `variant.yml`), whose node is the person's alone, on
+  a machine whose own node is not theirs (tools/dsd/README.md, Linux).

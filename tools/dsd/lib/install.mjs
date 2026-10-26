@@ -16,7 +16,7 @@ import { homedir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { logDirOf, variantName } from './paths.mjs'
 import { installUnit, relayUnit, removeUnit, startUnit, stopUnit, unitDir, unitStatus } from './systemd.mjs'
-import { DsdError, note, onPath, sleep } from './util.mjs'
+import { DsdError, note, onPath, sleep, usage } from './util.mjs'
 import { displayName } from './variants.mjs'
 
 const LSREGISTER = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
@@ -110,17 +110,31 @@ export function listening(port, timeoutMs = 400) {
 }
 
 /**
- * The first port block from 3200 that no other variant of this account records and on which
- * nothing listens (another account's variants show up as listeners).
+ * A port range as `dsd new --ports` and `DEEPSEA_PORTS` take it: `<first>-<last>`, or `<first>` for
+ * the one block starting there. Returns `{ first, last }`.
  */
-export async function choosePortBlock(recorded) {
-  for (let base = PORT_BASE; base < 65000; base += PORT_BLOCK) {
+export function parsePorts(text, what = '--ports') {
+  const m = /^(\d+)(?:-(\d+))?$/.exec(String(text).trim())
+  const first = m ? Number(m[1]) : NaN
+  const last = m?.[2] !== undefined ? Number(m[2]) : first + PORT_BLOCK - 1
+  if (!m || first < 1024 || last > 65535 || last - first + 1 < PORT_BLOCK) {
+    usage(`${what} takes <first>-<last> (at least ${PORT_BLOCK} ports, from 1024 to 65535) or the <first> port of one block; not "${text}"`)
+  }
+  return { first, last }
+}
+
+/**
+ * The first port block of `range` (default: from 3200) that no other variant of this account
+ * records and on which nothing listens (another account's variants show up as listeners).
+ */
+export async function choosePortBlock(recorded, range = { first: PORT_BASE, last: 65009 }) {
+  for (let base = range.first; base + PORT_BLOCK - 1 <= range.last; base += PORT_BLOCK) {
     if (recorded.has(base)) continue
     let busy = false
     for (let port = base; port < base + PORT_BLOCK && !busy; port++) busy = await listening(port, 150)
     if (!busy) return base
   }
-  throw new DsdError('no free port block')
+  throw new DsdError(`no free port block in ${range.first}-${range.last}`)
 }
 
 /** The tailscale CLI, or undefined. */
@@ -129,15 +143,29 @@ export function tailscaleCli() {
   return onPath('tailscale')
 }
 
-/** This node's MagicDNS name and the Serve mappings (path → target), read-only; undefined without Tailscale. */
-export function tailnetFacts() {
+/**
+ * The tailscale command for a variant: the CLI, with `--socket=<path>` when the variant names a
+ * daemon of its own (`tailscaleSocket` in variant.yml: a userspace tailscaled of the account, on a
+ * machine whose own tailscaled is not the account's). undefined without a CLI.
+ */
+export function tailscaleCommand(socket) {
   const cli = tailscaleCli()
-  if (!cli) return undefined
+  return cli === undefined ? undefined : [cli, ...(socket ? [`--socket=${socket}`] : [])]
+}
+
+/**
+ * The node's MagicDNS name and the Serve mappings (path → target), read-only; undefined without
+ * Tailscale. `socket`: the variant's own daemon (tailscaleCommand).
+ */
+export function tailnetFacts(socket) {
+  const command = tailscaleCommand(socket)
+  if (!command) return undefined
+  const [cli, ...pre] = command
   try {
-    const status = JSON.parse(execFileSync(cli, ['status', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 }))
+    const status = JSON.parse(execFileSync(cli, [...pre, 'status', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 }))
     const dnsName = String(status?.Self?.DNSName ?? '').replace(/\.$/, '')
     let serve = {}
-    try { serve = JSON.parse(execFileSync(cli, ['serve', 'status', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 }) || '{}') } catch { /* nothing served */ }
+    try { serve = JSON.parse(execFileSync(cli, [...pre, 'serve', 'status', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 }) || '{}') } catch { /* nothing served */ }
     const mappings = {}
     for (const web of Object.values(serve?.Web ?? {})) {
       for (const [path, handler] of Object.entries(web?.Handlers ?? {})) mappings[path] = handler?.Proxy ?? handler?.Path ?? handler?.Text ?? '?'
@@ -280,14 +308,14 @@ export const relayService = {
     const unit = unitStatus(relayUnitOf(id))
     return { loaded: unit.active, pid: unit.pid }
   },
-  /** Write the job and (re)start it. */
-  async install(id, programArguments) {
+  /** Write the job and (re)start it. `after`: units the relay needs running first (Linux). */
+  async install(id, programArguments, { after = [] } = {}) {
     if (DARWIN) {
       const { label, plist } = await installLaunchAgent(id, programArguments, relayService.log(id))
       return { label, file: plist }
     }
     const unit = relayUnitOf(id)
-    const file = await installUnit(unit, relayUnit({ description: `${displayName(id)} relay (${variantName(id)})`, programArguments, log: relayService.log(id) }))
+    const file = await installUnit(unit, relayUnit({ description: `${displayName(id)} relay (${variantName(id)})`, programArguments, log: relayService.log(id), after }))
     return { label: unit, file }
   },
   /** Start the installed job if it is not running. */
@@ -348,16 +376,17 @@ sys.stdout.buffer.write(plistlib.dumps(d))`
   return true
 }
 
-/** Remove a Serve path, only when it points at this variant's relay. */
-export function removeServePath(path, relayPort) {
-  const facts = tailnetFacts()
+/** Remove a Serve path, only when it points at this variant's relay. `socket`: the variant's own daemon. */
+export function removeServePath(path, relayPort, socket) {
+  const facts = tailnetFacts(socket)
   const target = facts?.mappings?.[path]
   if (target === undefined) return false
   if (!new RegExp(`^https?://(127\\.0\\.0\\.1|localhost):${relayPort}/?$`).test(String(target))) {
     note(`Serve path ${path} points at ${target}, not this variant's relay; left as it is`)
     return false
   }
-  execFileSync(tailscaleCli(), ['serve', '--https=443', `--set-path=${path}`, 'off'], { stdio: 'ignore', timeout: 15000 })
+  const [cli, ...pre] = tailscaleCommand(socket)
+  execFileSync(cli, [...pre, 'serve', '--https=443', `--set-path=${path}`, 'off'], { stdio: 'ignore', timeout: 15000 })
   return true
 }
 

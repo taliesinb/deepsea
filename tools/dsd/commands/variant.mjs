@@ -2,11 +2,13 @@
  * Named variants (LAYOUT.md §1, §6, §7):
  *
  *   dsd new <v> [--source <ref>] [--color <hex>] [--plugins <names|all>] [--no-serve | --serve-path <path>]
+ *           [--ports <first>[-<last>]] [--tailscale-socket <path>] [--after <unit>[,<unit>…]]
  *   dsd build <v> [--install [--dock]] [--self]
  *   dsd remove <v> [--home] [--self]
  *
- * `new` writes the home, its variant.yml (port block, Serve path, source) and
- * its links. `build` makes the immutable build of its source commit, writes
+ * `new` writes the home, its variant.yml (port block, Serve path, source,
+ * and the account's own tailscaled and the units its relay needs, when
+ * given) and its links. `build` makes the immutable build of its source commit, writes
  * its plugins into its profile as bundles, and on macOS builds its app; with `--install` it installs the
  * app (~/Applications), the server host and relay link (Application
  * Support) and the relay LaunchAgent, and with `--dock` a Dock tile. On
@@ -20,13 +22,13 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  OFFSETS, addDockTile, appPathOf, chooseServePath, choosePortBlock, installApp,
+  OFFSETS, addDockTile, appPathOf, chooseServePath, choosePortBlock, installApp, parsePorts,
   linkRelayNode, listening, relayService, removeApp, removeDockTile, removeServePath, serverHostNameOf, supportDirOf, tailnetFacts,
 } from '../lib/install.mjs'
 import { buildsDir, homeOf, logDirOf, variantName } from '../lib/paths.mjs'
 import { installBundles, selectPlugins } from '../lib/plugins.mjs'
 import { linuxLeftovers, macosLeftovers, refuseOwnHome } from '../lib/remove.mjs'
-import { lingering } from '../lib/systemd.mjs'
+import { lingering, UNIT_NAME } from '../lib/systemd.mjs'
 import { ensureSourceBuild, resolveSourceCommit } from '../lib/source.mjs'
 import { DsdError, isoLocal, note, onlyFlags, parseArgs, printJson, sleep, usage } from '../lib/util.mjs'
 import { checkNamedId, displayName, listVariants, readVariant, writeVariant } from '../lib/variants.mjs'
@@ -43,6 +45,9 @@ function namedConfig(id) {
 
 const DARWIN = process.platform === 'darwin'
 
+/** A variant's `after` list (variant.yml holds it comma-separated). */
+const afterUnits = config => String(config.after ?? '').split(',').map(s => s.trim()).filter(Boolean)
+
 const ports = config => ({ dsh: Number(config.ports) + OFFSETS.dsh, relay: Number(config.ports) + OFFSETS.relay, proxy: Number(config.ports) + OFFSETS.proxy })
 
 function relink(link, target) {
@@ -52,42 +57,64 @@ function relink(link, target) {
 
 /** dsd new <v> */
 export async function newVariant(argv) {
-  const args = parseArgs(argv, ['source', 'color', 'plugins', 'serve-path'])
-  onlyFlags(args, ['source', 'color', 'plugins', 'no-serve', 'serve-path'])
+  const args = parseArgs(argv, ['source', 'color', 'plugins', 'serve-path', 'ports', 'tailscale-socket', 'after'])
+  onlyFlags(args, ['source', 'color', 'plugins', 'no-serve', 'serve-path', 'ports', 'tailscale-socket', 'after'])
   const id = args._[0]
-  if (id === undefined || args._.length > 1) usage('dsd new <v> [--source <ref>] [--color <hex>] [--plugins <names|all>] [--no-serve | --serve-path <path>]')
-  if (args['no-serve'] && args['serve-path']) usage('--no-serve and --serve-path are alternatives')
-  printJson(await createVariant(id, { source: args.source, color: args.color, plugins: args.plugins, noServe: args['no-serve'], servePath: args['serve-path'] }))
+  if (id === undefined || args._.length > 1) usage('dsd new <v> [--source <ref>] [--color <hex>] [--plugins <names|all>] [--no-serve | --serve-path <path>] [--ports <first>[-<last>]] [--tailscale-socket <path>] [--after <unit>[,<unit>…]]')
+  if (args['no-serve'] && (args['serve-path'] || args['tailscale-socket'])) usage('--no-serve and --serve-path or --tailscale-socket are alternatives')
+  printJson(await createVariant(id, {
+    source: args.source, color: args.color, plugins: args.plugins, noServe: args['no-serve'], servePath: args['serve-path'],
+    ports: args.ports, tailscaleSocket: args['tailscale-socket'], after: args.after,
+  }))
 }
 
 /**
- * Create a named variant (dsd new; dsd adopt for a variant that does not exist yet). `servePath`
- * names the Serve path instead of choosing one (on a machine shared by several accounts, a path
- * of the person's own, such as `/deepsea-<user>`); one that another target holds is refused.
+ * Create a named variant (dsd new; dsd adopt for a variant that does not exist yet).
+ * - `servePath` names the Serve path instead of choosing one (on a machine shared by several
+ *   accounts, a path of the person's own, such as `/deepsea-<user>`); one that another target
+ *   holds is refused.
+ * - `ports` (default: DEEPSEA_PORTS, else from 3200) is the range the port block is chosen in, or
+ *   with a single port the block that starts there: a machine that gives each account a range of
+ *   ports only it may connect to.
+ * - `tailscaleSocket` is a tailscaled of the account's own (a userspace one, on a machine whose
+ *   own tailscaled is not the account's): its node serves the variant, through `--socket`.
+ * - `after` lists systemd user units the relay needs running first (Linux): such a tailscaled,
+ *   when nothing else starts it.
  */
-export async function createVariant(id, { source = 'integration/base', color, plugins = 'all', noServe = false, servePath: wanted } = {}) {
+export async function createVariant(id, { source = 'integration/base', color, plugins = 'all', noServe = false, servePath: wanted, ports: portsText, tailscaleSocket, after } = {}) {
   checkNamedId(id)
   if (existsSync(homeOf(id))) throw new DsdError(`${homeOf(id)} exists already`)
   if (color !== undefined && !/^#[0-9a-fA-F]{6}$/.test(color)) usage('--color takes #rrggbb')
   if (wanted !== undefined && !/^\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(wanted)) usage('--serve-path takes a path such as /deepsea-lab (lowercase letters, digits and single dashes)')
+  if (tailscaleSocket !== undefined && (typeof tailscaleSocket !== 'string' || !tailscaleSocket.startsWith('/'))) usage('--tailscale-socket takes the absolute path of a tailscaled socket')
+  const units = typeof after === 'string' ? after.split(',').map(s => s.trim()).filter(Boolean) : []
+  if (after !== undefined && (typeof after !== 'string' || units.length === 0)) usage('--after takes systemd unit names, comma-separated')
+  for (const unit of units) if (!UNIT_NAME.test(unit)) usage(`--after: "${unit}" is not a systemd unit name (such as name.service)`)
+  if (units.length && DARWIN) usage('--after is for Linux, where the relay is a systemd user unit')
+  const range = portsText !== undefined ? parsePorts(portsText) : process.env.DEEPSEA_PORTS ? parsePorts(process.env.DEEPSEA_PORTS, 'DEEPSEA_PORTS') : undefined
   resolveSourceCommit(source)
   const recorded = new Set(listVariants().filter(v => !v.throwaway && v.config?.ports).map(v => Number(v.config.ports)))
-  const block = await choosePortBlock(recorded)
-  const facts = noServe ? undefined : tailnetFacts()
+  const block = await choosePortBlock(recorded, range)
+  const facts = noServe ? undefined : tailnetFacts(tailscaleSocket)
   const serve = Boolean(facts?.dnsName)
+  if (tailscaleSocket !== undefined && !serve) throw new DsdError(`--tailscale-socket: no Tailscale node answers at ${tailscaleSocket} (is that tailscaled running and logged in?)`)
   if (wanted !== undefined && !serve) throw new DsdError('--serve-path: Tailscale is not available here')
   const servePath = !serve ? undefined : wanted === undefined ? chooseServePath(id, block, facts) : chooseServePath(id, block, facts, undefined, wanted)
   const home = homeOf(id)
   mkdirSync(home, { recursive: true, mode: 0o700 })
   writeVariant(id, {
     id, display: displayName(id), ...(color ? { color } : {}), ports: block, source,
-    plugins, serve, ...(servePath ? { servePath } : {}), created: isoLocal(),
+    plugins, serve, ...(servePath ? { servePath } : {}), ...(tailscaleSocket ? { tailscaleSocket } : {}),
+    ...(units.length ? { after: units.join(',') } : {}), created: isoLocal(),
   })
   mkdirSync(logDirOf(id), { recursive: true, mode: 0o700 })
   relink(join(home, 'logs'), logDirOf(id))
   relink(join(home, 'support'), supportDirOf(id))
   if (!serve && !noServe) note('Tailscale is not available: the variant is local only (its app talks to the relay on this machine)')
-  return { id, name: variantName(id), display: displayName(id), home, ports: { block, ...ports({ ports: block }) }, source, serve, servePath }
+  return {
+    id, name: variantName(id), display: displayName(id), home, ports: { block, ...ports({ ports: block }) }, source, serve, servePath,
+    ...(serve ? { url: `https://${facts.dnsName}${servePath}/` } : {}), ...(tailscaleSocket ? { tailscaleSocket } : {}), ...(units.length ? { after: units } : {}),
+  }
 }
 
 /**
@@ -122,7 +149,7 @@ export async function build(argv) {
   const harnessBuild = readlinkSync(join(dir, 'harness'))
   const plugins = variantPlugins(config, dir)
   const port = ports(config)
-  const facts = config.serve ? tailnetFacts() : undefined
+  const facts = config.serve ? tailnetFacts(config.tailscaleSocket) : undefined
   const url = config.serve && facts?.dnsName ? `https://${facts.dnsName}${config.servePath}/` : `http://127.0.0.1:${port.relay}/`
   // The app (apps/macos) exists only for macOS; on Linux a variant is its relay and server.
   const out = DARWIN ? mkdtempSync(join(tmpdir(), `deepsea-build-${id}-`)) : undefined
@@ -151,7 +178,7 @@ export async function build(argv) {
     ...(proxy ? ['--proxy', `127.0.0.1:${port.proxy}`] : []), '--log-dir', logDirOf(id), '--cwd', harnessBuild,
     '--', node, '--import', 'tsx/esm', join(harnessBuild, 'apps', 'cli', 'src', 'bin.ts'), '--profile', 'web',
     '--no-open', '--port', String(port.dsh)]
-  const job = await relayService.install(id, programArguments)
+  const job = await relayService.install(id, programArguments, { after: afterUnits(config) })
   relink(join(home, 'source'), dir)
   const dock = args.dock ? addDockTile(app) : undefined
   writeVariant(id, { ...config, build: commit.slice(0, 10), installed: isoLocal() })
@@ -202,7 +229,7 @@ export async function remove(argv) {
   const job = await relayService.remove(id)
   if (job.file) removed.push(job.file)
   if (config.serve && config.servePath) {
-    try { if (removeServePath(config.servePath, ports(config).relay)) removed.push(`Serve path ${config.servePath}`) } catch (error) {
+    try { if (removeServePath(config.servePath, ports(config).relay, config.tailscaleSocket)) removed.push(`Serve path ${config.servePath}`) } catch (error) {
       note(`Serve path ${config.servePath} stays: ${String(error.stderr || error.message).trim().split('\n')[0]}`)
     }
   }
