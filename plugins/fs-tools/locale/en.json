@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "File Tools",
+    "description": "Batch file tools for the agent: list directories, read and edit several files at once, and search."
+  }
+}

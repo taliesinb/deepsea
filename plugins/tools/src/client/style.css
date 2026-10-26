@@ -1,0 +1,358 @@
+/* /tools card. Header row mirrors the shipped command row (GenericCommandCard):
+   32px, tertiary label text, 2px dot separators. */
+
+.deepsea-tools {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.deepsea-tools__header {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  height: 32px;
+  align-items: center;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  white-space: nowrap;
+}
+
+.deepsea-tools__header[data-deepsea-tools-foldable] {
+  cursor: pointer;
+}
+
+.deepsea-tools__icon {
+  display: inline-flex;
+  flex: none;
+  margin-right: 8px;
+  align-items: center;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.deepsea-tools__title {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+}
+
+.deepsea-tools__separator {
+  flex: none;
+  width: 2px;
+  height: 2px;
+  margin: 0 8px;
+  border-radius: 1px;
+  background: var(--dsw-alias-label-caption);
+}
+
+.deepsea-tools__patterns {
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.deepsea-tools__message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deepsea-tools__message[data-deepsea-tools-error] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.deepsea-tools[data-state='running'] .deepsea-tools__header::after {
+  position: absolute;
+  inset-block: 0;
+  left: -300px;
+  width: 300px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--dsw-alias-bg-base) 60%, transparent) 55%,
+    transparent 100%
+  );
+  animation: deepsea-tools-sweep 2.6s ease-out infinite;
+  content: '';
+  pointer-events: none;
+}
+
+@keyframes deepsea-tools-sweep {
+  0% { left: -300px; }
+  90%, 100% { left: 100%; }
+}
+
+/* Table */
+
+/* No max-height: the card renders every row and the chat scrolls. */
+.deepsea-tools__body {
+  margin: 4px 0 4px 4px;
+  overflow: hidden;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-alias-markdown-code-block);
+  container-type: inline-size;
+}
+
+.deepsea-tools__table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: 20px;
+}
+
+.deepsea-tools__table th {
+  padding: 8px 12px 6px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 400;
+  text-align: left;
+}
+
+/* Name and arguments columns fit their longest cell (`--deepsea-tools-*-ch`,
+   set by the card, in `ch` of the mono face the cells use; 24px = the
+   cell's side padding). The name column is never capped: names do not
+   truncate (2px of slack, since a fixed table layout rounds the column
+   below the text's exact width in WebKit). The arguments column is capped in container units so the
+   description keeps priority: a percentage inside min() makes a
+   fixed-layout column width fall back to auto (equal thirds), cqw resolves
+   to a length. */
+.deepsea-tools__col-name,
+.deepsea-tools__col-args {
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+}
+
+.deepsea-tools__col-name {
+  width: calc(var(--deepsea-tools-name-ch) * 1ch + 26px);
+}
+
+.deepsea-tools__col-args {
+  width: min(calc(var(--deepsea-tools-args-ch) * 1ch + 24px), 30cqw);
+}
+
+.deepsea-tools__row {
+  cursor: pointer;
+}
+
+.deepsea-tools__row:hover,
+.deepsea-tools__row[data-deepsea-tools-open] {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);
+}
+
+.deepsea-tools__row:focus-visible {
+  outline: 1px solid var(--dsw-alias-border-l2, var(--dsw-alias-border-l1));
+  outline-offset: -1px;
+}
+
+/* A divider above every tool but the first; an open tool's details sit
+   inside its block, so the next divider comes after them. */
+.deepsea-tools__row td {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.deepsea-tools__table tbody > .deepsea-tools__row:first-child td {
+  border-top: 0;
+}
+
+.deepsea-tools__row td {
+  padding: 6px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.deepsea-tools__row .deepsea-tools__name {
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  text-overflow: clip;
+}
+
+/* Names in mono, separated by an ordinary space-width gap (4px, ARG_GAP in
+   the card). The card renders only the names that fit whole, then `…`. */
+.deepsea-tools__arg-cell {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  column-gap: 4px;
+}
+
+.deepsea-tools__arg-list {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  column-gap: 4px;
+}
+
+.deepsea-tools__arg-more {
+  flex: none;
+}
+
+.deepsea-tools__arg {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+}
+
+.deepsea-tools__arg--optional,
+.deepsea-tools__arg-more {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.deepsea-tools__summary {
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Expanded row: the full description, a divider, then the parameters as a
+   name | type | description table (the description column wraps). */
+
+.deepsea-tools__expanded > td {
+  padding: 2px 12px 14px;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);
+}
+
+.deepsea-tools__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  white-space: normal;
+}
+
+.deepsea-tools__description {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.deepsea-tools__description [data-markdown-variant='compact'] > :first-child,
+.deepsea-tools__param-description [data-markdown-variant='compact'] > :first-child {
+  margin-top: 0;
+}
+
+.deepsea-tools__description [data-markdown-variant='compact'] > :last-child,
+.deepsea-tools__param-description [data-markdown-variant='compact'] > :last-child {
+  margin-bottom: 0;
+}
+
+.deepsea-tools__params {
+  width: 100%;
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+  border-collapse: collapse;
+}
+
+.deepsea-tools__params td {
+  padding: 5px 20px 5px 0;
+  vertical-align: baseline;
+}
+
+.deepsea-tools__params tr:first-child td {
+  padding-top: 12px;
+}
+
+.deepsea-tools__params td:last-child {
+  padding-right: 0;
+}
+
+.deepsea-tools__param-name {
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.deepsea-tools__param-name--optional {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.deepsea-tools__param-type {
+  max-width: 220px;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+}
+
+.deepsea-tools__type-part {
+  white-space: nowrap;
+}
+
+.deepsea-tools__param-description {
+  width: 100%;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Narrow (phone): drop the arguments column. */
+
+/* Zero width rather than display:none: the expanded row's colspan=3 would
+   otherwise re-create the third column of the fixed layout. */
+@container (max-width: 520px) {
+  .deepsea-tools__col-args {
+    width: 0;
+  }
+
+  .deepsea-tools__table th:nth-child(2),
+  .deepsea-tools__row .deepsea-tools__args {
+    padding: 0;
+    font-size: 0;
+  }
+
+  .deepsea-tools__row .deepsea-tools__arg-cell {
+    display: none;
+  }
+
+  .deepsea-tools__param-type {
+    display: none;
+  }
+}
+
+/* Arguments tooltip (portaled to the body). Surface as the shipped
+   HoverCard: #2C2C2E in both themes, the menu elevation. */
+.deepsea-tools-tip {
+  position: fixed;
+  z-index: 100;
+  max-width: min(560px, calc(100vw - 16px));
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #2C2C2E;
+  box-shadow: var(--dsw-shadow-lv3);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  line-height: 18px;
+  pointer-events: none;
+}
+
+.deepsea-tools-tip table {
+  border-collapse: collapse;
+}
+
+.deepsea-tools-tip td {
+  padding: 1px 0;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.deepsea-tools-tip td + td {
+  padding-left: 14px;
+}
+
+.deepsea-tools-tip__name,
+.deepsea-tools-tip__type {
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+}
+
+.deepsea-tools-tip__type {
+  max-width: 280px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.6);
+  text-overflow: ellipsis;
+}
+
+.deepsea-tools-tip__name--optional {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deepsea-tools[data-state='running'] .deepsea-tools__header::after {
+    animation: none;
+  }
+}

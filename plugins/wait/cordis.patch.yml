@@ -1,0 +1,8 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers the global `wait` tool, its status and control routes and a
+# system-prompt hint (host), and the tool's progress-bar row (browser half,
+# lib/client.js). Override `config` in the profile's patch (a later layer
+# replaces the whole value).
+- insert:
+    - id: deepsea-wait
+      name: "@deepsea/wait"

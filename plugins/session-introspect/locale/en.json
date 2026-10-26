@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session Introspection",
+    "description": "Lets the agent read and study other sessions' transcripts, on this server or another."
+  }
+}
