@@ -289,7 +289,9 @@ export function createEgress(spec) {
   }
 
   /**
-   * Forward one HTTP upgrade (the embedded shell's `api/remote.mux` WebSocket).
+   * Forward one HTTP upgrade (the embedded shell's `api/remote.mux` WebSocket, the DeepSea app's
+   * loopback forward). A refusal keeps its status and the forward's reason header.
+   *
    * @param {import('node:http').IncomingMessage} req
    * @param {import('node:stream').Duplex} socket
    * @param {Buffer} head
@@ -327,7 +329,10 @@ export function createEgress(spec) {
     up.on('response', (upRes) => {
       if (upRes.statusCode === 401) exchange().catch(warnFailure)
       upRes.resume()
-      socket.end(`HTTP/1.1 ${String(upRes.statusCode ?? 502)} ${upRes.statusMessage ?? 'Bad Gateway'}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`)
+      // The forward's refusal reason (`x-deepsea-forward-error`, @deepsea/tailscale) is what the app shows.
+      const reason = upRes.headers['x-deepsea-forward-error']
+      const extra = typeof reason === 'string' && /^[\w-]{1,64}$/.test(reason) ? `X-DeepSea-Forward-Error: ${reason}\r\n` : ''
+      socket.end(`HTTP/1.1 ${String(upRes.statusCode ?? 502)} ${upRes.statusMessage ?? 'Bad Gateway'}\r\n${extra}Connection: close\r\nContent-Length: 0\r\n\r\n`)
     })
     up.on('error', (error) => {
       fail(0, error.message)

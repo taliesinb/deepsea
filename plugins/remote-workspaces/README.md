@@ -53,7 +53,12 @@ those describe the hop to this server, and the remote's own proxy, and the
 plugins behind it that read them (import-sessions: same machine or not), must
 see only what it stamps itself. Responses relay as they are, except
 `Set-Cookie` (dropped) and `Location` (remote paths mapped back under the
-mount). The mux WebSocket of the framed page is piped both ways. Every egress
+mount). Two WebSocket upgrades are piped both ways: the framed page's mux
+(`api/remote.mux`), and the remote's loopback forward
+(`api/deepsea-tailscale/loopback-forward`, @deepsea/tailscale), through which
+the DeepSea app forwards a port of the framed session's server, such as a
+sign-in's callback port (apps/macos); a refused upgrade keeps its status and
+`X-DeepSea-Forward-Error`. Every egress
 route sits behind this server's own request gate (Host/Origin fence and
 browser session), so it is not an open relay.
 
@@ -247,7 +252,7 @@ variant's `plugins/remote-workspaces/` log directory.
 
 | File | Role |
 |---|---|
-| `index.js` | host: the egress routes per server (prefix route and the exact `api/remote.mux` upgrade route), the control channel, the registry, moves and copies |
+| `index.js` | host: the egress routes per server (prefix route and the exact `api/remote.mux` and loopback-forward upgrade routes), the control channel, the registry, moves and copies |
 | `egress.mjs` | one remote: URL facts, token exchange, header rewriting, request and upgrade forwarding, `call`, `callControl` (the peer's control channel), `fetchRaw` |
 | `resolve.mjs` | short forms → URL, the MagicDNS suffix; `inspectPath` / `makeDirectory` (the `fs.*` endpoints served for peers) |
 | `remote-fs.mjs` | the same questions asked of a remote: its `fs.*`, else its directory picker |
