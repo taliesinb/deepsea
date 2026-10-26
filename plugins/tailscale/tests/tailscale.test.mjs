@@ -30,6 +30,25 @@ const manager = (servePath = '/deepsea-lab', target = RELAY) => createServeManag
 describe('Serve manager (fake CLI)', () => {
   beforeEach(() => { write({}) })
 
+  it('with a socket of the account\'s own, every call goes to that tailscaled (--socket first)', async () => {
+    const calls = []
+    const run = async (binary, args) => {
+      calls.push(args)
+      if (args.includes('status') && !args.includes('serve')) return { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: 'node-user.example.ts.net.', TailscaleIPs: ['100.64.0.9'], UserID: 7 }, User: { 7: { LoginName: 'User@Example.com' } } }), stderr: '' }
+      return { code: 0, stdout: '', stderr: '' }
+    }
+    const serve = createServeManager({ cliPath: cli, socket: '/run/user/1000/ts/tailscaled.sock', servePath: '/deepsea', target: () => targetOf(RELAY), ownPorts: () => [3203, 3204], run })
+    const status = await serve.status()
+    assert.deepEqual([status.state, status.dnsName, status.selfLogin, status.url], ['off', 'node-user.example.ts.net', 'user@example.com', 'https://node-user.example.ts.net/deepsea/'])
+    await serve.enable()
+    assert.ok(calls.length >= 3)
+    for (const args of calls) assert.equal(args[0], '--socket=/run/user/1000/ts/tailscaled.sock')
+    assert.ok(calls.some(args => args.join(' ') === '--socket=/run/user/1000/ts/tailscaled.sock serve --bg --yes --https=443 --set-path=/deepsea http://127.0.0.1:3203'))
+    const plain = []
+    await createServeManager({ cliPath: cli, servePath: '/deepsea', target: () => targetOf(RELAY), ownPorts: () => [], run: async (b, args) => { plain.push(args); return { code: 1, stdout: '', stderr: '' } } }).status()
+    assert.deepEqual(plain[0], ['status', '--json'])
+  })
+
   it('without a Serve path it still reads the node, and publishes nothing', async () => {
     const serve = createServeManager({ cliPath: cli, servePath: undefined, target: () => targetOf(RELAY), ownPorts: () => [3203, 3204] })
     const status = await serve.status()

@@ -59,6 +59,14 @@ describe('variant', () => {
     })
   })
 
+  it('a tailscaled of the account\'s own: from variant.yml, or the config over it', () => {
+    const variant = { id: 'lab', ports: 3200, serve: true, servePath: '/deepsea', tailscaleSocket: '/run/user/1000/ts/tailscaled.sock' }
+    assert.equal(resolveSettings(variant, {}, { home: '/h', env: {} }).tailscaleSocket, '/run/user/1000/ts/tailscaled.sock')
+    assert.equal(resolveSettings(variant, { tailscaleSocket: '/x.sock' }, { home: '/h', env: {} }).tailscaleSocket, '/x.sock')
+    assert.equal('tailscaleSocket' in resolveSettings({ id: 'lab' }, {}, { home: '/h', env: {} }), false)
+    assert.equal(parseVariantYaml('tailscaleSocket: /run/user/1000/ts/tailscaled.sock\n').tailscaleSocket, '/run/user/1000/ts/tailscaled.sock')
+  })
+
   it('serve: false, a throwaway and a stock home publish nothing; a throwaway gets a proxy only from config', () => {
     assert.equal(resolveSettings({ id: 'lab', ports: 3200, serve: false, servePath: '/deepsea-lab' }, {}, { home: '/h', env: {} }).servePath, undefined)
     const throwaway = resolveSettings({ id: 'release-3f9a1c', parent: 'release', throwaway: true }, {}, { home: '/h', env: {} })

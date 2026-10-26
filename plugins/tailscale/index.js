@@ -27,6 +27,7 @@
  *   proxyPort          the proxy's loopback port                    variant block +4
  *   servePath          the Serve path (`/deepsea-lab`)               variant.yml servePath
  *   tailscalePath      the tailscale CLI ('' = PATH, then the app)  ''
+ *   tailscaleSocket    a tailscaled of the account's own (--socket)  variant.yml tailscaleSocket, else the machine's
  *   identityOperators  identity-admitted users operate (control channel, ownsHost)   true
  *   loopbackForward    who may forward this machine's loopback ports: admitted | operators | off   admitted
  */
@@ -51,6 +52,7 @@ export const Config = Schema.object({
   proxyPort: Schema.natural().min(1).max(65535),
   servePath: Schema.string(),
   tailscalePath: Schema.string().default(''),
+  tailscaleSocket: Schema.string(),
   identityOperators: Schema.boolean().default(true),
   loopbackForward: Schema.union(['admitted', 'operators', 'off']).default('admitted'),
 })
@@ -136,7 +138,7 @@ export async function controlRoute(req, res, connection, dispatch) {
 
 /**
  * @param {import('@deepseek-ai/cordis').Context} ctx
- * @param {{ proxyPort?: number, servePath?: string, tailscalePath: string, identityOperators: boolean, loopbackForward: 'admitted' | 'operators' | 'off' }} config
+ * @param {{ proxyPort?: number, servePath?: string, tailscalePath: string, tailscaleSocket?: string, identityOperators: boolean, loopbackForward: 'admitted' | 'operators' | 'off' }} config
  */
 export function apply(ctx, config) {
   const log = message => ctx.logger.info(message)
@@ -172,6 +174,7 @@ export function apply(ctx, config) {
   const ownPorts = () => [settings.relayPort, settings.proxyPort, proxy?.port].filter(port => port !== undefined)
   const serve = createServeManager({
     cliPath: config.tailscalePath,
+    socket: settings.tailscaleSocket,
     servePath: settings.servePath,
     target: publishTarget,
     ownPorts,

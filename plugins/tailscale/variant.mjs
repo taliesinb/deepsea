@@ -2,7 +2,8 @@
  * What this plugin takes from the variant it runs in (LAYOUT.md §1, §7):
  * `$DSH_HOME/variant.yml`, the flat `key: value` file dsd writes. A named
  * variant records its port block (`ports`: proxy on +4, relay on +3) and,
- * when it may publish on the tailnet, `serve: true` and its `servePath`. A
+ * when it may publish on the tailnet, `serve: true` and its `servePath`, and
+ * `tailscaleSocket` when a tailscaled of the account's own serves it. A
  * throwaway records neither, and a stock home has no variant.yml at all: no
  * Serve path, and a proxy only when the row's config names a port.
  */
@@ -60,10 +61,12 @@ export function displayNameOf(id) {
 /**
  * The settings this plugin runs with: the variant's, overridden by the row's config.
  * @param {Record<string, unknown> | undefined} variant - parsed variant.yml
- * @param {{ proxyPort?: number, servePath?: string }} config
+ * @param {{ proxyPort?: number, servePath?: string, tailscaleSocket?: string }} config
  * @param {{ home: string, env?: NodeJS.ProcessEnv }} where
  * @returns {{ id?: string, name?: string, display?: string, proxyPort?: number, relayPort?: number,
- *   relayUrl?: string, servePath?: string, cookieName: string, appPath?: string }}
+ *   relayUrl?: string, servePath?: string, tailscaleSocket?: string, cookieName: string, appPath?: string }}
+ *   `tailscaleSocket`: a tailscaled of the account's own (variant.yml `tailscaleSocket`, `dsd new
+ *   --tailscale-socket`) whose node serves the variant, instead of the machine's.
  */
 export function resolveSettings(variant, config, { home, env = process.env }) {
   const id = typeof variant?.id === 'string' && variant.id !== '' ? variant.id : variantOf(home, env)
@@ -78,7 +81,9 @@ export function resolveSettings(variant, config, { home, env = process.env }) {
   const variantPath = variant?.serve === true && typeof variant.servePath === 'string' && variant.servePath !== '' ? variant.servePath : undefined
   const servePath = configuredPath ?? variantPath
   const display = typeof variant?.display === 'string' && variant.display !== '' ? variant.display : id === undefined ? undefined : displayNameOf(id)
+  const socket = [config.tailscaleSocket, variant?.tailscaleSocket].find(value => typeof value === 'string' && value !== '')
   return {
+    ...(socket === undefined ? {} : { tailscaleSocket: socket }),
     id,
     name: id === undefined ? undefined : variantName(id),
     display,
