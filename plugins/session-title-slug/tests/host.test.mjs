@@ -52,3 +52,19 @@ test('apply renames through the session-title service once the prompt is publish
   await Promise.resolve()
   assert.match(warnings[0], /could not name session "session-2" "boom"/)
 })
+
+test('the bundle patch makes automatic titles slugs, keeping the base titler row\'s other values', async () => {
+  const { readFileSync } = await import('node:fs')
+  const fields = text => Object.fromEntries([...text.matchAll(/^\s+(targetWords|targetCjkCharacters|maxInputBytes|maxOutputTokens|timeoutMs|style):\s*(\S+)\s*$/gm)].map(m => [m[1], m[2]]))
+  const ours = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+  const row = ours.slice(ours.indexOf('- id: session-title-llm'))
+  assert.ok(row.length > 0, 'the patch has the session-title-llm row')
+  const own = fields(row)
+  assert.equal(own.style, 'slug')
+  // The base bundle's row, when the harness build is linked: every required value carried over unchanged.
+  let base
+  try { base = readFileSync(new URL('../../../harness/packages/bundle/base/cordis.patch.yml', import.meta.url), 'utf8') } catch { return }
+  const baseRow = base.slice(base.indexOf('- id: session-title-llm'), base.indexOf('- id:', base.indexOf('- id: session-title-llm') + 5))
+  const { style: _style, ...required } = own
+  assert.deepEqual(required, fields(baseRow))
+})
