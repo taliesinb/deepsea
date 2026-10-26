@@ -111,7 +111,21 @@ operations are listed in the header of `Sources/Automation.swift`: `hello`,
   alone runs its Edit menu command, as in a browser, even in the hidden
   window, which is never key. `click --text`
   picks the innermost visible element showing that text (exactly, else
-  containing it), optionally within a selector.
+  containing it), optionally within a selector. A `click` answers
+  `dragRegion: true` when the press landed on the title band's native drag
+  map (below): a real press there would have dragged the window; the
+  synthetic one is passed to the page like any click.
+- **Title-bar drag is native** (the Chromium/Electron `-webkit-app-region`
+  model, which WKWebView lacks): the page reports a hit-tested map of the
+  top 52 CSS px — every 6px column of each 8px strip probed with
+  `elementFromPoint`, draggable unless on a hard control (icon buttons,
+  header action/utility buttons, tabs, inputs, menus, the sidebar resize
+  handle) or under a resize/grab/crosshair cursor (so an element pick gets
+  its click) — and `AppWebView.mouseDown` consumes a press inside it before
+  WebKit sees it: movement drags the window, release in place replays the
+  click to the page (the session title still opens its picker), a double
+  click applies the Desktop & Dock title-bar action. `window-info` carries
+  the current map as `dragRegions`.
 - **Snapshots** come from `WKWebView.takeSnapshot`, which needs no Screen
   Recording permission and works for the hidden window; the window material
   behind the page shows as a flat fill. Running CSS animations are finished

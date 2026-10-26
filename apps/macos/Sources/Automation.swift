@@ -23,13 +23,15 @@
 //   click {selector, nth? | text, selector? , nth? | x, y; clicks?}
 //                                           real mouse events at the element's centre (scrolled into view; with
 //                                           `text`, the innermost element showing exactly that text, else containing
-//                                           it, within `selector`) or at a viewport point (CSS px)
+//                                           it, within `selector`) or at a viewport point (CSS px); `dragRegion` in
+//                                           the answer: a real press there would have dragged the window
 //   type {text? , key?}                     real key events: `text` character by character, `key` one named key
 //                                           with modifiers (`Enter`, `Escape`, `cmd+k`, `shift+Tab`)
 //   describe {selector, nth? | target; options?}   the element inspector's record
 //   snapshot {selector, nth? | target; options?}   an element snapshot (files, image hashes)
 //   snapshot {window: true, chrome?}        the page, or with `chrome` the whole window (a visible app only)
-//   window-info                             frame, screen, key/active, content size, view mode, appearance
+//   window-info                             frame, screen, key/active, content size, view mode, appearance,
+//                                           the title band's native drag map (`dragRegions`, CSS px)
 //   log {lines?}                            the last lines of this run's log
 //   opened {clear?}                         URLs the app opened, or would have, outside itself (a
 //                                           hidden test build never opens them: links, sign-in
@@ -466,6 +468,9 @@ final class Automation {
                                                              windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: count, pressure: type == .leftMouseDown ? 1 : 0) else { return }
                         // Straight to the web view: the window's own routing drops mouse events while it
                         // ignores them (a hidden window is click-through for the person at the screen).
+                        // Synthetic: a press on a native drag region is recorded, not tracked (AppWebView).
+                        app.webView.syntheticInput = true
+                        defer { app.webView.syntheticInput = false }
                         switch type {
                         case .leftMouseDown: app.webView.mouseDown(with: event)
                         case .leftMouseUp: app.webView.mouseUp(with: event)
@@ -473,12 +478,14 @@ final class Automation {
                         }
                     }
                 }
+                app.webView.dragRegionHit = false
                 steps.append(event(.mouseMoved, 0))
                 for n in 1...clicks {
                     steps.append(event(.leftMouseDown, n))
                     steps.append(event(.leftMouseUp, n))
                 }
-                self.sequence(app, steps) { done(.success(["x": x, "y": y, "clicks": clicks, "hit": hit])) }
+                // `dragRegion`: the press landed where a real one would have dragged the window.
+                self.sequence(app, steps) { done(.success(["x": x, "y": y, "clicks": clicks, "hit": hit, "dragRegion": app.webView.dragRegionHit])) }
             }
         }
     }
@@ -673,6 +680,8 @@ final class Automation {
         info["viewMode"] = app.viewMode.rawValue
         info["appearance"] = app.window.effectiveAppearance.name.rawValue
         info["pageZoom"] = app.webView.pageZoom
+        // The native title-bar drag map the page last reported (CSS px, origin top-left).
+        info["dragRegions"] = app.webView.dragRegions.map { ["x": $0.origin.x, "y": $0.origin.y, "width": $0.width, "height": $0.height] }
         info["hidden"] = app.options.hidden
         info["url"] = app.webView.url?.absoluteString ?? NSNull()
         return info
