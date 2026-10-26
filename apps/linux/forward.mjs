@@ -34,6 +34,9 @@ import { connectWebSocket, HandshakeError } from './websocket.mjs'
 export const FORWARD_PATH = 'api/deepsea-tailscale/loopback-forward'
 export const FORWARD_ERROR_HEADER = 'x-deepsea-forward-error'
 const IDLE_LIMIT_MS = 60 * 60 * 1000
+/** A single-use forward (a sign-in callback): closed this long after its connection ends, or after this many idle minutes. */
+const SINGLE_USE_GRACE_MS = 2000
+const SINGLE_USE_IDLE_MS = 10 * 60 * 1000
 const HANDSHAKE_TIMEOUT_MS = 15_000
 
 // ---------------------------------------------------------------------------
@@ -52,6 +55,15 @@ export function loopbackPort(value) {
   try { url = new URL(String(value)) } catch { return undefined }
   if (!['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol) || !isLoopbackHost(url.hostname)) return undefined
   return Number(url.port || (url.protocol === 'https:' || url.protocol === 'wss:' ? 443 : 80))
+}
+
+/** The loopback port an OAuth sign-in page redirects to (its `redirect_uri`), or undefined. */
+export function loopbackRedirectPort(value) {
+  let url
+  try { url = new URL(String(value)) } catch { return undefined }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
+  const redirect = url.searchParams.get('redirect_uri')
+  return redirect === null ? undefined : loopbackPort(redirect)
 }
 
 /** The same loopback URL on another local port (when the remote's port is busy here). */
@@ -167,10 +179,9 @@ export class Forwarder extends EventEmitter {
    * @param {number} port
    * @returns {Promise<{ ws: import('./websocket.mjs').WebSocket, info: { port: number, pid?: number, command?: string } }>}
    */
-  async tunnel(port) {
+  async tunnel(port, mount = this.options.mount()) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new ForwardError(port, 'bad-port', 'invalid TCP port')
     if (this.disposed) throw new ForwardError(port, 'transport', 'forwarding has stopped')
-    const mount = this.options.mount()
     if (mount === undefined) throw new ForwardError(port, 'transport', 'the server is not connected')
     const endpoint = forwardEndpoint(mount, port)
     const headers = await this.options.headers?.(endpoint.replace(/^ws/, 'http')) ?? {}
@@ -213,38 +224,49 @@ export class Forwarder extends EventEmitter {
   }
 
   /**
-   * Make the server's `127.0.0.1:<port>` reachable here; resolves the
-   * listener `{ remotePort, localPort, connections, since }`.
+   * Make `127.0.0.1:<port>` of the machine of the server at `mount` (default: the app's own)
+   * reachable here, on another local port when that one is taken here; resolves the listener
+   * `{ remotePort, localPort, connections, since, mount, singleUse }`.
+   * `exact` (a sign-in callback, whose redirect names the port): that port or nothing, bound
+   * before the server is asked, so a port taken here (the sign-in's own listener, when the server
+   * is on this machine after all) fails at once with code `listen`. `singleUse`: closed once a
+   * connection has gone through (a moment after it ends), or after ten idle minutes.
    * @param {number} port
+   * @param {{ mount?: string, exact?: boolean, singleUse?: boolean }} [options]
    */
-  ensure(port) {
-    const existing = this.listeners.get(port)
+  ensure(port, { mount = this.options.mount(), exact = false, singleUse = false } = {}) {
+    if (mount === undefined) return Promise.reject(new ForwardError(port, 'transport', 'the server is not connected'))
+    const key = `${mount}|${String(port)}`
+    const existing = this.listeners.get(key)
     if (existing !== undefined) return Promise.resolve(existing.row)
     if (this.disposed) return Promise.reject(new ForwardError(port, 'transport', 'forwarding has stopped'))
-    if (!this.pending.has(port)) {
-      this.pending.set(port, this.open(port).finally(() => this.pending.delete(port)))
+    if (!this.pending.has(key)) {
+      this.pending.set(key, this.open(port, { key, mount, exact, singleUse }).finally(() => this.pending.delete(key)))
     }
-    return this.pending.get(port)
+    return this.pending.get(key)
   }
 
-  async open(port) {
-    const probe = await this.tunnel(port)
-    probe.ws.close(1000, 'probe')
-    const row = { remotePort: port, localPort: 0, connections: 0, since: Date.now(), lastActivity: Date.now(), pid: probe.info.pid, command: probe.info.command }
+  async open(port, { key, mount, exact, singleUse }) {
+    const row = { remotePort: port, localPort: 0, connections: 0, since: Date.now(), lastActivity: Date.now(), mount, singleUse }
     const accepted = new Set()
+    let served
     const server = createServer({ pauseOnConnect: true }, (socket) => {
       accepted.add(socket)
       row.connections += 1
       row.lastActivity = Date.now()
+      clearTimeout(served)
       this.emit('change')
       socket.on('error', () => {})
       socket.once('close', () => {
         accepted.delete(socket)
         row.connections -= 1
         row.lastActivity = Date.now()
+        // A single-use listener goes once its connection is done, after a moment for the
+        // browser's follow-up requests (a favicon) on the same page.
+        if (singleUse && row.connections === 0) served = setTimeout(() => { if (this.listeners.get(key)?.row === row) this.closeKey(key) }, SINGLE_USE_GRACE_MS)
         this.emit('change')
       })
-      this.tunnel(port).then(({ ws }) => {
+      this.tunnel(port, mount).then(({ ws }) => {
         if (socket.destroyed) { ws.close(1000); return }
         pipeTunnel(socket, ws)
       }, (error) => {
@@ -254,20 +276,37 @@ export class Forwarder extends EventEmitter {
     })
     server.on('error', (error) => this.options.log?.(`forward: listener for remote ${String(port)} failed: ${error.message}`))
     let why
-    try {
-      row.localPort = await listen(server, port)
-    } catch (error) {
-      why = error.code ?? error.message
-      try {
-        row.localPort = await listen(server, 0)
-      } catch (inner) {
+    if (exact) {
+      // Bound before the server is asked: a port taken here costs no question.
+      try { row.localPort = await listen(server, port) } catch (error) {
         server.close()
-        throw new ForwardError(port, 'listen', inner.message)
+        throw new ForwardError(port, 'listen', `127.0.0.1:${String(port)} is taken here (${String(error.code ?? error.message)})`)
+      }
+    }
+    try {
+      const probe = await this.tunnel(port, mount)
+      probe.ws.close(1000, 'probe')
+      Object.assign(row, { pid: probe.info.pid, command: probe.info.command })
+    } catch (error) {
+      if (exact) server.close()
+      throw error
+    }
+    if (!exact) {
+      try {
+        row.localPort = await listen(server, port)
+      } catch (error) {
+        why = error.code ?? error.message
+        try {
+          row.localPort = await listen(server, 0)
+        } catch (inner) {
+          server.close()
+          throw new ForwardError(port, 'listen', inner.message)
+        }
       }
     }
     if (this.disposed) { server.close(); throw new ForwardError(port, 'transport', 'forwarding has stopped') }
-    this.listeners.set(port, { row, server, accepted })
-    this.options.log?.(`forward: 127.0.0.1:${String(row.localPort)} → remote 127.0.0.1:${String(port)}${why ? ` (${String(port)} is busy here: ${why})` : ''}`)
+    this.listeners.set(key, { row, server, accepted })
+    this.options.log?.(`forward: 127.0.0.1:${String(row.localPort)} → remote 127.0.0.1:${String(port)} via ${mount}${why ? ` (${String(port)} is busy here: ${why})` : ''}${singleUse ? ' (single use)' : ''}`)
     this.emit('change')
     return row
   }
@@ -277,24 +316,29 @@ export class Forwarder extends EventEmitter {
     return [...this.listeners.values()].map(entry => entry.row).sort((a, b) => a.remotePort - b.remotePort)
   }
 
-  close(port) {
-    const entry = this.listeners.get(port)
+  closeKey(key) {
+    const entry = this.listeners.get(key)
     if (entry === undefined) return
-    this.listeners.delete(port)
+    this.listeners.delete(key)
     entry.server.close()
     for (const socket of entry.accepted) socket.destroy()
-    this.options.log?.(`forward: closed 127.0.0.1:${String(entry.row.localPort)} → remote ${String(port)}`)
+    this.options.log?.(`forward: closed 127.0.0.1:${String(entry.row.localPort)} → remote ${String(entry.row.remotePort)} via ${entry.row.mount}`)
     this.emit('change')
   }
 
+  /** Close every forward of a remote port (the menu's Close). */
+  close(port) {
+    for (const [key, { row }] of [...this.listeners]) if (row.remotePort === port) this.closeKey(key)
+  }
+
   closeAll() {
-    for (const port of [...this.listeners.keys()]) this.close(port)
+    for (const key of [...this.listeners.keys()]) this.closeKey(key)
   }
 
   closeIdle(now = Date.now()) {
-    const limit = this.options.idleLimitMs ?? IDLE_LIMIT_MS
-    for (const [port, { row }] of this.listeners) {
-      if (row.connections === 0 && now - row.lastActivity > limit) this.close(port)
+    for (const [key, { row }] of [...this.listeners]) {
+      const limit = row.singleUse ? SINGLE_USE_IDLE_MS : this.options.idleLimitMs ?? IDLE_LIMIT_MS
+      if (row.connections === 0 && now - row.lastActivity > limit) this.closeKey(key)
     }
   }
 
