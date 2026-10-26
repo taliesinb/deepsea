@@ -22,6 +22,15 @@
 //
 // Listeners live until the app quits, the user closes them from the View ▸
 // Forwarded Ports menu, or they sit idle (no connection) for an hour.
+//
+// A forward goes through the server of the page that asked (`via`): the app's
+// own mount, or a remote session framed through remote-workspaces
+// (`<mount>deepsea-remote-workspaces/servers/<id>/`, whose egress passes the
+// forward route on to that server). A sign-in's callback port (the loopback
+// `redirect_uri` of an OAuth page) is forwarded on exactly its own port, since
+// the redirect names it, and single-use: the listener closes once the callback
+// has gone through, or after ten minutes, so it never holds the port against a
+// later sign-in on this Mac.
 
 import Foundation
 import Network
@@ -44,6 +53,14 @@ struct LoopbackLink {
         guard let host = url.host, LoopbackLink.isLoopbackHost(host) else { return nil }
         self.url = url
         self.port = url.port ?? (scheme == "https" ? 443 : 80)
+    }
+
+    /// The loopback address an OAuth sign-in page redirects to (its `redirect_uri`), or nil.
+    static func redirect(of url: URL) -> LoopbackLink? {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "redirect_uri" })?.value,
+              let redirect = URL(string: raw) else { return nil }
+        return LoopbackLink(redirect)
     }
 
     /// The same URL rewritten onto another local port (used when the remote's port is busy here).
@@ -224,16 +241,24 @@ final class ForwardListener {
     let remotePort: Int
     let localPort: Int
     let since = Date()
+    /// Closes itself once a connection has come and gone (a sign-in callback); see `finished`.
+    let singleUse: Bool
+    /// How long it may sit without a connection before it is closed.
+    var idleLimit: TimeInterval { singleUse ? 10 * 60 : 60 * 60 }
+    /// Called (on the main queue) when a single-use listener has served its connection.
+    var finished: (() -> Void)?
     private(set) var connectionCount = 0
     private(set) var lastActivity = Date()
     private let listener: NWListener
     private var connections: [ObjectIdentifier: ForwardConnection] = [:]
+    private var served = false
     private let queue: DispatchQueue
     private let request: () -> URLRequest?
     private let log: (String) -> Void
 
-    init(remotePort: Int, preferredLocalPort: Int, request: @escaping () -> URLRequest?, log: @escaping (String) -> Void) throws {
+    init(remotePort: Int, preferredLocalPort: Int, singleUse: Bool = false, request: @escaping () -> URLRequest?, log: @escaping (String) -> Void) throws {
         self.remotePort = remotePort
+        self.singleUse = singleUse
         self.request = request
         self.log = log
         // Loopback only: the listener must never be reachable from the LAN.
@@ -289,6 +314,13 @@ final class ForwardListener {
                 self.connections.removeValue(forKey: ObjectIdentifier(done))
                 self.connectionCount = self.connections.count
                 self.lastActivity = Date()
+                // A single-use listener goes once its connection is done, after a moment for the
+                // browser's follow-up requests (a favicon) on the same page.
+                guard self.singleUse, !self.served else { return }
+                self.served = true
+                self.queue.asyncAfter(deadline: .now() + 2) {
+                    if self.connections.isEmpty { DispatchQueue.main.async { self.finished?() } } else { self.served = false }
+                }
             }
         }
         connections[ObjectIdentifier(forward)] = forward
@@ -307,15 +339,22 @@ final class ForwardListener {
     }
 }
 
+/// One forward: a port on the machine of the server at `base` (a mount directory).
+struct ForwardKey: Hashable {
+    let base: String
+    let port: Int
+}
+
 /// The table of forwards and the probe that precedes each one.
 final class PortForwarder: NSObject, URLSessionWebSocketDelegate {
     /// Mount base the page is currently loaded from (`https://node/deepsea/` or the loopback fallback), or nil while offline.
     var endpointBase: () -> URL?
     var log: (String) -> Void
-    private(set) var listeners: [Int: ForwardListener] = [:]   // by remote port
-    private var pending: [Int: [(Result<ForwardListener, ForwardError>) -> Void]] = [:]
+    /// The page's cookie store (the window's: an `--ephemeral` test build keeps its own), set once the web view exists.
+    var cookieStore: () -> WKHTTPCookieStore = { WKWebsiteDataStore.default().httpCookieStore }
+    private(set) var listeners: [ForwardKey: ForwardListener] = [:]
+    private var pending: [ForwardKey: [(Result<ForwardListener, ForwardError>) -> Void]] = [:]
     private var idleTimer: Timer?
-    static let idleLimit: TimeInterval = 60 * 60
 
     init(endpointBase: @escaping () -> URL?, log: @escaping (String) -> Void) {
         self.endpointBase = endpointBase
@@ -324,10 +363,10 @@ final class PortForwarder: NSObject, URLSessionWebSocketDelegate {
         idleTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.closeIdle() }
     }
 
-    /// The forward endpoint for a remote port, as a WebSocket request carrying the page's cookies.
-    private func forwardRequest(remotePort: Int, cookies: [HTTPCookie]) -> URLRequest? {
+    /// The forward endpoint for a remote port under a server's mount, as a WebSocket request carrying the page's cookies.
+    private func forwardRequest(remotePort: Int, base: URL, cookies: [HTTPCookie]) -> URLRequest? {
         // `base` is the mount directory with its trailing slash, so the relative path lands under it.
-        guard let base = endpointBase(), let endpoint = URL(string: "api/deepsea-tailscale/loopback-forward", relativeTo: base)?.absoluteURL,
+        guard let endpoint = URL(string: "api/deepsea-tailscale/loopback-forward", relativeTo: base)?.absoluteURL,
               var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else { return nil }
         components.scheme = base.scheme == "https" ? "wss" : "ws"
         components.queryItems = [URLQueryItem(name: "port", value: String(remotePort))]
@@ -346,32 +385,65 @@ final class PortForwarder: NSObject, URLSessionWebSocketDelegate {
         return request
     }
 
-    /// Make `127.0.0.1:<remotePort>` reachable here (or on another local port); the result names the listener.
-    func ensure(remotePort: Int, completion: @escaping (Result<ForwardListener, ForwardError>) -> Void) {
-        if let existing = listeners[remotePort] { completion(.success(existing)); return }
-        if pending[remotePort] != nil { pending[remotePort]!.append(completion); return }
-        pending[remotePort] = [completion]
+    /// Make `127.0.0.1:<remotePort>` of the machine of the server at `via` (default: the app's own) reachable
+    /// here, on another local port when that one is taken here; the result names the listener.
+    /// `exactPort` (a sign-in callback, whose redirect names the port): that port or nothing; it is bound
+    /// before the server is asked, so a port taken here (the sign-in's own listener, when the server is on
+    /// this Mac after all) fails at once with `.listen`. `singleUse`: closed once a connection has gone through.
+    func ensure(remotePort: Int, via: URL? = nil, exactPort: Bool = false, singleUse: Bool = false,
+                completion: @escaping (Result<ForwardListener, ForwardError>) -> Void) {
+        guard let base = via ?? endpointBase() else { completion(.failure(.transport("the server's machine is not connected"))); return }
+        let key = ForwardKey(base: base.absoluteString, port: remotePort)
+        if let existing = listeners[key] { completion(.success(existing)); return }
+        if pending[key] != nil { pending[key]!.append(completion); return }
+        pending[key] = [completion]
         let settle: (Result<ForwardListener, ForwardError>) -> Void = { [weak self] result in
             guard let self else { return }
-            let waiters = self.pending.removeValue(forKey: remotePort) ?? []
-            if case .success(let listener) = result { self.listeners[remotePort] = listener }
+            let waiters = self.pending.removeValue(forKey: key) ?? []
+            if case .success(let listener) = result {
+                self.listeners[key] = listener
+                listener.finished = { [weak self, weak listener] in
+                    guard let self, let listener, self.listeners[key] === listener else { return }
+                    self.close(key)
+                }
+            }
             for waiter in waiters { waiter(result) }
         }
-        WKWebsiteDataStore.default().httpCookieStore.getAllCookies { [weak self] cookies in
-            guard let self else { return }
-            guard let request = self.forwardRequest(remotePort: remotePort, cookies: cookies) else {
+        // Bound first for an exact port, so a port taken here costs no question to the server.
+        var early: ForwardListener?
+        var request: URLRequest?
+        if exactPort {
+            do {
+                early = try ForwardListener(remotePort: remotePort, preferredLocalPort: remotePort, singleUse: singleUse, request: { request }, log: log)
+            } catch let error as ForwardError {
+                settle(.failure(error)); return
+            } catch {
+                settle(.failure(.listen(error.localizedDescription))); return
+            }
+        }
+        cookieStore().getAllCookies { [weak self] cookies in
+            guard let self else { early?.close(); return }
+            guard let made = self.forwardRequest(remotePort: remotePort, base: base, cookies: cookies) else {
+                early?.close()
                 settle(.failure(.transport("the server's machine is not connected")))
                 return
             }
-            self.probe(request) { [weak self] probeResult in
-                guard let self else { return }
+            request = made
+            self.probe(made) { [weak self] probeResult in
+                guard let self else { early?.close(); return }
                 DispatchQueue.main.async {
                     switch probeResult {
                     case .failure(let error):
-                        self.log("forward: port \(remotePort) refused: \(error)")
+                        early?.close()
+                        self.log("forward: port \(remotePort) via \(base.absoluteString) refused: \(error)")
                         settle(.failure(error))
                     case .success:
-                        settle(self.bind(remotePort: remotePort, request: request))
+                        if let early {
+                            self.log("forward: 127.0.0.1:\(early.localPort) → \(remotePort) via \(base.absoluteString)\(singleUse ? " (single use)" : "")")
+                            settle(.success(early))
+                        } else {
+                            settle(self.bind(remotePort: remotePort, request: made))
+                        }
                     }
                 }
             }
@@ -440,20 +512,25 @@ final class PortForwarder: NSObject, URLSessionWebSocketDelegate {
         }
     }
 
-    func close(remotePort: Int) {
-        guard let listener = listeners.removeValue(forKey: remotePort) else { return }
+    private func close(_ key: ForwardKey) {
+        guard let listener = listeners.removeValue(forKey: key) else { return }
         listener.close()
-        log("forward: closed 127.0.0.1:\(listener.localPort) → remote \(remotePort)")
+        log("forward: closed 127.0.0.1:\(listener.localPort) → remote \(key.port) via \(key.base)")
+    }
+
+    /// Close every forward of a remote port (the menu's Close).
+    func close(remotePort: Int) {
+        for key in listeners.keys where key.port == remotePort { close(key) }
     }
 
     func closeAll() {
-        for port in Array(listeners.keys) { close(remotePort: port) }
+        for key in Array(listeners.keys) { close(key) }
     }
 
     private func closeIdle() {
         let now = Date()
-        for (port, listener) in listeners where listener.connectionCount == 0 && now.timeIntervalSince(listener.lastActivity) > PortForwarder.idleLimit {
-            close(remotePort: port)
+        for (key, listener) in listeners where listener.connectionCount == 0 && now.timeIntervalSince(listener.lastActivity) > listener.idleLimit {
+            close(key)
         }
     }
 

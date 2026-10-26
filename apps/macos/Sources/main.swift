@@ -266,6 +266,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = options.ephemeral ? .nonPersistent() : .default()
+        // Forwards carry the page's own cookies: a server reached on loopback admits by its session cookie.
+        let dataStore = configuration.websiteDataStore
+        forwarder.cookieStore = { dataStore.httpCookieStore }
         if options.hidden {
             // A hidden test window still runs its page at full speed: no occlusion or
             // background throttling of timers, rAF or CSS animations (private preferences
@@ -387,10 +390,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             source: viewMode.script,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true))
+        // Every frame, so a framed remote session asks with its own server's address; the handler
+        // answers only the main frame and frames of this app's own origin (never a dev server's).
         controller.addUserScript(WKUserScript(
             source: Self.openExternalScript,
             injectionTime: .atDocumentStart,
-            forMainFrameOnly: true))
+            forMainFrameOnly: false))
         // Page diagnostics → the run log (Paths.swift): uncaught errors,
         // unhandled rejections and console.error/warn. The wrapper has no
         // dev-tools shortcut, so this is how a "it only happens in the app"
@@ -440,8 +445,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     /// `__DEEPSEA_APP__.openExternal(url)`: open a URL in the user's default browser
     /// without a click in progress (a page-initiated `window.open` needs one in
     /// WKWebView). Used by the login command to open a sign-in page the moment
-    /// the server returns it. Same-origin frames (a framed remote session) reach
-    /// it through `window.top`.
+    /// the server returns it. Every frame has it, so the app knows which server's
+    /// page asked (`pageServer`); a frame of another origin is not answered.
     static let openExternalScript = """
     globalThis.__DEEPSEA_APP__ = Object.assign(globalThis.__DEEPSEA_APP__ || {}, {
       openExternal: url => { try { webkit.messageHandlers.deepseaApp.postMessage({ type: 'open-url', url: String(url) }) } catch {} },
@@ -766,6 +771,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         return !LoopbackLink.isLoopbackHost(host)
     }
 
+    /// The DeepSea server a page of this app belongs to, and whether it is another machine: the app's
+    /// own mount for a main frame (this window's or a popup's), else the directory of a frame of this
+    /// app's origin, which is another server's page framed through remote-workspaces
+    /// (`<mount>deepsea-remote-workspaces/servers/<id>/`, whose egress reaches that server). nil for a
+    /// frame of any other origin (a dev server, a site in the sidebar browser), which is not answered.
+    func pageServer(_ frame: WKFrameInfo) -> (base: URL, remote: Bool)? {
+        if frame.isMainFrame {
+            guard let base = currentMountBase() else { return nil }
+            return (base, serverIsRemote)
+        }
+        guard let url = frame.request.url, scope.contains(url), let directory = URL(string: ".", relativeTo: url)?.absoluteURL else { return nil }
+        if directory == currentMountBase() { return (directory, serverIsRemote) }
+        return (directory, true)
+    }
+
     /// The mount the page is loaded from right now (tailnet or loopback fallback), or nil while offline.
     func currentMountBase() -> URL? {
         if showingOfflinePage { return nil }
@@ -917,15 +937,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
         if body["type"] as? String == "open-url" {
             // Only web and mail URLs, like a page-initiated popup out of scope; a loopback URL is
-            // forwarded first (the remote's loopback), the same as for target=_blank.
+            // forwarded first (the remote's loopback), the same as for target=_blank, through the
+            // server of the page that asked.
             guard let raw = body["url"] as? String, let url = URL(string: raw),
                   ["http", "https", "mailto"].contains(url.scheme?.lowercased() ?? "") else { return }
+            guard let server = pageServer(message.frameInfo) else {
+                appendLog("[open-url] refused from \(message.frameInfo.request.url?.absoluteString ?? "a frame"): not this app's page")
+                return
+            }
             appendLog("[open-url] \(url.absoluteString)")
-            if serverIsRemote, !scope.contains(url), let link = LoopbackLink(url) {
-                forwardLoopback(link) { [weak self] target in
+            if server.remote, !scope.contains(url), let link = LoopbackLink(url) {
+                forwardLoopback(link, via: server.base) { [weak self] target in
                     guard let self, let target else { return }
                     if self.scope.contains(target) { self.openPopupWindow(target) } else { openExternally(target) }
                 }
+                return
+            }
+            // A sign-in page whose redirect goes to a loopback callback: on another machine's server
+            // that callback listens there, so its port is forwarded here first.
+            if server.remote, !scope.contains(url), let callback = LoopbackLink.redirect(of: url) {
+                forwardCallback(callback, via: server.base) { [weak self] in self?.openExternally(url) }
                 return
             }
             if scope.contains(url) { openPopupWindow(url) } else { openExternally(url) }
@@ -1142,14 +1173,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     /// use here: the link itself when the same local port could be bound, a rewritten
     /// one when it could not, this app's own mount when the port is the remote server
     /// instance itself, or nil when the remote refused (an alert says why).
-    func forwardLoopback(_ link: LoopbackLink, completion: @escaping (URL?) -> Void) {
-        forwarder.ensure(remotePort: link.port) { [weak self] result in
+    func forwardLoopback(_ link: LoopbackLink, via: URL? = nil, completion: @escaping (URL?) -> Void) {
+        forwarder.ensure(remotePort: link.port, via: via) { [weak self] result in
             guard let self else { completion(nil); return }
             switch result {
             case .success(let listener):
                 completion(link.rewritten(toLocalPort: listener.localPort))
             case .failure(let error):
-                if error.refusalCode == "reserved", let base = self.currentMountBase() {
+                if error.refusalCode == "reserved", let base = via ?? self.currentMountBase() {
                     // `$DSH_WEB_URL`-style links (http://127.0.0.1:<server port>/...) mean this very GUI.
                     var relative = link.url.path.isEmpty ? "" : String(link.url.path.dropFirst())
                     if let query = link.url.query { relative += "?\(query)" }
@@ -1159,6 +1190,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 self.reportForwardFailure(port: link.port, error: error)
                 completion(nil)
             }
+        }
+    }
+
+    /// Forward a sign-in's callback port from the server at `via`, on exactly that port and for one
+    /// use, then `open` the sign-in page, forwarded or not: a port taken here is the sign-in's own
+    /// listener (the server is on this Mac after all), and any other failure leaves the sign-in's own
+    /// fallback, pasting the address the browser ended on.
+    func forwardCallback(_ link: LoopbackLink, via: URL, then open: @escaping () -> Void) {
+        forwarder.ensure(remotePort: link.port, via: via, exactPort: true, singleUse: true) { [weak self] result in
+            switch result {
+            case .success(let listener):
+                self?.appendLog("forward: sign-in callback 127.0.0.1:\(listener.localPort) → port \(link.port) via \(via.absoluteString)")
+            case .failure(let error):
+                self?.appendLog("forward: sign-in callback \(link.port) not forwarded (\(error)); opening the page as it is")
+            }
+            open()
         }
     }
 

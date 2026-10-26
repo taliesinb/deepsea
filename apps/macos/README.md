@@ -12,7 +12,7 @@ position, preferences and logs.
 | `Sources/main.swift` | the app: entry points and the offline page, link handling, the integrated title bar, View ▸ Desktop / Mobile and Window Material, Settings… (⌘,), menus, downloads, the run log |
 | `Sources/Automation.swift` | the automation channel of test builds (below) |
 | `Sources/Snapshots.swift` | window and element snapshots |
-| `Sources/PortForward.swift` | loopback links of a remote server, forwarded to this Mac |
+| `Sources/PortForward.swift` | loopback links of a remote server and sign-in callbacks, forwarded to this Mac |
 | `Sources/Paths.swift` | the variant's log directory and snapshot store |
 | `Resources/desktop-branding.js` | the page-side identity: wordmark, whale colour, window title |
 | `Resources/element-inspector.js` | `__DEEPSEA_INSPECT__`: describe or pick an element (selector, rect, styles, slots, React chain, accessibility) |
@@ -69,6 +69,35 @@ dsd runs this during `dsd build <v> --install`. The bundle is assembled and
 signed beside the installed one and swapped in only when its code-directory
 hash differs: macOS ties privacy grants to that hash, so reinstalling the
 same code keeps them.
+
+## Loopback ports of the server's machine
+
+On another machine's server, a loopback address the page shows (a dev
+server's `http://localhost:5173/`) names that machine's loopback, so the app
+forwards the port before it loads or opens one (`Sources/PortForward.swift`;
+the server half is @deepsea/tailscale's loopback-forward route): one
+WebSocket per TCP connection to `<mount>api/deepsea-tailscale/loopback-forward`,
+on the same local port when it is free here, else another, listed in View ▸
+Forwarded Ports.
+
+- **The asking page's server.** `__DEEPSEA_APP__.openExternal` is in every
+  frame, so the app knows which page asked: the app's own GUI, or another
+  server's session framed through remote-workspaces
+  (`<mount>deepsea-remote-workspaces/servers/<id>/`, whose egress passes the
+  forward route on). A forward goes through that page's server. A frame of any
+  other origin (a dev server, a site in the sidebar browser) is not answered.
+- **Sign-in callbacks.** A sign-in page whose `redirect_uri` is a loopback
+  address (pi-ai's Anthropic flow: `http://localhost:53692/callback`) has its
+  callback listening on the server's machine. When that is another machine,
+  the app forwards exactly that port, for one use, then opens the page; the
+  listener closes a moment after the callback has gone through, or after ten
+  minutes, so it never holds the port against a later sign-in here. When the
+  port is taken here, the sign-in is this Mac's own (pi-ai binds before it
+  hands out the page), and the page just opens. If the forward fails anyway,
+  the sign-in's own fallback remains: `/login <flow> <address>` (@deepsea/login).
+- Forwards carry the window's cookies (an `--ephemeral` test build's own
+  store), so a server reached on loopback admits them by its session cookie,
+  and one on the tailnet by Tailscale identity.
 
 ## Test builds
 
