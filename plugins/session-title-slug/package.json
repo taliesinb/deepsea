@@ -1,0 +1,54 @@
+{
+  "name": "@deepsea/session-title-slug",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: a first prompt that starts with `some-slug: ` names its New Session `some-slug` (a pinned title, so the automatic titler never runs); the New Session row previews the slug while it is typed, and a typed-into New Session stays reachable as a dimmed row after switching away.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "slug.mjs",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs tests/*.test.ts",
+    "check": "node --check index.js && node --test tests/*.test.mjs tests/*.test.ts",
+    "prepare": "node build.mjs"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-api-session-controller": "link:../../harness/packages/api/session-controller",
+    "@deepseek-ai/dsh-api-workspace-controller": "link:../../harness/packages/api/workspace-controller",
+    "@deepseek-ai/dsh-client-locale": "link:../../harness/packages/client/locale",
+    "@deepseek-ai/dsh-client-ui-conversation": "link:../../harness/packages/client/ui-conversation",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-session": "link:../../harness/packages/client/ui-session",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@deepseek-ai/dsh-client-ui-workspace": "link:../../harness/packages/client/ui-workspace",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}

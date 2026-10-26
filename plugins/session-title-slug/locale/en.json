@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session Title Slug",
+    "description": "Names a new session from a slug at the start of its first prompt, as in “fix-login: …”."
+  }
+}
