@@ -1,0 +1,58 @@
+{
+  "name": "@deepsea/brand-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: re-brands the web GUI from brand profiles (a mark, a wordmark, web fonts, typography, an accent colour, the hero headline and the turn-status label), kept as directories of profile.json and files in the plugin's state directory and managed from a card in the Plugins panel (apply, new, edit, duplicate, rename, zip export and import) or cli.mjs. No brand is built in.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "brand.mjs",
+    "profiles.mjs",
+    "cli.mjs",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --check brand.mjs && node --check profiles.mjs && node --check cli.mjs && node --test tests/*.test.mjs",
+    "prepare": "node build.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths",
+    "fflate": "^0.8.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-client-ui-conversation": "link:../../harness/packages/client/ui-conversation",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "link:../../harness/packages/client/ui-plugin-manager",
+    "@deepseek-ai/dsh-client-ui-primitives": "link:../../harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-sidebar": "link:../../harness/packages/client/ui-sidebar",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}
