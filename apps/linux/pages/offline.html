@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+<title>DeepSea</title>
+<link rel="stylesheet" href="style.css">
+<main class="offline">
+  <h1 id="title"></h1>
+  <p id="reason"></p>
+  <code id="address"></code>
+  <p><button id="retry" autofocus>Reconnect</button><button id="change" class="secondary">Change Server…</button></p>
+  <p id="auto" hidden>Retrying every 5 seconds.</p>
+</main>
+<script src="offline.js"></script>
+</html>
