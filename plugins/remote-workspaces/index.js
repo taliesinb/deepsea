@@ -54,6 +54,11 @@ export const CONTROL_CHANNEL = '/deepsea-remote-workspaces'
 export const SERVERS_PREFIX = `${CONTROL_CHANNEL}/servers`
 /** The one upgrade the embedded shell opens, relative to its document directory. */
 const MUX_PATH = '/api/remote.mux'
+/**
+ * The remote's loopback forward (@deepsea/tailscale's route): the DeepSea app forwards a port of
+ * the framed session's server through it, such as a sign-in's callback port.
+ */
+const FORWARD_PATH = '/api/deepsea-tailscale/loopback-forward'
 const MAX_CONTROL_BODY = 64 * 1024
 const PKG = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
@@ -177,8 +182,8 @@ export function apply(ctx, config, seams = {}) {
         return egress.handleRequest(req, res, url.slice(localBase.length))
       },
     })
-    const disposeUpgrade = ctx.webServer.registerUpgrade({
-      path: `${localBase}${MUX_PATH}`,
+    const disposeUpgrades = [MUX_PATH, FORWARD_PATH].map(path => ctx.webServer.registerUpgrade({
+      path: `${localBase}${path}`,
       handler: (req, socket, head) => {
         const rejection = ctx.connection.requestRejection(req)
         if (rejection !== undefined) {
@@ -187,12 +192,12 @@ export function apply(ctx, config, seams = {}) {
         }
         return egress.handleUpgrade(req, socket, head, (req.url ?? '/').slice(localBase.length))
       },
-    })
+    }))
     const entry = {
       server,
       egress,
       dispose: () => {
-        disposeUpgrade()
+        for (const dispose of disposeUpgrades) dispose()
         disposeRoute()
       },
     }
