@@ -1,0 +1,85 @@
+{
+  "name": "@deepsea/browser",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: per-chat Safari Technology Preview and Chrome windows for agents (safari_* and chrome_* tools over safaridriver --mcp and chrome-devtools-mcp), an isolated page reader, host-side waits, YouTube show notes, element-aware screenshots shown in the chat, and placement that keeps covered Safari pages running.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "tools.mjs",
+    "windows.mjs",
+    "servers.mjs",
+    "environment.mjs",
+    "reader-pool.mjs",
+    "page-read.mjs",
+    "dom-markdown.mjs",
+    "chrome-read.mjs",
+    "waiting.mjs",
+    "safari-screenshot.mjs",
+    "youtube-notes.mjs",
+    "foreground.mjs",
+    "placement.mjs",
+    "app-windows.mjs",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/tools.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "deepsea": {
+    "machineWide": "Safari Technology Preview and Google Chrome: launches and quits them, opens and closes their windows, and moves Safari windows and the frontmost app's window through DeepSea Window Helper"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs && node scripts/gen-tool-docs.mjs --check",
+    "check": "node --check index.js && node --test tests/*.test.mjs && node scripts/gen-tool-docs.mjs --check",
+    "prepare": "node build.mjs",
+    "docs": "node scripts/gen-tool-docs.mjs",
+    "dump:tools": "node scripts/dump-server-tools.mjs",
+    "live:chrome": "node scripts/live-chrome.mjs",
+    "live:safari": "node scripts/live-safari.mjs",
+    "live:parking": "node scripts/live-parking.mjs"
+  },
+  "dependencies": {
+    "@deepsea/logs": "link:../../packages/logs",
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths",
+    "@deepseek-ai/dsh-tools": "link:../../harness/packages/core/tools",
+    "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "chrome-devtools-mcp": "1.9.0",
+    "sharp": "0.35.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-client-ui-chat": "link:../../harness/packages/client/ui-chat",
+    "@deepseek-ai/dsh-client-ui-conversation": "link:../../harness/packages/client/ui-conversation",
+    "@deepseek-ai/dsh-client-ui-primitives": "link:../../harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-session": "link:../../harness/packages/client/ui-session",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@deepseek-ai/dsh-client-ui-tool": "link:../../harness/packages/client/ui-tool",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.7",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}
