@@ -142,14 +142,16 @@ export function isTailscaleAddress(ip) {
 }
 
 /**
- * @param {{ cliPath?: string, servePath?: string, target: () => string | undefined, ownPorts: () => number[],
+ * @param {{ cliPath?: string, socket?: string, servePath?: string, target: () => string | undefined, ownPorts: () => number[],
  *   log?: (message: string) => void, run?: typeof runCli }} options
+ *   `socket` is a tailscaled of the account's own (`--socket` on every call; default: the machine's);
  *   `target` is what to publish (the relay or proxy URL), undefined while there is nothing to publish;
  *   `ownPorts` the loopback ports a mapping of this variant may point at.
  */
 export function createServeManager(options) {
   const path = options.servePath
-  const run = options.run ?? runCli
+  const socketArgs = options.socket ? [`--socket=${options.socket}`] : []
+  const run = (binary, args) => (options.run ?? runCli)(binary, [...socketArgs, ...args])
   const portFlag = `--https=${String(SERVE_PORT)}`
   let binary
   let resolved = false
