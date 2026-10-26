@@ -9,6 +9,7 @@
  *                      slot; a sign-in link renders as one click
  *
  *   /login FLOW [oauth]           start sign-in; the `<flow>-oauth` route is added once authorized
+ *   /login FLOW <address>         finish it with the address a browser on another machine ended on
  *   /login                        the flows offering a sign-in (= /logins available)
  *   /logout FLOW                  delete a stored grant (and the empty route its sign-in added)
  *   /logins [list]                flows whose grant is stored
@@ -37,7 +38,7 @@ export const inject = ['authorization', 'commands', 'credentials', 'settings']
 
 /** The browser half's flow list. */
 export const FLOWS_PATH = '/api/deepsea-login/flows'
-/** The sign-in dialog's routes: start (POST), status (GET ?flow=), answer (POST), cancel (POST). */
+/** The sign-in dialog's routes: start (POST), status (GET ?flow=), answer (POST: a question's answer or a pasted address), cancel (POST). */
 export const SIGN_IN_PATHS = {
   start: '/api/deepsea-login/start',
   status: '/api/deepsea-login/status',
@@ -110,6 +111,21 @@ function pending(entries) {
   return formatList(names.filter(value => value !== undefined).sort(), 'No sign-ins are pending.')
 }
 
+/**
+ * Hold a browser-callback fallback text prompt (pi-ai's "paste the redirect URL") on the attempt
+ * until an address is pasted (`attempt.paste.give`, from `/login FLOW <address>` or the dialog) or
+ * it is withdrawn: the callback won, or the attempt ended.
+ */
+function holdPaste(attempt, signal) {
+  return new Promise((resolve, reject) => {
+    const withdrawn = () => new Error('authorization prompt withdrawn', { cause: signal.reason })
+    if (signal.aborted) { reject(withdrawn()); return }
+    const paste = { give: (value) => { if (attempt.paste === paste) attempt.paste = undefined; resolve(value) } }
+    attempt.paste = paste
+    signal.addEventListener('abort', () => { if (attempt.paste === paste) attempt.paste = undefined; reject(withdrawn()) }, { once: true })
+  })
+}
+
 /** Keep a browser-callback fallback prompt pending until its provider withdraws it. */
 function waitForCallback(signal) {
   return new Promise((_resolve, reject) => {
@@ -174,7 +190,7 @@ async function askPrerequisite(ctx, agent, prompt, signal) {
 function startAttempt(ctx, attempts, key, ask, urlWaitMs) {
   const controller = new AbortController()
   const urlReady = Promise.withResolvers()
-  const attempt = { key, controller, urlReady, notice: undefined, settlement: undefined, failure: undefined, question: undefined, answer: undefined }
+  const attempt = { key, controller, urlReady, notice: undefined, settlement: undefined, failure: undefined, question: undefined, answer: undefined, paste: undefined }
   attempts.set(key, attempt)
   let timer
   let remaining = urlWaitMs
@@ -211,9 +227,14 @@ function startAttempt(ctx, attempts, key, ask, urlWaitMs) {
         if (prompt.kind === 'secret') {
           throw new SignInError('Secret prompts are not supported by /login. Use a dedicated secure authorization surface.', 'SECRET_PROMPT')
         }
+        // A question racing the browser callback is never put to anyone: a text one (the redirect
+        // address, for a browser on another machine) is held for a paste, any other until withdrawn.
         // pi-ai withdraws a racing question only after awaiting it, so on an llm-pi-ai without the
         // attempt-signal fix a cancel would otherwise hang the attempt and keep its callback port.
-        if (prompt.signal !== undefined) return waitForCallback(AbortSignal.any([prompt.signal, controller.signal]))
+        if (prompt.signal !== undefined) {
+          const racing = AbortSignal.any([prompt.signal, controller.signal])
+          return prompt.kind === 'text' ? holdPaste(attempt, racing) : waitForCallback(racing)
+        }
         pause()
         try { return await ask(prompt, controller.signal, attempt) } finally { resume() }
       },
@@ -251,14 +272,33 @@ async function beginSignIn(ctx, attempts, key, ask, urlWaitMs) {
   return attempt
 }
 
+/** The loopback address a sign-in URL redirects to (`redirect_uri`), or undefined. Exported for tests. */
+export function loopbackRedirect(url) {
+  try {
+    const redirect = new URL(new URL(url).searchParams.get('redirect_uri') ?? '')
+    return ['localhost', '127.0.0.1', '[::1]'].includes(redirect.hostname) ? `${redirect.host}${redirect.pathname}` : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether a /login word is a pasted redirect address or code (`https://…`, `…?code=…`, `code#state`), not a method. */
+const isPasted = word => /:\/\/|[=#]/u.test(word)
+
+/** How long `/login FLOW <address>` waits for the sign-in to finish before answering. */
+export const PASTE_WAIT_MS = 30_000
+
 /** The result text for a browser URL: one Markdown link plus the follow-up commands. */
 export function oauthLink(url, flow, code) {
   try {
     const { hostname, pathname } = new URL(url)
     const label = `${hostname}${pathname}`.replace(/\/$/u, '')
+    const redirect = loopbackRedirect(url)
     return [
       `If the sign-in page didn't open, click this link: [${label}](${url})`,
       ...code === undefined ? [] : [`Code: \`${code}\``],
+      // The redirect goes to this server's loopback: a browser on another machine lands on its own.
+      ...redirect === undefined ? [] : [`If the browser ends on a \`${redirect}\` page that does not load, copy its address and run \`/login ${flow} <address>\`.`],
       'Provider will be added automatically.',
       `Use \`/logins cancel ${flow}\` to abort the sign-in now.`,
       `Use \`/logout ${flow}\` to sign out later.`,
@@ -286,6 +326,7 @@ function routeProfile(ctx, { ns, path }) {
 async function activate(ctx, attempts, entries, flow, agent, method, urlWaitMs) {
   const key = keyFor(entries, flow)
   if (typeof key === 'object') return key
+  if (method !== undefined && method !== 'oauth' && isPasted(method)) return paste(attempts, key, flow, method, urlWaitMs === URL_WAIT_MS ? PASTE_WAIT_MS : urlWaitMs)
   if (method !== undefined && method !== 'oauth') {
     return { kind: 'error', text: `Authorization flow ${JSON.stringify(flow)} supports only the oauth method in /login. Configure API keys in Settings > Models.` }
   }
@@ -305,6 +346,24 @@ async function activate(ctx, attempts, entries, flow, agent, method, urlWaitMs) 
     }
     throw error
   }
+}
+
+/**
+ * `/login FLOW <address>`: hand the address a browser on another machine ended on (or a code) to
+ * the pending sign-in, then wait up to `waitMs` for it to finish.
+ */
+async function paste(attempts, key, flow, text, waitMs) {
+  const attempt = attempts.get(key)
+  if (attempt === undefined || attempt.settlement !== undefined) return { kind: 'error', text: `No ${flow} sign-in is waiting. Start one with /login ${flow}.` }
+  if (attempt.paste === undefined) return { kind: 'error', text: `The ${flow} sign-in does not take a pasted address; finish it in the browser.` }
+  attempt.paste.give(text)
+  let timer
+  const settlement = await Promise.race([attempt.done, new Promise((resolve) => { timer = setTimeout(resolve, waitMs, 'pending') })])
+  clearTimeout(timer)
+  if (settlement === 'authorized') return { kind: 'success', text: `Signed in to ${flow}.` }
+  if (settlement === 'pending') return { kind: 'success', text: `Address sent to the ${flow} sign-in; it has not finished yet (/logins pending).` }
+  if (settlement === 'cancelled') return { kind: 'error', text: `The ${flow} sign-in was cancelled.` }
+  return { kind: 'error', text: (attempt.failure ?? `The ${flow} sign-in failed.`).replaceAll(key, flow) }
 }
 
 async function deactivate(ctx, attempts, entries, flow) {
@@ -445,7 +504,8 @@ export async function signInStatus(ctx, attempts, key) {
   if (attempt.failure !== undefined || attempt.settlement === 'failed') return { ...base, state: 'failed', error: attempt.failure ?? 'Sign-in failed.' }
   if (attempt.settlement !== undefined) return { ...base, state: 'cancelled' }
   if (attempt.question !== undefined) return { ...base, state: 'question', question: attempt.question }
-  return { ...base, state: notice?.url === undefined ? 'starting' : 'waiting' }
+  // `paste`: the flow also takes the address the browser ended on (a browser on another machine).
+  return { ...base, state: notice?.url === undefined ? 'starting' : 'waiting', ...attempt.paste === undefined ? {} : { paste: true } }
 }
 
 /**
@@ -492,6 +552,13 @@ export function signInRoutes(ctx, attempts, urlWaitMs = URL_WAIT_MS) {
     },
     post(SIGN_IN_PATHS.answer, async (key, value) => {
       const attempt = attempts.get(key)
+      // `{ flow, paste }`: the address the browser ended on, for a flow that takes one now.
+      if (value.paste !== undefined) {
+        if (attempt?.paste === undefined) return json({ error: 'this sign-in does not take a pasted address now' }, 409)
+        if (typeof value.paste !== 'string' || value.paste.trim() === '' || value.paste.length > 4096) return json({ error: 'invalid address' }, 400)
+        attempt.paste.give(value.paste.trim())
+        return json(await signInStatus(ctx, attempts, key))
+      }
       const question = attempt?.question
       if (question === undefined || value.id !== question.id) return json({ error: 'no such question is open' }, 409)
       const answer = value.value
@@ -521,7 +588,7 @@ export function apply(ctx) {
   ctx.commands.register({
     name: 'login',
     description: 'Sign in to a provider plan (or another browser sign-in)',
-    input: { hint: `${flowHint(ctx)} [oauth]` },
+    input: { hint: `${flowHint(ctx)} [oauth | <address>]` },
     recordInput: true,
     handler: invocation => runLogin(ctx, attempts, invocation),
   })

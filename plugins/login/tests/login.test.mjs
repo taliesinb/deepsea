@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runLogin, runLogout, runLogins, prerequisiteAnswer, oauthLink, flowName, flowsReport, flowHint, KNOWN_FLOWS, FLOWS_PATH, SIGN_IN_PATHS, signInRoutes } from '../index.js'
+import { runLogin, runLogout, runLogins, prerequisiteAnswer, oauthLink, loopbackRedirect, flowName, flowsReport, flowHint, KNOWN_FLOWS, FLOWS_PATH, SIGN_IN_PATHS, signInRoutes } from '../index.js'
 
 const KEY = 'llm-pi-ai/anthropic-oauth'
 const URL = 'https://claude.ai/oauth/authorize?code=true&state=x'
@@ -222,7 +222,7 @@ test('apply registers /login, /logout and /logins, placeholders naming the flows
     commands: { register: command => { registered.push(command) } },
     inject(names, callback) { if (names.includes('connection')) callback({ effect: setup => setup(), connection: { fetch: { register: route => { routes.push(route); return () => {} } } } }) } })
   assert.deepEqual(registered.map(c => c.name), ['login', 'logout', 'logins'])
-  assert.equal(registered[0].input.hint, '[anthropic, openai-codex] [oauth]')
+  assert.equal(registered[0].input.hint, '[anthropic, openai-codex] [oauth | <address>]')
   assert.equal(registered[1].input.hint, '[anthropic, openai-codex]')
   assert.deepEqual(routes.map(r => [r.path, r.methods]), [
     [FLOWS_PATH, ['GET']], [SIGN_IN_PATHS.start, ['POST']], [SIGN_IN_PATHS.status, ['GET']],
@@ -261,6 +261,62 @@ test('cancelling withdraws a racing callback question even when the provider has
   assert.equal(await questionSettled, 'withdrawn')
 })
 
+/** pi-ai's loopback flow: the link, then a text question racing the browser callback on its own signal. */
+const LOOPBACK_URL = 'https://claude.ai/oauth/authorize?code=true&redirect_uri=http%3A%2F%2Flocalhost%3A53692%2Fcallback&state=x'
+const ADDRESS = 'http://localhost:53692/callback?code=abc&state=x'
+function racingFlow() {
+  const flow = { pasted: undefined, callback: undefined }
+  flow.run = request => new Promise((resolve) => {
+    request.interaction.notify({ message: 'open', url: LOOPBACK_URL })
+    const racing = new AbortController()
+    flow.callback = () => { racing.abort(); resolve({ status: 'authorized' }) }
+    request.interaction.prompt({ kind: 'text', message: 'Paste the redirect URL', signal: racing.signal })
+      .then((value) => { flow.pasted = value; resolve(value === ADDRESS ? { status: 'authorized' } : Promise.reject(new Error('Invalid authorization code'))) }, () => {})
+    request.signal.addEventListener('abort', () => resolve({ status: 'cancelled' }), { once: true })
+  })
+  return flow
+}
+
+test('a loopback redirect: the link says how to finish from another machine', () => {
+  assert.equal(loopbackRedirect(LOOPBACK_URL), 'localhost:53692/callback')
+  assert.equal(loopbackRedirect(URL), undefined)
+  assert.equal(loopbackRedirect('https://x.example/a?redirect_uri=https%3A%2F%2Fapp.example%2Fcb'), undefined)
+  assert.match(oauthLink(LOOPBACK_URL, 'anthropic'), /If the browser ends on a `localhost:53692\/callback` page that does not load, copy its address and run `\/login anthropic <address>`\./)
+  assert.doesNotMatch(oauthLink(URL, 'anthropic'), /does not load/)
+})
+
+test('/login FLOW <address> finishes a pending sign-in with the address the browser ended on', async () => {
+  const flow = racingFlow()
+  const f = fixture({ run: flow.run })
+  assert.match((await login(f, 'anthropic')).text, /\/login anthropic <address>/)
+  await tick()
+  assert.deepEqual(await login(f, `anthropic ${ADDRESS}`), { kind: 'success', text: 'Signed in to anthropic.' })
+  assert.equal(flow.pasted, ADDRESS)
+  await tick()
+  assert.deepEqual(f.state.providers, { 'anthropic-oauth': {} })
+  // Nothing is waiting any more.
+  assert.deepEqual(await login(f, `anthropic ${ADDRESS}`), { kind: 'error', text: 'No anthropic sign-in is waiting. Start one with /login anthropic.' })
+})
+
+test('a wrong address fails the sign-in; once the callback wins, a paste is refused', async () => {
+  const bad = fixture({ run: racingFlow().run })
+  await login(bad, 'anthropic')
+  await tick()
+  assert.deepEqual(await login(bad, 'anthropic code#other'), { kind: 'error', text: 'Invalid authorization code' })
+
+  const flow = racingFlow()
+  const f = fixture({ run: flow.run })
+  await login(f, 'anthropic')
+  await tick()
+  flow.callback()
+  await tick()
+  assert.match((await login(f, `anthropic ${ADDRESS}`)).text, /No anthropic sign-in is waiting/)
+  // A flow with no paste question refuses an address; a method word is still a method.
+  const plain = fixture({ run: request => new Promise(() => { request.interaction.notify({ message: 'open', url: URL }) }) })
+  await login(plain, 'anthropic')
+  assert.deepEqual(await login(plain, `anthropic ${ADDRESS}`), { kind: 'error', text: 'The anthropic sign-in does not take a pasted address; finish it in the browser.' })
+  assert.match((await login(plain, 'anthropic api-key')).text, /supports only the oauth method/)
+})
 
 /** The dialog's routes over one fixture, called like the browser does. */
 function dialog(f, wait) {
@@ -350,6 +406,24 @@ test('cancelling from the dialog ends the attempt; a sign-in without a page fail
   assert.equal(failed.state, 'failed')
   assert.match(failed.error, /did not provide a browser URL/)
   assert.deepEqual(silent.state.providers, {})
+})
+
+test('the dialog offers the paste while the flow takes one, and refuses it otherwise', async () => {
+  const flow = racingFlow()
+  const f = fixture({ run: flow.run })
+  const d = dialog(f)
+  await d.post(SIGN_IN_PATHS.start, { flow: 'anthropic' })
+  await tick()
+  assert.equal((await d.status('anthropic')).paste, true)
+  assert.equal((await d.post(SIGN_IN_PATHS.answer, { flow: 'anthropic', paste: '' })).status, 400)
+  assert.equal((await d.post(SIGN_IN_PATHS.answer, { flow: 'anthropic', paste: 7 })).status, 400)
+  assert.equal((await d.post(SIGN_IN_PATHS.answer, { flow: 'anthropic', paste: ` ${ADDRESS} ` })).status, 200)
+  await tick()
+  assert.equal(flow.pasted, ADDRESS)
+  const after = await d.status('anthropic')
+  assert.equal(after.state, 'authorized')
+  assert.equal('paste' in after, false)
+  assert.equal((await d.post(SIGN_IN_PATHS.answer, { flow: 'anthropic', paste: ADDRESS })).status, 409)
 })
 
 test('the dialog routes refuse non-JSON bodies and unknown flows', async () => {
