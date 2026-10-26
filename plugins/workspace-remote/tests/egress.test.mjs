@@ -61,6 +61,9 @@ function fakeRemote(token) {
     if (cookie === undefined || !validCookies.has(cookie)) {
       socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); return
     }
+    if (req.url.startsWith('/deepsea/api/deepsea-tailscale/loopback-forward?port=1&')) {
+      socket.end('HTTP/1.1 404 Not Found\r\nX-DeepSea-Forward-Error: nothing-listening\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); return
+    }
     const accept = createHash('sha1').update(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64')
     socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`)
     socket.on('data', chunk => socket.write(chunk))
@@ -231,6 +234,21 @@ describe('createEgress against a fake remote', () => {
       req.end()
     })
     assert.equal(echoed, 'ping-bytes')
+  })
+
+  it('passes the app\'s loopback forward through, and its refusal reason back', async () => {
+    const upgrade = path => new Promise((resolve, reject) => {
+      const req = httpRequest({
+        hostname: '127.0.0.1', port: localPort, path, method: 'GET',
+        headers: { connection: 'Upgrade', upgrade: 'websocket', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', 'sec-websocket-version': '13' },
+      })
+      req.on('upgrade', (res, socket) => { socket.destroy(); resolve({ status: res.statusCode }) })
+      req.on('response', (res) => { res.resume(); resolve({ status: res.statusCode, reason: res.headers['x-deepsea-forward-error'] }) })
+      req.on('error', reject)
+      req.end()
+    })
+    assert.deepEqual(await upgrade(`${BASE}/api/deepsea-tailscale/loopback-forward?port=53692`), { status: 101 })
+    assert.deepEqual(await upgrade(`${BASE}/api/deepsea-tailscale/loopback-forward?port=1&x=1`), { status: 404, reason: 'nothing-listening' })
   })
 
   it('names a refused token as such', async () => {
