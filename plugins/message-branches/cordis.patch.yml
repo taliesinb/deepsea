@@ -1,0 +1,8 @@
+# Bundle patch, used when the package is installed into a profile. Registers
+# the family-tree and edit routes (host) and the user-bubble Edit action, the
+# version switcher and the branch tree (browser half, lib/client.js).
+# Override `config` in the profile's patch (a later layer replaces the whole
+# value).
+- insert:
+    - id: deepsea-message-branches
+      name: "@deepsea/message-branches"
