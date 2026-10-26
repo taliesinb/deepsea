@@ -7,6 +7,7 @@ Copilot, …) and pay-per-use OAuth (OpenRouter, …).
 
 ```text
 /login FLOW [oauth]            start a sign-in; its route appears once it is authorized
+/login FLOW <address>          finish it with the address a browser on another machine ended on
 /login                         the flows offering a sign-in (= /logins available)
 /logout FLOW                   delete a stored sign-in
 /logins [list]                 flows whose sign-in is stored
@@ -28,7 +29,7 @@ link is one click.
   included.
 - A bare `/logout` opens the same picker over the active sign-ins only.
 - After `/login ` and `/logout ` the composer placeholder lists the flow names
-  (`[anthropic, github-copilot, …] [oauth]`): the ones registered when the
+  (`[anthropic, github-copilot, …] [oauth | <address>]`): the ones registered when the
   plugin loads, else pi-ai 0.87.1's set (`KNOWN_FLOWS`).
 - Both pickers read `GET /api/deepsea-login/flows` (name, label, route, kind,
   vendor, methods, active, pending; no secrets) each time they open. They are
@@ -54,6 +55,9 @@ without it). Its dialog:
   (`claude.ai/oauth/authorize`), plus the device code when there is one. Both
   are real links: a new tab in a browser, `open` through the DeepSea app's
   `__DEEPSEA_APP__.openExternal`. Nothing opens by itself;
+- while the flow takes one (`paste: true` in the status), a field for the
+  address the browser ended on (below), sent as `POST
+  /api/deepsea-login/answer { flow, paste }`;
 - polls `GET /api/deepsea-login/status?flow=` every second while pending
   ("Waiting for authorization…"), then shows "Signed in as <email>" (the
   account from `llm.describeSignIn`), the error, or "Sign-in cancelled" with
@@ -80,13 +84,36 @@ server never answers.
   the sidebar browser) does not apply. A sign-in page needs the browser
   holding the provider session, and its redirect goes to a loopback
   callback.
-- **Remote servers are not handled yet.** pi-ai's loopback flows redirect to
-  `http://localhost:<port>/callback` (Anthropic: 53692) on the machine
-  running the server. When the app shows another machine's server, the
-  browser is on this machine, so that port must be forwarded to the server
-  before the redirect; the app's loopback port forwarding could do it, keyed
-  on the `redirect_uri` in the sign-in URL, but nothing triggers it yet.
-  Until then the device-code and paste-the-code fallbacks are the way.
+
+## A browser on another machine
+
+pi-ai's loopback flows redirect to `http://localhost:<port>/callback`
+(Anthropic: 53692) on the machine running the server. When the server is
+another machine's (a remote workspace, a tailnet URL, a phone), the browser
+lands on its own machine's loopback, where nothing listens, and the page does
+not load. Those flows also ask, racing the callback, for the address the
+browser ended on (pi-ai's `manual_code`); this plugin never puts that question
+to anyone, since the callback usually wins, but holds it on the attempt:
+
+- the card adds, when the sign-in URL's `redirect_uri` is a loopback address,
+  "If the browser ends on a `localhost:53692/callback` page that does not
+  load, copy its address and run `/login anthropic <address>`";
+- `/login FLOW <address>` (a word with `://`, `=` or `#`, so never a method)
+  hands the address, or a bare `code#state`, to the pending attempt and waits
+  up to 30 s for it: "Signed in to anthropic.", the provider's error (a wrong
+  or stale code), or that the sign-in is still finishing. With no attempt
+  waiting, or a flow that takes no address, it says so;
+- the Add login dialog shows a field for it while the flow takes one.
+
+Whichever comes first wins: once the callback succeeds the question is
+withdrawn, and a later paste is refused. The code in the address is good only
+once and only with the attempt's own PKCE verifier, which never leaves the
+server; a `/login` line is still recorded in the session like any command.
+The DeepSea apps save the copy: the macOS app and the Linux client forward a
+sign-in page's loopback callback port from its server's machine before they
+open it, also for a session framed through remote-workspaces (apps/macos,
+apps/linux). The paste remains for a plain browser, and for a forward that
+cannot be made.
 
 ## Requirements
 
@@ -114,7 +141,8 @@ lists no flows.
   profile, is reused and never overwritten.
 - **The result** is the provider's browser URL as a Markdown link (plus a
   device code when the flow has one). The browser callback completes the
-  sign-in; there is no `finish` action. With no URL within 30 s (paused while
+  sign-in, or the address pasted with `/login FLOW <address>` when the
+  browser is on another machine (above). With no URL within 30 s (paused while
   a question is open) the attempt is withdrawn.
 - **Prerequisite questions** (account type, domain, login method) are asked
   in the initiating session through `ctx.userQuestions`; nothing is chosen
