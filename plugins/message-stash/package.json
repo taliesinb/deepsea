@@ -1,0 +1,54 @@
+{
+  "name": "@deepsea/message-stash",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: a stash for unsent composer messages. Ctrl+S sets the draft aside, Ctrl+S,S opens the stash, Ctrl+R cycles stashed messages through the composer; a cycled message is popped only when it is sent.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts",
+    "check": "node --check index.js && node --test tests/*.test.ts",
+    "prepare": "node build.mjs"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-api-session-controller": "link:../../harness/packages/api/session-controller",
+    "@deepseek-ai/dsh-client-store": "link:../../harness/packages/client/store",
+    "@deepseek-ai/dsh-client-ui-conversation": "link:../../harness/packages/client/ui-conversation",
+    "@deepseek-ai/dsh-client-ui-layout": "link:../../harness/packages/client/ui-layout",
+    "@deepseek-ai/dsh-client-ui-primitives": "link:../../harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-session": "link:../../harness/packages/client/ui-session",
+    "@deepseek-ai/dsh-client-ui-settings": "link:../../harness/packages/client/ui-settings",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}

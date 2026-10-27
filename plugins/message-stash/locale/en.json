@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Message Stash",
+    "description": "Ctrl+S sets the draft aside, Ctrl+R brings a stashed message back; Ctrl+S twice opens the stash."
+  }
+}

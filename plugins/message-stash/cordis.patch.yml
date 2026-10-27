@@ -1,0 +1,7 @@
+# Bundle patch, used when the package is installed into a profile.
+# Ctrl+S stashes the composer draft, Ctrl+S,S opens the stash, Ctrl+R cycles
+# (browser half, lib/client.js). No config; the double-tap window is a
+# setting (Settings → General).
+- insert:
+    - id: deepsea-message-stash
+      name: "@deepsea/message-stash"
