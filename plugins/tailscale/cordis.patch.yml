@@ -1,0 +1,31 @@
+# Bundle patch, used when the package is installed into a profile.
+#
+# The plugin row. With no config it takes everything from the variant:
+# $DSH_HOME/variant.yml (port block: proxy on +4; serve and servePath) and the
+# relay from DEEPSEA_RELAY. Override in the profile's cordis.patch.yml (a
+# later layer replaces the whole config):
+#   config: { proxyPort, servePath, tailscalePath, identityOperators, loopbackForward }
+- insert:
+    - id: deepsea-tailscale
+      name: "@deepsea/tailscale"
+
+# "Add workspace" from any device: the web app's `directory-picker` row is the
+# -auto chooser, which on a loopback bind with a local display opens the
+# native folder dialog on this Mac's screen, where a phone or another Mac on
+# the tailnet can never see it. This pins DSH's in-app directory browser
+# instead. Host rows: effective at the next server start. To get the native
+# dialog back, override in the profile's cordis.patch.yml:
+#   - id: directory-picker
+#     disabled: false
+#   - id: directory-picker-browse
+#     disabled: true
+#   - id: ui-directory-picker-browse
+#     disabled: true
+# Do not also insert these ids from another layer (duplicate ids fail the boot).
+- id: directory-picker
+  disabled: true
+- insert:
+    - id: directory-picker-browse
+      name: '@deepseek-ai/dsh-host-directory-picker-browse'
+    - id: ui-directory-picker-browse
+      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'
