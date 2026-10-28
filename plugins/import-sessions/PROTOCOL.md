@@ -10,8 +10,10 @@ through the client's `connection.rpc.call('/deepsea-import-sessions', endpoint,
 → { "type": "server-response", "rpcId": "…", "result": { "ok": true, "value": … } | { "ok": false, "error": { "code": "deepsea-import-sessions/…", "message": "…", "details": {} } } }
 ```
 
-All endpoints are POST. `source` is `'claude' | 'pi' | 'dsh'` (`dsh`: another
-home or a backup archive, read on the server; never uploaded).
+All endpoints are POST. `source` is `'claude' | 'pi' | 'dsh' | 'workspace' |
+'session'` (`dsh`: another home, a backup or an export, read on the server;
+never uploaded. `workspace` / `session`: one `.workspace.deepsea.zip` /
+`.session.deepsea.zip` export, read on the server or uploaded).
 
 ## `sources` — `{}`
 
@@ -23,6 +25,8 @@ home or a backup archive, read on the server; never uploaded).
     claude: { label: 'Claude Code', root: string, defaultRoot: '~/.claude/projects',   exists: boolean },  // root: expanded server path; exists: the server store holds ≥1 workspace
     pi:     { label: 'pi',          root: string, defaultRoot: '~/.pi/agent/sessions', exists: boolean },
     dsh:    { label: 'DeepSea',     root: string, defaultRoot: string,                 exists: true },     // root: the directory holding the server's home (~/.deepsea)
+    workspace: { label: 'workspace', root: string, defaultRoot: '~/Downloads',         exists: true },     // where the server's chooser opens for an export
+    session:   { label: 'session',   root: string, defaultRoot: '~/Downloads',         exists: true },
   },
   server: { host?: string },                                          // short host name of the server machine
   client: { sameMachine: boolean, host?: string },                    // is this request from the server machine itself? (x-deepsea-tailscale / -self headers of @deepsea/tailscale's proxy, else a loopback peer) host = tailnet peer name when known
@@ -65,13 +69,18 @@ server classifies by content, so the wrapper directory is harmless. For a
 single transcript send its `name`. Client-side FILTER before uploading:
 - claude: `<uuid>.jsonl` at any depth, plus `<uuid>/subagents/agent-*.jsonl`; skip `memory/`, `*.backup`, everything else
 - pi: `<ISO-ts>_<uuid>.jsonl`; skip everything else
+- workspace / session: the one chosen file, when its name ends in `.workspace.deepsea.zip` / `.session.deepsea.zip`; sent as its bare name
 Show upload progress (files done / total, bytes). `upload-chunk` errors are fatal
 for that upload (discard it).
 
 ## `scan` — `{ source, path }`
 
 `path` may be the source root, one workspace slug directory, one session
-file, or the directory returned by `upload-finish`. The scan READS EVERY
+file, or the directory returned by `upload-finish`. For `workspace` and
+`session` it is the export file, or an upload directory holding it; the
+reply's `path` is the export file, its `kind` is `workspace` / `session`, and
+an export of the other kind, or one holding more than one workspace (or,
+for `session`, more than one session), fails the scan. The scan READS EVERY
 transcript fully (fast: hundreds of MB/s) so counts are exact. Returns a tree:
 
 ```ts
@@ -160,7 +169,8 @@ unknown job fails with `deepsea-import-sessions/unknown-job`.
 
 ## Client flow
 
-`/import-claude`, `/import-pi` and `/import-dsh` are host slash commands; the
+`/import-claude`, `/import-pi`, `/import-dsh`, `/import-workspace` and
+`/import-session` are host slash commands; the
 browser half decorates the bare command (`commandUi.decorate`, `ui.kind =
 'action'`) to open ONE dialog. Its stages:
 
@@ -174,6 +184,10 @@ browser half decorates the bare command (`commandUi.decorate`, `ui.kind =
      (`sources[source].exists`): `scan` of the server's own store.
    - `/import-dsh`: `From ~/.deepsea on <server>` · **Choose**: `pick` (the
      server's own file-or-folder panel, rooted beside its home) → `scan`.
+   - `/import-workspace`, `/import-session`: `From ~/Downloads on <this device>`
+     · **Upload** (`<input type=file accept=.zip>`, one file) → upload →
+     `scan`; on another machine's client also `From ~/Downloads on <server>` ·
+     **Choose**: `pick` → `scan`.
 2. **scanning**.
 3. **decide**, two shapes:
    - **bulk** (`kind !== 'session'`): a filter field and the tree table
@@ -188,6 +202,10 @@ browser half decorates the bare command (`commandUi.decorate`, `ui.kind =
    - **single** (`kind === 'session'`): a card with the session's title, dates,
      size, turns, tool calls, tokens, where it was recorded and **Import to**
      with the same choices.
+   - **workspace** (`/import-workspace`): a card with the directory's name,
+     sessions (and how many are already imported), dates, turns, where it was
+     recorded and **Import to**; every importable session is selected.
+   - For an export the description line is the export's file name.
    - Footer: count · Back · Cancel · **Import N sessions** (disabled at 0).
 4. **large**, only when a SELECTED session is `large`: "N selected sessions
    exceed ~X tokens" and two cards, **Compacted** (default; keep the last

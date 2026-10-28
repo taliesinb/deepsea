@@ -5,7 +5,8 @@
  * Code: ~/.claude/projects; pi: ~/.pi/agent/sessions) into DeepSea as real,
  * resumable sessions, grouped into the workspace whose directory matches the
  * transcript's working directory; `/import-dsh` brings sessions from another
- * home or a backup archive (host/dsh-source.mjs).
+ * home, a backup or an export (host/dsh-source.mjs); `/import-workspace` and
+ * `/import-session` bring in one @deepsea/export-sessions export.
  *
  * Two surfaces:
  *
@@ -24,7 +25,7 @@
 import { stat } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { scanDshSelection, importDshFamily } from './host/dsh-source.mjs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import Schema from '@deepseek-ai/schemastery'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { readClaudeSession } from './host/claude-reader.mjs'
@@ -68,7 +69,15 @@ function readBody(req, limit) {
   })
 }
 
-const isSource = value => value === 'claude' || value === 'pi' || value === 'dsh'
+const SOURCE_NAMES = ['claude', 'pi', 'dsh', 'workspace', 'session']
+const isSource = value => SOURCE_NAMES.includes(value)
+/** Sources read through dsh-source: homes, backups and exports (`dsh`), or one export of one kind. */
+const isArchiveSource = value => value === 'dsh' || value === 'workspace' || value === 'session'
+/** The archive kinds each archive source accepts (`dsh`: every archive and directory). */
+const ARCHIVE_KINDS = { dsh: undefined, workspace: ['workspace'], session: ['session'] }
+/** Where the server's chooser opens for an export: where @deepsea/export-sessions writes by default. */
+const EXPORTS_ROOT = '~/Downloads'
+const BAD_SOURCE = 'source must be one of claude, pi, dsh, workspace, session'
 
 /**
  * @param {import('@deepseek-ai/cordis').Context} ctx
@@ -108,15 +117,24 @@ export function apply(ctx, config) {
     return { turns: read.builder.stats.turns, toolCalls: read.builder.stats.toolCalls, estimatedTokens, large: estimatedTokens > config.largeTokens }
   }
   const scan = async (source, path, signal) => {
-    const raw = source === 'dsh'
-      ? await scanDshSelection(path, activeHome, { signal, probe: async id => (await ctx.sessionPersistence.stat(id, { signal })) !== undefined })
+    const raw = isArchiveSource(source)
+      ? await scanDshSelection(path, activeHome, { signal, kinds: ARCHIVE_KINDS[source], probe: async id => (await ctx.sessionPersistence.stat(id, { signal })) !== undefined })
       : await scanSelection(source, roots[source], path, { probe, measure: measureFor(source) })
     // A shallow copy: the dsh scan keeps `families` and `selection` for the import; the reply leaves them out.
     const result = { ...await decorateTree(raw) }
     result.uploaded = source === 'dsh' ? false : uploads.owns(result.path)
-    result.largeTokens = source === 'dsh' ? Number.MAX_SAFE_INTEGER : config.largeTokens
-    if (source !== 'dsh' && result.workspaces.length === 1 && result.workspaces[0].sessions.length === 1) result.kind = 'session'
-    if (source === 'dsh') {
+    result.largeTokens = isArchiveSource(source) ? Number.MAX_SAFE_INTEGER : config.largeTokens
+    if (!isArchiveSource(source) && result.workspaces.length === 1 && result.workspaces[0].sessions.length === 1) result.kind = 'session'
+    // One export holds one workspace, or one session with its subagents.
+    if (source === 'workspace' || source === 'session') {
+      const sessions = result.workspaces.reduce((sum, group) => sum + group.sessions.length, 0)
+      if (result.workspaces.length !== 1 || (source === 'session' && sessions !== 1)) {
+        await raw.selection.cleanup()
+        throw new Error(`${basename(raw.path)} holds ${sessions} sessions in ${result.workspaces.length} workspaces, not one ${source}`)
+      }
+      result.kind = source
+    }
+    if (isArchiveSource(source)) {
       const token = `dsh-scan-${randomUUID()}`
       dshScans.set(token, raw)
       ctx.effect(() => async () => { const held = dshScans.get(token); if (held?.selection !== undefined) await held.selection.cleanup(); dshScans.delete(token) }, `import-sessions: release ${token}`)
@@ -184,17 +202,20 @@ export function apply(ctx, config) {
   }
 
   // ---- host slash commands -------------------------------------------------------------
-  for (const source of ['claude', 'pi', 'dsh']) {
+  const COMMAND_DESCRIPTIONS = {
+    dsh: 'Import sessions from another home, a backup or an export',
+    workspace: 'Import a workspace export',
+    session: 'Import a session export',
+  }
+  for (const source of SOURCE_NAMES) {
     ctx.effect(() => ctx.commands.register({
       name: `import-${source}`,
-      description: source === 'dsh'
-        ? 'Import sessions from another home or a backup'
-        : `Import ${SOURCES[source].label} sessions`,
-      ...(source === 'dsh' ? {} : { input: { hint: 'transcript, workspace folder or store' } }),
+      description: COMMAND_DESCRIPTIONS[source] ?? `Import ${SOURCES[source].label} sessions`,
+      ...(isArchiveSource(source) ? {} : { input: { hint: 'transcript, workspace folder or store' } }),
       handler: async ({ rawInput, signal }) => {
         const path = rawInput.trim()
         try {
-          if (source === 'dsh') return { kind: 'error', text: '/import-dsh imports through the web GUI.' }
+          if (isArchiveSource(source)) return { kind: 'error', text: `/import-${source} imports through the web GUI.` }
           if (path === '') return { kind: 'success', text: await storeSummary(source) }
           return await headlessImport(source, path, signal)
         } catch (error) {
@@ -222,12 +243,16 @@ export function apply(ctx, config) {
         const who = requestClient(req)
         const client = { sameMachine: who.sameMachine, host: who.sameMachine ? serverHost() : await peerHost(who.address).catch(() => undefined) }
         sources.dsh = { label: 'DeepSea', root: dirname(activeHome), defaultRoot: collapseHome(dirname(activeHome)), exists: true }
+        sources.workspace = { label: 'workspace', root: expandHome(EXPORTS_ROOT), defaultRoot: EXPORTS_ROOT, exists: true }
+        sources.session = { label: 'session', root: expandHome(EXPORTS_ROOT), defaultRoot: EXPORTS_ROOT, exists: true }
         return ok({ platform: process.platform, pickerAvailable: capability.available, pickerKind: capability.kind, sources, workspaces: workspaceOptions(), defaults: { keepTurns: config.keepTurns, resultCap: config.resultCap }, server: { host: serverHost() }, client })
       }
       case 'pick': {
-        if (!isSource(args.source)) return fail('bad-request', 'source must be "claude", "pi", or "dsh"')
+        if (!isSource(args.source)) return fail('bad-request', BAD_SOURCE)
         try {
-          const path = await pickPath({ initialDirectory: args.source === 'dsh' ? dirname(activeHome) : roots[args.source], message: args.source === 'dsh' ? 'Choose a home or a backup' : `Choose ${SOURCES[args.source].label} transcripts`, signal })
+          const initialDirectory = args.source === 'dsh' ? dirname(activeHome) : isArchiveSource(args.source) ? expandHome(EXPORTS_ROOT) : roots[args.source]
+          const message = args.source === 'dsh' ? 'Choose a home, a backup or an export' : isArchiveSource(args.source) ? `Choose a ${args.source} export` : `Choose ${SOURCES[args.source].label} transcripts`
+          const path = await pickPath({ initialDirectory, message, signal })
           return ok({ path })
         } catch (error) {
           if (error?.code === 'picker-unavailable') return fail('picker-unavailable', error.message)
@@ -235,7 +260,7 @@ export function apply(ctx, config) {
         }
       }
       case 'scan': {
-        if (!isSource(args.source)) return fail('bad-request', 'source must be "claude", "pi", or "dsh"')
+        if (!isSource(args.source)) return fail('bad-request', BAD_SOURCE)
         if (typeof args.path !== 'string' || args.path.trim() === '') return fail('bad-request', 'path is required')
         try {
           return ok(await scan(args.source, args.path.trim(), signal))
@@ -246,7 +271,7 @@ export function apply(ctx, config) {
       case 'upload-begin': {
         if (!isSource(args.source) || args.source === 'dsh') return fail('bad-request', 'homes are imported from a server path, not uploaded')
         const upload = await uploads.begin(args.source)
-        log(`import-sessions: upload ${upload.id} started (${SOURCES[args.source].label})`)
+        log(`import-sessions: upload ${upload.id} started (${SOURCES[args.source]?.label ?? `${args.source} export`})`)
         return ok({ uploadId: upload.id, chunkBytes: 4 * 1024 * 1024 })
       }
       case 'upload-chunk': {
@@ -272,8 +297,8 @@ export function apply(ctx, config) {
         return ok({ discarded: await uploads.discard(args.uploadId) })
       }
       case 'import': {
-        if (!isSource(args.source)) return fail('bad-request', 'source must be "claude", "pi", or "dsh"')
-        if (args.source === 'dsh') {
+        if (!isSource(args.source)) return fail('bad-request', BAD_SOURCE)
+        if (isArchiveSource(args.source)) {
           const scan = dshScans.get(String(args.scanToken ?? ''))
           if (scan === undefined) return fail('bad-request', 'the scan has expired; choose the source again')
           const selections = Array.isArray(args.selections) ? args.selections : []
@@ -287,6 +312,8 @@ export function apply(ctx, config) {
           }
           await scan.selection.cleanup()
           dshScans.delete(String(args.scanToken))
+          // An uploaded export is done with once its sessions are in.
+          if (typeof args.uploadId === 'string' && uploads.get(args.uploadId) !== undefined) await uploads.discard(args.uploadId)
           const jobId = `dsh-${randomUUID()}`
           dshScans.set(jobId, { jobId, total: results.length, done: results.length, finished: true, results })
           return ok({ jobId, total: results.length })

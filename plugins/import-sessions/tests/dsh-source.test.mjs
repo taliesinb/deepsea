@@ -54,6 +54,44 @@ test('a backup archive is read from its home/sessions/, and from the earlier dsh
   }
 })
 
+test('a workspace archive is read from its home/sessions/, with its attachments from the archive', async () => {
+  const source = await dshHome()
+  const png = Buffer.from('workspace png')
+  const zip = backupOf(source.home, {
+    format: 'deepsea-workspace-v1', name: 'y2026m10d09h21m00s00.hexample.fabc123.s1.blender.workspace.deepsea.zip',
+    extra: { [`attachments/v1/objects/${sha(png).slice(0, 2)}/${sha(png)}`]: png },
+  })
+  const scan = await scanDshSelection(zip, elsewhere)
+  try {
+    assert.equal(scan.selection.archive, true)
+    assert.deepEqual(scan.workspaces.flatMap(group => group.sessions).map(session => session.id), [source.id])
+    assert.deepEqual(await scan.selection.readAttachment(`objects/${sha(png).slice(0, 2)}/${sha(png)}`), png)
+  } finally { await scan.selection.cleanup() }
+  await assert.rejects(prepareDshSelection(backupOf(source.home, { format: 'deepsea-home-v1', name: 'x.s1.blender.workspace.deepsea.zip' }), elsewhere), /invalid backup manifest/)
+})
+
+test('/import-workspace and /import-session accept only their own export, as a file or alone in an upload directory', async () => {
+  const source = await dshHome()
+  const session = backupOf(source.home, { format: 'deepsea-session-v1', name: 'y2026m10d09h21m00s00.hexample.fabc123.s1.Build.session.deepsea.zip' })
+  const workspace = backupOf(source.home, { format: 'deepsea-workspace-v1', name: 'y2026m10d09h21m00s00.hexample.fabc123.s1.blender.workspace.deepsea.zip' })
+  const backup = backupOf(source.home)
+  const scan = await scanDshSelection(session, elsewhere, { kinds: ['session'] })
+  try { assert.deepEqual(scan.workspaces.flatMap(group => group.sessions).map(row => row.id), [source.id]) }
+  finally { await scan.selection.cleanup() }
+  // /import-dsh takes a session export too.
+  const any = await prepareDshSelection(session, elsewhere)
+  assert.equal(any.archiveKind, 'session')
+  await any.cleanup()
+  await assert.rejects(prepareDshSelection(workspace, elsewhere, { kinds: ['session'] }), /is not a \.session\.deepsea\.zip file/)
+  await assert.rejects(prepareDshSelection(backup, elsewhere, { kinds: ['workspace'] }), /is not a \.workspace\.deepsea\.zip file/)
+  await assert.rejects(prepareDshSelection(source.home, elsewhere, { kinds: ['workspace'] }), /is not a \.workspace\.deepsea\.zip file/)
+  const upload = scratch('upload')
+  cpSync(workspace, join(upload, 'blender.workspace.deepsea.zip'))
+  const uploaded = await prepareDshSelection(upload, elsewhere, { kinds: ['workspace'] })
+  assert.equal(uploaded.path, join(upload, 'blender.workspace.deepsea.zip'))
+  await uploaded.cleanup()
+})
+
 test('an archive under another name, or with the other layout\'s manifest, is refused', async () => {
   const source = await dshHome()
   const zip = backupOf(source.home, { name: 'home.zip' })

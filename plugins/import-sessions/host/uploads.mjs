@@ -10,8 +10,9 @@
  *   $DSH_HOME/plugins/import-sessions/uploads/<uploadId>/<relative path>
  *
  * Relative paths are sanitized (no absolute, no `..`, no empty segments); only
- * names that look like transcripts of the declared source are accepted, so the
- * server never stores arbitrary client files. Uploads are swept after a day.
+ * names that look like transcripts of the declared source (for `workspace` and
+ * `session`: an export of that kind) are accepted, so the server never stores
+ * arbitrary client files. Uploads are swept after a day.
  */
 import { createWriteStream } from 'node:fs'
 import { mkdir, open, readdir, realpath, rename, rm, stat } from 'node:fs/promises'
@@ -23,6 +24,8 @@ import { isSessionFile } from './sources.mjs'
 
 const SWEEP_AGE_MS = 24 * 60 * 60 * 1000
 const ID_RE = /^up-[0-9a-f-]{36}$/
+/** The one file an export upload carries, by source. */
+const EXPORT_NAMES = { workspace: /\.workspace\.deepsea\.zip$/i, session: /\.session\.deepsea\.zip$/i }
 
 /** Accept a relative transcript path for `source`; return its normalized posix form. */
 export function sanitizeRelativePath(source, relative) {
@@ -34,6 +37,10 @@ export function sanitizeRelativePath(source, relative) {
   const segments = normalized.split('/').filter(s => s !== '' && s !== '.')
   if (segments.length === 0 || segments.length > 8) throw new Error(`upload path has an unexpected depth: ${relative}`)
   const name = segments.at(-1)
+  if (source in EXPORT_NAMES) {
+    if (segments.length !== 1 || !EXPORT_NAMES[source].test(name)) throw new Error(`not a ${source} export: ${relative}`)
+    return name
+  }
   const isSubagent = source === 'claude' && segments.length >= 3 && segments.at(-2) === 'subagents' && /^agent-[^/]+\.jsonl$/.test(name)
   if (!isSessionFile(source, name) && !isSubagent) throw new Error(`not a transcript file for this source: ${relative}`)
   return segments.join('/')

@@ -1,15 +1,19 @@
 # @deepsea/import-sessions
 
 `/import-claude`, `/import-pi` and `/import-dsh` bring **Claude Code** and
-**pi** coding-agent transcripts, and the sessions of **another home or a
-backup**, into DeepSea as real, resumable sessions, grouped into the
-workspace whose directory matches the transcript's working directory.
+**pi** coding-agent transcripts, and the sessions of **another home, a
+backup or an export**, into DeepSea as real, resumable sessions, grouped into
+the workspace whose directory matches the transcript's working directory.
+`/import-workspace` and `/import-session` bring in one workspace or one
+session exported by @deepsea/export-sessions, asking only where it goes.
 
 | Source | Store | Session id |
 |---|---|---|
 | Claude Code | `~/.claude/projects/<slug>/<uuid>.jsonl` (+ `<uuid>/subagents/agent-*.jsonl`) | `claude-<uuid>` (children `claude-<uuid>-agent-…`) |
 | pi | `~/.pi/agent/sessions/--<path>--/<ts>_<uuid>.jsonl` | `pi-<uuid>` |
-| another home | `<home>/sessions/<workspace>/<session>/`, or a @deepsea/backup-restore `.backup.deepsea.zip` / `.rollback.deepsea.zip` (or the earlier `.backup.dsh.zip`) | kept |
+| another home (`/import-dsh`) | `<home>/sessions/<workspace>/<session>/`, a @deepsea/backup-restore `.backup.deepsea.zip` / `.rollback.deepsea.zip` (or the earlier `.backup.dsh.zip`), or an export | kept |
+| a workspace export (`/import-workspace`) | `.workspace.deepsea.zip` (`/export-workspace`) | kept |
+| a session export (`/import-session`) | `.session.deepsea.zip` (`/export-session`) | kept |
 
 ## What the person sees
 
@@ -24,9 +28,15 @@ The bare command (or `/import-claude ` + Enter) opens **one dialog**:
    machine's client and the server has the store too, *From … on `<server>`*
    · **Choose** reads the server's own store instead. For `/import-dsh`,
    **Choose** opens the server's own file-or-folder panel beside its home
-   (`~/.deepsea`): another home, one of its sessions folders, or a backup.
-2. **Decide**: a tree of workspaces → sessions (bulk) or a single-session
-   card. Each workspace (or the card) has an **Import to** lozenge: the
+   (`~/.deepsea`): another home, one of its sessions folders, a backup or an
+   export. For `/import-workspace` and `/import-session`, **Upload** takes one
+   export file from this device (the DeepSea app opens its panel at
+   `~/Downloads`); on another machine's client, **Choose** opens the server's
+   own panel at `~/Downloads` instead. Only an export of the command's kind
+   is accepted.
+2. **Decide**: a tree of workspaces → sessions (bulk), a single-session
+   card, or for `/import-workspace` a card of the workspace (its directory's
+   name, sessions, dates, turns). Each workspace (or the card) has an **Import to** lozenge: the
    workspace whose path equals the transcript's `cwd`, else a new one named
    after the directory under the **Place new workspaces in** base (default
    `~/`), any existing workspace, or ungrouped. Sessions already imported,
@@ -51,7 +61,8 @@ does.
 Without the GUI: `/import-claude <path>` (a transcript, a workspace folder or
 the store) imports headlessly in archive mode into the directory-matched
 workspaces; the bare command summarizes the store (workspaces, sessions, how
-many already imported). `/import-dsh` works through the dialog only.
+many already imported). `/import-dsh`, `/import-workspace` and
+`/import-session` work through the dialog only.
 
 ## Fidelity
 
@@ -84,7 +95,7 @@ many already imported). `/import-dsh` works through the dialog only.
   harness's own released-format migration (`@deepseek-ai/dsh-session-format-catalog`,
   `toCurrentFormat` in `host/importer.mjs`) brings to the current format,
   each imported subagent child declared to its parent's migration.
-- Another home's sessions are read with the harness's JSONL persistence and
+- Another home's (or a backup's, or an export's) sessions are read with the harness's JSONL persistence and
   stored through the Session Controller's `storeSessionLogs` (harness topic
   `session-relocation`), keeping their ids, each root with its subagent
   descendants, into a workspace. The attachments their logs reference are
@@ -103,8 +114,9 @@ many already imported). `/import-dsh` works through the dialog only.
   upload. Uploads live under `$DSH_HOME/plugins/import-sessions/uploads/<id>/`
   while the dialog is open and are deleted after the import (or swept after
   a day); only file names that look like transcripts of the chosen source
+  (for `/import-workspace` and `/import-session`, one export of that kind)
   are accepted, with sanitized relative paths.
-- A backup archive's `home/sessions/` (`dsh/sessions/` in the earlier layout) is extracted to
+- A backup or export's `home/sessions/` (`dsh/sessions/` in the earlier layout) is extracted to
   `$TMPDIR/deepsea-import-sessions-…` for the scan and removed after the
   import.
 - New workspaces are created at `<base>/<basename of the original cwd>` on
@@ -133,7 +145,7 @@ many already imported). `/import-dsh` works through the dialog only.
 | `host/events.mjs` | the session event builder and an invariant checker |
 | `host/claude-reader.mjs`, `host/pi-reader.mjs` | the two transcript readers |
 | `host/sources.mjs` | store discovery and the scan |
-| `host/dsh-source.mjs` | `/import-dsh`: homes, sessions folders and backup archives |
+| `host/dsh-source.mjs` | `/import-dsh`, `/import-workspace`, `/import-session`: homes, sessions folders, backups and exports |
 | `host/uploads.mjs` | device uploads |
 | `host/picker.mjs` | the server's own file-or-folder panel (macOS; folders only with zenity/kdialog on Linux) |
 | `host/hosts.mjs` | which machine a request comes from |

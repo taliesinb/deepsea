@@ -33,20 +33,24 @@ import {
   type Call, type ImportArgs, type ImportMode, type ImportResult, type ImportSelection, type ProgressResult, type ScanResult, type Source, type SourcesResult,
 } from './protocol.ts'
 import { DEFAULT_NEW_BASE, NewBaseField, TreeStage, initialDestinationValue, isSelectable, resolveDestination, type DestinationValue } from './TreeStage.tsx'
-import { LargeSection, SessionCard, type LargeChoice } from './DecideStage.tsx'
+import { LargeSection, SessionCard, WorkspaceCard, type LargeChoice } from './DecideStage.tsx'
 import { PickStage } from './PickStage.tsx'
 import { RunningStage, SummaryStage } from './SummaryStage.tsx'
 import { expectedTranscriptText, filterTranscripts } from './transcript-filter.ts'
 import { uploadTranscripts, type UploadProgress } from './upload.ts'
-import { borderColor, dangerColor, mono, plural, small, tildify, warningColor } from './format.ts'
+import { basename, borderColor, dangerColor, mono, plural, small, tildify, warningColor } from './format.ts'
 
 const PROGRESS_POLL_MS = 500
 const COMMANDS: ReadonlyArray<{ name: string, source: Source }> = [
   { name: 'import-claude', source: 'claude' },
   { name: 'import-pi', source: 'pi' },
   { name: 'import-dsh', source: 'dsh' },
+  { name: 'import-workspace', source: 'workspace' },
+  { name: 'import-session', source: 'session' },
 ]
-const SOURCE_LABEL: Record<Source, string> = { claude: 'Claude Code', pi: 'pi', dsh: 'DeepSea' }
+const SOURCE_LABEL: Record<Source, string> = { claude: 'Claude Code', pi: 'pi', dsh: 'DeepSea', workspace: 'workspace', session: 'session' }
+/** One export of one kind: the dialog only asks where it goes. */
+const isExportSource = (source: Source): source is 'workspace' | 'session' => source === 'workspace' || source === 'session'
 /** Used until `sources` answers (its `defaults` win). */
 const FALLBACK_CHOICE: LargeChoice = { mode: 'working', keepTurns: 20, resultCap: 4096 }
 
@@ -190,7 +194,9 @@ function ImportFlow({ source, rpc, onClose }: { source: Source, rpc: ClientConne
     setError(undefined)
     const { kept } = filterTranscripts(source, Array.from(list))
     if (kept.length === 0) {
-      setDeviceError(`Nothing to import among the ${plural(list.length, 'chosen file')}: expected ${expectedTranscriptText(source)}. Choose the ${label} store, one of its workspace folders, or one transcript.`)
+      setDeviceError(isExportSource(source)
+        ? `Expected ${expectedTranscriptText(source)}.`
+        : `Nothing to import among the ${plural(list.length, 'chosen file')}: expected ${expectedTranscriptText(source)}. Choose the ${label} store, one of its workspace folders, or one transcript.`)
       return
     }
     // Replace any upload we still hold from an earlier choice.
@@ -352,7 +358,7 @@ function ImportFlow({ source, rpc, onClose }: { source: Source, rpc: ClientConne
 
   // -- render ----------------------------------------------------------------
   const wide = stage === 'decide' || stage === 'summary'
-  const title = stage === 'large' ? 'Large sessions' : `Import ${label} sessions`
+  const title = stage === 'large' ? 'Large sessions' : isExportSource(source) ? `Import ${source}` : `Import ${label} sessions`
   const backToPick = (): void => { setError(undefined); setStage('pick') }
 
   let body: ReactNode
@@ -371,7 +377,7 @@ function ImportFlow({ source, rpc, onClose }: { source: Source, rpc: ClientConne
           error={error}
           onFiles={(files) => { void onFiles(files) }}
           onServerStore={() => {
-            if (source === 'dsh') {
+            if (source === 'dsh' || isExportSource(source)) {
               void call<{ path: string | null }>('pick', { source }).then(result => { if (result.path !== null) void startScan(result.path) }).catch(failure => setDeviceError(`Could not open chooser: ${errorText(failure)}`))
             } else if (root !== undefined) void startScan(root)
           }}
@@ -398,14 +404,32 @@ function ImportFlow({ source, rpc, onClose }: { source: Source, rpc: ClientConne
       const selectable = scan?.workspaces.reduce((sum, workspace) => sum + workspace.sessions.filter(isSelectable).length, 0) ?? 0
       const single = scan?.kind === 'session' ? scan.workspaces[0] : undefined
       const only = single?.sessions[0]
-      description = only !== undefined
+      const whole = source === 'workspace' && scan?.kind === 'workspace' ? scan.workspaces[0] : undefined
+      description = isExportSource(source) && scan !== undefined
+        ? basename(scan.path)
+        : only !== undefined
         ? (scan?.uploaded === true ? 'Uploaded 1 session' : tildify(only.file))
         : scanPath !== undefined
           ? `${scan?.uploaded === true ? 'Uploaded' : `${tildify(scanPath)} —`} ${plural(total, 'session')} in ${plural(scan?.workspaces.length ?? 0, 'workspace')}${selectable !== total ? `, ${String(selectable)} importable` : ''}`
           : undefined
       body = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {single !== undefined && only !== undefined
+          {whole !== undefined
+            ? (
+              <>
+                {whole.sessions.every(session => !isSelectable(session)) && <Banner tone="warn">Already imported.</Banner>}
+                <WorkspaceCard
+                  workspace={whole}
+                  existing={existing}
+                  destination={destinations[whole.key] ?? initialDestinationValue(whole)}
+                  newBase={newBase}
+                  {...remoteDirs ? { remoteDirs: { host: sources?.client.host } } : {}}
+                  onDestination={(value) => { setDestination(whole.key, value) }}
+                />
+                <NewBaseField value={newBase} enabled={count > 0 && (destinations[whole.key] ?? initialDestinationValue(whole)) === 'new'} onChange={setNewBase} />
+              </>
+            )
+            : single !== undefined && only !== undefined
             ? (
               <>
                 {!isSelectable(only) && (
@@ -450,7 +474,7 @@ function ImportFlow({ source, rpc, onClose }: { source: Source, rpc: ClientConne
         <>
           <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, fontSize: 13, color: 'var(--dsw-alias-label-secondary)' }}>
             <span style={{ whiteSpace: 'nowrap' }}>{String(count)} selected</span>
-            {single === undefined && importedCount + duplicateCount > 0 && (
+            {single === undefined && whole === undefined && importedCount + duplicateCount > 0 && (
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 <input type="checkbox" checked={showHidden} onChange={(event) => { setShowHidden(event.target.checked) }} style={{ width: 15, height: 15, margin: 0, accentColor: 'var(--dsw-alias-brand-primary)' }} />
                 {hiddenLabel}

@@ -8,7 +8,10 @@
  *        own store directly (only when the client is a remote device AND the
  *        server actually has that store).
  *   /import-dsh: From ~/.deepsea on <server>     [Choose]  → the server's own
- *        file-or-folder panel (a home, a sessions folder or a backup ZIP).
+ *        file-or-folder panel (a home, a sessions folder, a backup or an export).
+ *   /import-workspace, /import-session: From ~/Downloads on <your device> [Upload]
+ *        (one export file), and on a remote device also From ~/Downloads on
+ *        <server> [Choose] (the server's own panel).
  *
  * Purely presentational: filtering, uploading and scanning are the flow's.
  */
@@ -20,7 +23,7 @@ import type { Source, SourcesResult } from './protocol.ts'
 import type { UploadProgress } from './upload.ts'
 import { borderColor, brandColor, codeChip, dangerColor, hoverBg, megabytesText, mono, small } from './format.ts'
 
-const STORE_HINT: Record<Source, string> = { claude: '~/.claude/projects', pi: '~/.pi/agent/sessions', dsh: '~' }
+const STORE_HINT: Record<Source, string> = { claude: '~/.claude/projects', pi: '~/.pi/agent/sessions', dsh: '~', workspace: '~/Downloads', session: '~/Downloads' }
 
 
 /**
@@ -102,12 +105,14 @@ export function PickStage({ source, label, sources, upload, deviceError, error, 
   const clientHost = sources?.client.host
   const remote = sources !== undefined && !sources.client.sameMachine
   const serverHasStore = sources?.sources[source].exists === true
+  /** One export file, not a folder of transcripts. */
+  const exportFile = source === 'workspace' || source === 'session'
 
   const openChooser = (): void => {
     if (source === 'dsh') { onServerStore(); return }
     const input = folderInput.current
     if (input === null) return
-    hintAppPicker(store, `Choose ${label} transcripts`)
+    hintAppPicker(store, exportFile ? `Choose a ${source} export` : `Choose ${label} transcripts`)
     input.value = ''
     input.click()
   }
@@ -119,13 +124,14 @@ export function PickStage({ source, label, sources, upload, deviceError, error, 
           folderInput.current = node
           // Folder chooser; the DeepSea app's panel also accepts a single file.
           // /import-dsh never opens it: the server's own panel takes a home or a backup ZIP.
-          if (source !== 'dsh') {
+          if (source !== 'dsh' && !exportFile) {
             node?.setAttribute('webkitdirectory', '')
             node?.setAttribute('directory', '')
           }
         }}
         type="file"
-        multiple
+        multiple={!exportFile}
+        {...exportFile ? { accept: '.zip' } : {}}
         style={{ display: 'none' }}
         aria-hidden="true"
         tabIndex={-1}
