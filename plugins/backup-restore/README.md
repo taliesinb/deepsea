@@ -74,7 +74,10 @@ session counts, the path with a copy button, and the size.
 
 1. The archive is validated: a regular file in the backups directory, a
    good ZIP, every entry under `home/` or the manifest (no absolute paths, no
-   `..`, no duplicates), entry types and sizes matching the manifest.
+   `..`, no duplicates), entry types and sizes matching the manifest. A
+   workspace or session export (@deepsea/export-sessions,
+   `.workspace.deepsea.zip` / `.session.deepsea.zip`) is refused: it is
+   imported with `/import-workspace` or `/import-session`.
 2. A **rollback** of the current home is written and verified first; if
    that fails, nothing else happens and the server keeps running.
 3. A pending status is recorded, the detached restore worker
