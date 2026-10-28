@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "重启",
+    "description": "/reboot 重启服务器，并先显示重启会中断哪些内容。"
+  }
+}

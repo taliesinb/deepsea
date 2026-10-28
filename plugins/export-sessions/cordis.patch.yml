@@ -1,0 +1,7 @@
+# Bundle patch, used when the package is installed into a profile.
+# /export-workspace and /export-session (host commands, control and download
+# routes) and their dialog (browser half, lib/client.js). Optional config
+# `directory`: where the ZIPs are written, default ~/Downloads.
+- insert:
+    - id: deepsea-export-sessions
+      name: "@deepsea/export-sessions"
