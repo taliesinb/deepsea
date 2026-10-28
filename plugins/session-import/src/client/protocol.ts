@@ -9,7 +9,8 @@ import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/cli
 /** The host's control routes: a wire name kept from the plugin's old name, import-sessions (as are the deepsea-import-sessions-* CSS classes). */
 export const CHANNEL = '/deepsea-import-sessions'
 
-export type Source = 'claude' | 'pi' | 'dsh'
+/** `workspace` / `session`: one @deepsea/session-export export of that kind. */
+export type Source = 'claude' | 'pi' | 'dsh' | 'workspace' | 'session'
 
 /** `sources` — `{}` */
 export interface SourcesResult {

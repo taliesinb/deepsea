@@ -4,6 +4,8 @@
  *   - `SessionCard`: the single-session shape (`scan.kind === 'session'`):
  *     title, dates, size, turns, ~tokens, badges and an "Import to" select
  *     with the same options a workspace row gets.
+ *   - `WorkspaceCard`: one exported workspace (`/import-workspace`): its
+ *     directory's name, sessions, dates and the "Import to" select.
  *   - `LargeSection`: the follow-up step shown only when a SELECTED session is
  *     `large`; radio cards Compacted (keepTurns / resultCap inputs) vs Original,
  *     applied to the large ones only (the rest import in full).
@@ -12,7 +14,7 @@ import { fileSizeText } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ReactNode } from 'react'
 import type { ScanSession, ScanWorkspace, SourcesResult } from './protocol.ts'
 import { DestinationLozenge, SessionBadges, type DestinationValue } from './TreeStage.tsx'
-import { borderColor, brandColor, compactText, dateRangeText, hoverBg, plural, small, tildify, tokenText, warningColor } from './format.ts'
+import { basename, borderColor, brandColor, compactText, dateRangeText, hoverBg, plural, small, tildify, tokenText, warningColor } from './format.ts'
 
 export type ModeKind = 'archive' | 'working'
 
@@ -40,12 +42,14 @@ export function SessionCard({ workspace, session, existing, destination, newBase
   destination: DestinationValue
   onDestination: (value: DestinationValue) => void
 }) {
+  // Sessions read from a home or an export carry no size or token estimate (0).
   const facts: string[] = [
     dateRangeText(session.startedAt, session.endedAt),
-    fileSizeText(session.bytes),
+    ...session.bytes > 0 ? [fileSizeText(session.bytes)] : [],
     plural(session.turns, 'turn'),
     `${String(session.toolCalls)} tool call${session.toolCalls === 1 ? '' : 's'}`,
-    tokenText(session.estimatedTokens),
+    ...session.estimatedTokens > 0 ? [tokenText(session.estimatedTokens)] : [],
+    ...session.subagents !== undefined && session.subagents > 0 ? [plural(session.subagents, 'subagent session')] : [],
   ]
   return (
     <div style={{ border: `1px solid ${borderColor}`, borderRadius: 8, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -60,6 +64,48 @@ export function SessionCard({ workspace, session, existing, destination, newBase
         Recorded in {tildify(workspace.dir)}{remoteDirs !== undefined
           ? <span> on {remoteDirs.host ?? 'your device'}</span>
           : !workspace.dirExists ? <span style={{ color: warningColor }}> (directory no longer exists)</span> : null}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 2 }}>
+        <span style={{ fontWeight: 600 }}>Import to</span>
+        <DestinationLozenge value={destination} workspace={workspace} existing={existing} newBase={newBase} onChange={onDestination} />
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// One exported workspace
+
+/**
+ * @param props.workspace - the scan's one workspace row (every session of the export).
+ * @param props.destination - current select value.
+ */
+export function WorkspaceCard({ workspace, existing, destination, newBase, remoteDirs, onDestination }: {
+  newBase: string
+  remoteDirs?: { host: string | undefined }
+  workspace: ScanWorkspace
+  existing: SourcesResult['workspaces']
+  destination: DestinationValue
+  onDestination: (value: DestinationValue) => void
+}) {
+  const sessions = workspace.sessions
+  const imported = sessions.filter(session => session.imported).length
+  const facts: string[] = [
+    plural(sessions.length, 'session'),
+    ...imported > 0 ? [`${String(imported)} already imported`] : [],
+    ...sessions.length > 0 ? [dateRangeText(Math.min(...sessions.map(session => session.startedAt)), Math.max(...sessions.map(session => session.endedAt)))] : [],
+    plural(sessions.reduce((sum, session) => sum + session.turns, 0), 'turn'),
+  ]
+  return (
+    <div style={{ border: `1px solid ${borderColor}`, borderRadius: 8, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <span style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }} title={workspace.dir}>{basename(workspace.dir)}</span>
+      <div style={{ ...small, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {facts.map((fact, index) => <span key={fact}>{index > 0 ? '· ' : ''}{fact}</span>)}
+      </div>
+      <div style={{ ...small, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={workspace.dir}>
+        Recorded in {tildify(workspace.dir)}{remoteDirs !== undefined
+          ? <span> on {remoteDirs.host ?? 'your device'}</span>
+          : !workspace.dirExists ? <span style={{ color: warningColor }}> (directory not on this server)</span> : null}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 2 }}>
         <span style={{ fontWeight: 600 }}>Import to</span>
