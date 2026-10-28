@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "导出会话",
+    "description": "/export-workspace 和 /export-session 将工作区或会话写入 ZIP，供 /import-workspace 和 /import-session 导入。"
+  }
+}
