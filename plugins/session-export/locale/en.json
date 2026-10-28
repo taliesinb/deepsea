@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session export",
+    "description": "/export-workspace and /export-session write a workspace or a session to a ZIP for /import-workspace and /import-session."
+  }
+}
