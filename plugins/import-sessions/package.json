@@ -2,7 +2,7 @@
   "name": "@deepsea/import-sessions",
   "version": "0.1.0",
   "private": true,
-  "description": "DeepSea plugin: /import-claude, /import-pi and /import-dsh bring Claude Code and pi transcripts, and sessions of another home or backup, into real, resumable sessions: a chooser on the device or the server's own store, a workspace → session tree with directory-matched destinations, a compacted working session for large transcripts, all written through the harness's own persistence, attachment and workspace services.",
+  "description": "DeepSea plugin: /import-claude, /import-pi and /import-dsh bring Claude Code and pi transcripts, and sessions of another home, a backup or an export, into real, resumable sessions, and /import-workspace and /import-session bring in one workspace or session export: a chooser on the device or the server's own store, a workspace → session tree with directory-matched destinations, a compacted working session for large transcripts, all written through the harness's own persistence, attachment and workspace services.",
   "type": "module",
   "main": "index.js",
   "exports": {

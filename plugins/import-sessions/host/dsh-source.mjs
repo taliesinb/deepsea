@@ -1,9 +1,12 @@
 /**
  * `/import-dsh`: sessions from another home (the `$DSH_HOME` of another
  * variant or machine), one of its sessions workspaces or session directories,
- * or a @deepsea/backup-restore archive (`.backup.deepsea.zip` /
- * `.rollback.deepsea.zip`, or the earlier `.backup.dsh.zip` layout), whose
- * `sessions/` is extracted to `$TMPDIR/deepsea-import-sessions-…`.
+ * a @deepsea/backup-restore archive (`.backup.deepsea.zip` /
+ * `.rollback.deepsea.zip`, or the earlier `.backup.dsh.zip` layout), or a
+ * @deepsea/export-sessions export (`.workspace.deepsea.zip`,
+ * `.session.deepsea.zip`; `/import-workspace` and `/import-session` take only
+ * those). An archive's `sessions/` is extracted to
+ * `$TMPDIR/deepsea-import-sessions-…`.
  * The logs are read with the harness's own JSONL persistence, grouped into
  * root sessions with their subagent descendants, and stored through the
  * Session Controller's `storeSessionLogs` (harness topic session-relocation),
@@ -24,11 +27,20 @@ import { storeSessionLogs } from '@deepseek-ai/dsh-session-log-export'
 import { resolveDestination } from './importer.mjs'
 
 const execFileAsync = promisify(execFile)
-/** Backup archive layouts: @deepsea/backup-restore's, then the earlier DSH one. */
+/**
+ * Archive layouts, by kind: @deepsea/backup-restore's home backups, then
+ * @deepsea/export-sessions' workspace and session exports, then the earlier
+ * DSH home backup.
+ */
 const ARCHIVES = [
-  { name: /\.(?:backup|rollback)\.deepsea\.zip$/i, root: 'home/', manifest: 'deepsea-backup.json', format: 'deepsea-home-v1' },
-  { name: /\.(?:backup|rollback)\.dsh\.zip$/i, root: 'dsh/', manifest: 'dsh-backup.json', format: 'dsh-home-v1' },
+  { kind: 'home', name: /\.(?:backup|rollback)\.deepsea\.zip$/i, root: 'home/', manifest: 'deepsea-backup.json', format: 'deepsea-home-v1' },
+  { kind: 'workspace', name: /\.workspace\.deepsea\.zip$/i, root: 'home/', manifest: 'deepsea-backup.json', format: 'deepsea-workspace-v1' },
+  { kind: 'session', name: /\.session\.deepsea\.zip$/i, root: 'home/', manifest: 'deepsea-backup.json', format: 'deepsea-session-v1' },
+  { kind: 'home', name: /\.(?:backup|rollback)\.dsh\.zip$/i, root: 'dsh/', manifest: 'dsh-backup.json', format: 'dsh-home-v1' },
 ]
+/** The file name an archive of each kind ends with, for messages. */
+const SUFFIXES = { home: '.backup.deepsea.zip, .rollback.deepsea.zip', workspace: '.workspace.deepsea.zip', session: '.session.deepsea.zip' }
+const suffixText = kinds => kinds.flatMap(kind => SUFFIXES[kind].split(', ')).join(', ').replace(/, ([^,]+)$/, ' or $1')
 const PROJECT_RE = /^(?:--.*--|_no-cwd)$/
 const SESSION_RE = /^session-/
 const LOG_RE = /^session(?:\.v\d+)?\.jsonl(?:\.zstd)?$/
@@ -137,16 +149,30 @@ function homeAttachments(home) {
   }
 }
 
-/** Resolve a home, sessions root, workspace dir, session dir, or backup ZIP. */
-export async function prepareDshSelection(selected, activeHome) {
-  const path = resolve(selected)
-  const info = await stat(path)
-  if (info.isFile()) {
-    const layout = ARCHIVES.find(item => item.name.test(basename(path)))
-    if (layout === undefined) throw new Error(`${path} is not a .backup.deepsea.zip or .rollback.deepsea.zip file`)
-    const extracted = await extractBackup(path, layout)
-    return { ...extracted, path, sessionsRoot: join(extracted.root, 'sessions'), kind: 'root' }
+/**
+ * Resolve a home, sessions root, workspace dir, session dir, or archive.
+ * @param {string} selected
+ * @param {string} activeHome - the home the server runs on (refused)
+ * @param {{ kinds?: readonly ('home' | 'workspace' | 'session')[] }} [options] - `kinds`: accept only
+ *   archives of these kinds (no directories, except an upload directory holding exactly one such archive)
+ */
+export async function prepareDshSelection(selected, activeHome, { kinds } = {}) {
+  let path = resolve(selected)
+  let info = await stat(path)
+  const accepted = kinds === undefined ? ARCHIVES : ARCHIVES.filter(item => kinds.includes(item.kind))
+  if (kinds !== undefined && info.isDirectory()) {
+    const inside = (await readdir(path)).filter(name => accepted.some(item => item.name.test(name)))
+    if (inside.length !== 1) throw new Error(`${path} is not a ${suffixText(kinds)} file`)
+    path = join(path, inside[0])
+    info = await stat(path)
   }
+  if (info.isFile()) {
+    const layout = accepted.find(item => item.name.test(basename(path)))
+    if (layout === undefined) throw new Error(`${path} is not a ${suffixText(kinds ?? ['home', 'workspace', 'session'])} file`)
+    const extracted = await extractBackup(path, layout)
+    return { ...extracted, path, sessionsRoot: join(extracted.root, 'sessions'), kind: 'root', archiveKind: layout.kind }
+  }
+  if (kinds !== undefined) throw new Error(`${path} is not a ${suffixText(kinds)} file`)
   if (!info.isDirectory()) throw new Error(`${path} is neither a home directory nor a backup ZIP`)
   if (await samePath(path, activeHome)) throw new Error('Choose another home: this is the home the server runs on')
   // The home is the directory holding `sessions/`; its attachments sit beside them.
@@ -218,7 +244,7 @@ function titleOf(events, fallback) {
 }
 
 export async function scanDshSelection(selected, activeHome, options = {}) {
-  const selection = await prepareDshSelection(selected, activeHome)
+  const selection = await prepareDshSelection(selected, activeHome, { kinds: options.kinds })
   try {
     const families = await readWithPersistence(selection.sessionsRoot, selection, options.signal)
     const workspaces = new Map()

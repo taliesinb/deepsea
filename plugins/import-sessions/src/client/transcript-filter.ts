@@ -7,6 +7,7 @@
  *   claude: `<uuid>.jsonl` at any depth, plus `<uuid>/subagents/agent-*.jsonl`;
  *           skip anything under `memory/`, `*.backup`, everything else
  *   pi:     `<ISO-ts>_<uuid>.jsonl`; skip everything else
+ *   workspace / session: one `.workspace.deepsea.zip` / `.session.deepsea.zip`
  *
  * Pure: takes relative posix paths, returns the survivors. No DOM types so
  * it can be exercised from a plain Node check.
@@ -37,7 +38,8 @@ export function isTranscriptPath(source: Source, relative: string): boolean {
   if (segments.length === 0 || segments.length > MAX_SEGMENTS || segments.includes('..')) return false
   const name = segments[segments.length - 1] as string
   if (name.endsWith('.backup')) return false
-  if (source === 'dsh') return /\.(?:backup|rollback)\.(?:deepsea|dsh)\.zip$/i.test(name) || /^session(?:\.v\d+)?\.jsonl(?:\.zstd)?$/i.test(name)
+  if (source === 'dsh') return /\.(?:(?:backup|rollback)\.(?:deepsea|dsh)|(?:workspace|session)\.deepsea)\.zip$/i.test(name) || /^session(?:\.v\d+)?\.jsonl(?:\.zstd)?$/i.test(name)
+  if (source === 'workspace' || source === 'session') return segments.length === 1 && name.toLowerCase().endsWith(`.${source}.deepsea.zip`)
   if (source === 'pi') return PI_SESSION_FILE.test(name)
   if (segments.includes('memory')) return false
   if (CLAUDE_SESSION_FILE.test(name)) return true
@@ -50,7 +52,9 @@ export function isTranscriptPath(source: Source, relative: string): boolean {
 /** What the filter looks for, for the "nothing matched" error. */
 export function expectedTranscriptText(source: Source): string {
   return source === 'dsh'
-    ? 'a home or session folder, or a .backup.deepsea.zip/.rollback.deepsea.zip archive'
+    ? 'a home or session folder, or a .backup.deepsea.zip/.rollback.deepsea.zip/.workspace.deepsea.zip/.session.deepsea.zip archive'
+    : source === 'workspace' || source === 'session'
+      ? `a .${source}.deepsea.zip file`
     : source === 'pi'
       ? 'pi transcripts named <timestamp>_<uuid>.jsonl'
       : 'Claude Code transcripts named <uuid>.jsonl (plus <uuid>/subagents/agent-*.jsonl)'

@@ -1,5 +1,6 @@
 # Bundle patch, used when the package is installed into a profile.
-# /import-claude, /import-pi and /import-dsh (host commands and control routes)
+# /import-claude, /import-pi, /import-dsh, /import-workspace and /import-session
+# (host commands and control routes)
 # and their dialog (browser half, lib/client.js). Config keys and defaults are
 # the plugin's schema (README); override by id in the profile's patch, which
 # replaces the whole `config`. Needs the harness topic session-relocation.

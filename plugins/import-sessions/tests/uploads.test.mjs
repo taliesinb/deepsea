@@ -20,6 +20,14 @@ test('relative upload paths: only transcripts, never escaping', () => {
   assert.throws(() => sanitizeRelativePath('pi', 'x/11111111-2222-4333-8444-555555555555.jsonl'), /not a transcript/, 'a Claude name is not a pi name')
 })
 
+test('an export upload is one file of its own kind', () => {
+  assert.equal(sanitizeRelativePath('workspace', 'y2026m10d09h21m00s00.hx.fy.s3.blender.workspace.deepsea.zip'), 'y2026m10d09h21m00s00.hx.fy.s3.blender.workspace.deepsea.zip')
+  assert.equal(sanitizeRelativePath('session', 'notes.session.deepsea.zip'), 'notes.session.deepsea.zip')
+  assert.throws(() => sanitizeRelativePath('session', 'blender.workspace.deepsea.zip'), /not a session export/)
+  assert.throws(() => sanitizeRelativePath('workspace', 'dir/blender.workspace.deepsea.zip'), /not a workspace export/)
+  assert.throws(() => sanitizeRelativePath('workspace', '../blender.workspace.deepsea.zip'), /escapes/)
+})
+
 test('upload store: gzip chunks materialize, finish returns a scannable dir, discard removes it', async () => {
   const source = claudeStore()
   const store = new UploadStore(scratch('uploads'))

@@ -8,7 +8,8 @@ import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/cli
 
 export const CHANNEL = '/deepsea-import-sessions'
 
-export type Source = 'claude' | 'pi' | 'dsh'
+/** `workspace` / `session`: one @deepsea/export-sessions export of that kind. */
+export type Source = 'claude' | 'pi' | 'dsh' | 'workspace' | 'session'
 
 /** `sources` — `{}` */
 export interface SourcesResult {
