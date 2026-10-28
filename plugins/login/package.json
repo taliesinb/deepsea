@@ -1,0 +1,58 @@
+{
+  "name": "@deepsea/login",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: /login, /logout and /logins start, list, cancel and remove provider sign-ins (llm-pi-ai <provider>-oauth routes), with a chat card whose sign-in link is one click, and the Models page's Add login dialog.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "deepsea": {
+    "requires": [
+      "pi-ai-oauth-routes",
+      "settings-models-signins"
+    ]
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --test tests/*.test.mjs",
+    "prepare": "node build.mjs"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-api-session-controller": "link:../../harness/packages/api/session-controller",
+    "@deepseek-ai/dsh-client-ui-chat": "link:../../harness/packages/client/ui-chat",
+    "@deepseek-ai/dsh-client-ui-commands": "link:../../harness/packages/client/ui-commands",
+    "@deepseek-ai/dsh-client-ui-primitives": "link:../../harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-settings-models": "link:../../harness/packages/client/ui-settings-models",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.7",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}
