@@ -23,6 +23,8 @@ export const ROOT = `${HOME_DIR}/`
 export const MANIFEST = 'deepsea-backup.json'
 /** Backup and rollback file names. */
 export const ARCHIVE_NAME = /\.(?:backup|rollback)\.deepsea\.zip$/
+/** Workspace and session exports (@deepsea/export-sessions): imported, never restored. */
+const EXPORT_NAME = /\.(workspace|session)\.deepsea\.zip$/
 const MAX_LISTING = 64 * 1024 * 1024
 const SQLITE_HEADER = Buffer.from('SQLite format 3\0')
 const SQLITE_SIDECAR = /-(?:wal|shm|journal)$/
@@ -234,6 +236,7 @@ export async function makeBackup({ home, backups, kind = 'backup', commit, date 
     await handle.close()
     await rename(temp, target)
     reserved = false
+    await chmod(target, 0o600)
     return { name, path: target, counts: totals, bytes: (await stat(target)).size }
   } finally {
     if (reserved) await rm(target, { force: true })
@@ -255,6 +258,8 @@ export async function listBackups(backups) {
 }
 
 export async function validateArchive(backups, name) {
+  const exported = typeof name === 'string' ? EXPORT_NAME.exec(name) : null
+  if (exported !== null) throw new Error(`a ${exported[1]} export is imported with /import-${exported[1]}, not restored`)
   if (typeof name !== 'string' || name !== basename(name) || !ARCHIVE_NAME.test(name)) throw new Error('choose a backup from the backups directory')
   await regularDirectory(backups)
   const path = join(backups, name)
