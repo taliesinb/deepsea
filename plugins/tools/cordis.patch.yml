@@ -1,0 +1,6 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers the /tools slash command (host) and its chat card (browser half,
+# lib/client.js). No config.
+- insert:
+    - id: deepsea-tools
+      name: "@deepsea/tools"

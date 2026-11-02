@@ -1,0 +1,22 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@deepsea/logs':
+        specifier: link:../../packages/logs
+        version: link:../../packages/logs
+      '@deepseek-ai/dsh-home-paths':
+        specifier: link:../../harness/packages/util/home-paths
+        version: link:../../harness/packages/util/home-paths
+      '@deepseek-ai/dsh-tools':
+        specifier: link:../../harness/packages/core/tools
+        version: link:../../harness/packages/core/tools
+      '@deepseek-ai/schemastery':
+        specifier: link:../../harness/vendor/schemastery
+        version: link:../../harness/vendor/schemastery

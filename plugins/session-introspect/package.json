@@ -1,0 +1,47 @@
+{
+  "name": "@deepsea/session-introspect",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: transcript_* tools that let an agent read other agents' session transcripts (find by workspace/title, per-turn outline, timeline, per-tool error/latency stats, grep, raw events, joined exports) over ctx.sessionQuery, locally or, with `remote`, on another instance over the tailnet (the same plugin serves /api/deepsea-session-introspect/v1 there).",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "model.mjs",
+    "stats.mjs",
+    "render.mjs",
+    "output.mjs",
+    "resolve.mjs",
+    "remote.mjs",
+    "serve.mjs",
+    "source.mjs",
+    "tools.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/tools.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs && node scripts/gen-tool-docs.mjs --check",
+    "check": "node --check index.js && node --test tests/*.test.mjs && node scripts/gen-tool-docs.mjs --check",
+    "fixture": "node scripts/make-fixture.mjs",
+    "docs": "node scripts/gen-tool-docs.mjs"
+  },
+  "dependencies": {
+    "@deepsea/logs": "link:../../packages/logs",
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths",
+    "@deepseek-ai/dsh-tools": "link:../../harness/packages/core/tools",
+    "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery"
+  },
+  "license": "MIT"
+}
