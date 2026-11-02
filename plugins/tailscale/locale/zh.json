@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Tailscale",
+    "description": "通过 Tailscale 在你的 tailnet 上提供本应用，含 Tailscale 与服务器设置及每个会话的二维码。"
+  }
+}
