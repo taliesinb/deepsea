@@ -1,0 +1,24 @@
+{
+  "name": "@deepsea/no-global-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: an agent-preset row that hides every deployment-global tool from the agents under its preset (ctx.tools.restrict({ allow: [] })), and the chat-only preset minimal-no-tools built on it, for tiny local models.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": ["index.js", "cordis.patch.yml", "README.md", "locale/*.json"],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --test tests/*.test.mjs"
+  }
+}

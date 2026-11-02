@@ -1,0 +1,31 @@
+{
+  "name": "@deepsea/local-model-supervisor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: local model servers (AFM, llama.cpp, …) hosted by DeepSea itself: started when a session selects or uses their provider, reused across sessions and variants, adopted when already running, stopped once idle and unused.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": ["index.js", "supervisor.mjs", "cordis.patch.yml", "README.md", "locale/*.json"],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "deepsea": {
+    "machineWide": "local model server processes it starts and stops (by default afm on 127.0.0.1:9997)"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --check supervisor.mjs && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@deepsea/logs": "link:../../packages/logs",
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths"
+  }
+}

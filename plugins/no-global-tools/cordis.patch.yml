@@ -1,0 +1,24 @@
+# Bundle patch, used when the package is installed into a profile.
+# The chat-only preset `minimal-no-tools`, for very small local models (Apple
+# Foundation on-device, 3-4B LM Studio models): a one-line persona that is the
+# complete system prompt (no harness identity, no runtime-context snapshots),
+# no compaction, and this package's row, which hides every globally registered
+# tool, so the request carries no tool schemas. The row works in any preset;
+# never as a profile row (it needs an agent scope).
+- insert:
+    - id: deepsea-preset-minimal-no-tools
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: minimal-no-tools
+        name: Minimal (no tools)
+        description: Chat-only composition for tiny local models — a one-line persona, no tools, no runtime context.
+        order: 4
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: You are a helpful, concise assistant.
+              complete: true
+              includeRuntimeContext: false
+          - id: deepsea-no-global-tools
+            name: "@deepsea/no-global-tools"
