@@ -1,0 +1,7 @@
+# Bundle patch, used when the package is installed into a profile.
+# Browser-only: the `%` session picker comes from the browser half
+# (lib/client.js); the host row only carries it. Needs the harness topic
+# input-triggers (plugin-defined trigger characters). No config.
+- insert:
+    - id: deepsea-session-reference-picker
+      name: "@deepsea/session-reference-picker"
