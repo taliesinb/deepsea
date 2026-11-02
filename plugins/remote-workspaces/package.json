@@ -1,0 +1,70 @@
+{
+  "name": "@deepsea/remote-workspaces",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: workspaces of other DeepSea servers in this sidebar. A remote session opens in a same-origin frame of the remote's own ?embed page, served through this server's egress proxy, which holds the remote's credentials; sessions are listed, started, renamed, archived, moved and copied host to host over the remote's API, and a new remote workspace's path is checked and completed on the remote.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "egress.mjs",
+    "remote-fs.mjs",
+    "resolve.mjs",
+    "state.mjs",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "deepsea": {
+    "requires": [
+      "embed-session",
+      "session-relocation",
+      "workspace-destinations",
+      "modal-width"
+    ]
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs tests/*.test.ts",
+    "check": "node --check index.js && node --check egress.mjs && node --check remote-fs.mjs && node --check resolve.mjs && node --check state.mjs && node --test tests/*.test.mjs tests/*.test.ts",
+    "prepare": "node build.mjs"
+  },
+  "dependencies": {
+    "@deepsea/logs": "link:../../packages/logs",
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths",
+    "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-api-workspace-controller": "link:../../harness/packages/api/workspace-controller",
+    "@deepseek-ai/dsh-client-connection": "link:../../harness/packages/client/connection",
+    "@deepseek-ai/dsh-client-store": "link:../../harness/packages/client/store",
+    "@deepseek-ai/dsh-client-ui-layout": "link:../../harness/packages/client/ui-layout",
+    "@deepseek-ai/dsh-client-ui-primitives": "link:../../harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@deepseek-ai/dsh-client-ui-workspace": "link:../../harness/packages/client/ui-workspace",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}

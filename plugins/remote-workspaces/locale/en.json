@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Remote Workspaces",
+    "description": "Shows the workspaces of other servers in the sidebar and opens their sessions here."
+  }
+}
