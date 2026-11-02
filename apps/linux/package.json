@@ -1,0 +1,19 @@
+{
+  "name": "deepsea-linux",
+  "productName": "DeepSea",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea for Linux: a desktop client for a DeepSea server, with loopback port forwarding.",
+  "license": "MIT",
+  "type": "module",
+  "main": "main.mjs",
+  "desktopName": "io.github.taliesinb.deepsea.desktop",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.mjs",
+    "test:electron": "electron tests/electron-smoke.mjs"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  }
+}
