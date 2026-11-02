@@ -1,0 +1,7 @@
+# Bundle patch, used when the package is installed into a profile.
+# /backup and /restore (host commands and control routes) and their dialogs
+# (browser half, lib/client.js). Optional config `directory`: the backups
+# directory, default `_backups/<v>/` beside the home (~/.deepsea/_backups/<v>/).
+- insert:
+    - id: deepsea-backup-restore
+      name: "@deepsea/backup-restore"

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Backup & Restore",
+    "description": "/backup saves the whole home as a ZIP; /restore brings a backup back."
+  }
+}
