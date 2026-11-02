@@ -1,0 +1,10 @@
+# Bundle patch, used when the package is installed into a profile.
+# 160px of empty space under the transcript's last row (a <style> row in the
+# page). Override `config` in the profile's patch (a later layer replaces the
+# whole value):
+#   - id: deepsea-transcript-grace-margin
+#     config:
+#       margin: 200            # px, integer 0-600; 0 adds no rule
+- insert:
+    - id: deepsea-transcript-grace-margin
+      name: "@deepsea/transcript-grace-margin"

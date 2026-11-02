@@ -1,0 +1,29 @@
+{
+  "name": "@deepsea/transcript-grace-margin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: empty space under the last row of a session's transcript, so scrolling to the bottom of a long session reads as the end. One injected style rule, no browser half.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --test tests/*.test.mjs"
+  },
+  "license": "MIT"
+}
