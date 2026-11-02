@@ -106,6 +106,13 @@ Both this repository and the harness fork are kept as **topic branches**:
 - **Only `topic/base` touches shared files and the harness pin.** Plugin
   topics add their own directories; registries that list plugins or recipes
   are derived by scanning, not edited by hand, so topics do not conflict.
+- **The main checkout stays on `topic/base`**, in both repositories (this
+  one, and the harness repository `harness.lock` names). Base changes are
+  made there. Integration branches are only built (`dsd topics integrate`)
+  and run (`--source integration/base`); never check one out or commit on
+  it, since the next integration replaces it. An agent that edits a shared
+  file in the main checkout leaves the edit uncommitted for the user and
+  says so in its report.
 - **`topic/base` is append-only while topics are in progress.** A change to
   base is a new commit, and each topic takes it with a plain `git rebase
   topic/base`; rewriting base would force every topic through `--onto`.

@@ -93,6 +93,37 @@ location, and every path in the repository is relative to it.
 it, so it is never typed by hand. Worktrees live outside the checkout so that
 package managers, type checkers and searches in one never see the others.
 
+`dsd worktree add` makes worktrees of this repository only. A harness
+topic's worktree is made with git, in the harness repository (`url` in
+`harness.lock`, relative to the main checkout):
+
+```sh
+git -C <harness repo> fetch origin
+git -C <harness repo> worktree add --no-track -b topic/<topic> \
+  <repo>-worktrees/harness-<topic> origin/topic/base   # or its parent topic
+pnpm -C <repo>-worktrees/harness-<topic> install --frozen-lockfile
+```
+
+- Never edit `<repo>/harness`: it links to a build in `~/.deepsea/_builds/`
+  that running variants use.
+- A topic starts from `topic/base` or its parent topic, never from an
+  integration branch (the harness repository's own checkout stays on
+  `topic/base`: AGENTS.md, Topic branches). `--no-track` keeps the new
+  branch from taking its base as its upstream.
+- `dsd topics rebase` and `dsd topics integrate` read local branches
+  (`refs/heads/topic/*`). A fresh clone has only `origin/topic/*`: create
+  the local branches it lacks (`git -C <harness repo> branch topic/<t>
+  origin/topic/<t>`) before running them.
+- The harness's own checks run in the worktree (`harness/AGENTS.md`,
+  Commands). A throwaway runs a harness topic only once it is committed:
+  `dsd run … --harness topic/<topic>` builds that commit (a full harness
+  build the first time) and runs it on `topic/base` alone, without the
+  other harness topics, and the app's client may then fail to load. To see
+  a harness topic in the app, list it in `topics.txt`, run `dsd topics
+  integrate`, and run `--harness integration/<upstream>`.
+- The harness repository and the worktrees directory are outside `<repo>`,
+  so a sandboxed agent needs approval to write to them.
+
 ### Builds
 
 Variants run immutable builds, one per commit, shared by every variant and
