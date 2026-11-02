@@ -1,0 +1,5 @@
+# Dependencies whose install scripts may run.
+allowBuilds:
+  'chrome-devtools-mcp': true
+  'esbuild': true
+  'sharp': true

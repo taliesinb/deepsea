@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fixture guide</title>
+<style>
+  body { font: 15px -apple-system, system-ui, sans-serif; margin: 0; display: flex; flex-wrap: wrap; }
+  header, footer { flex: 1 0 100%; padding: 8px 16px; }
+  aside { width: 180px; padding: 8px 16px; }
+  main { flex: 1; padding: 8px 16px; }
+</style>
+</head>
+<body>
+<header><nav aria-label="Site"><a href="/">Home</a> <a href="/guide">Guide</a></nav></header>
+<aside id="sidebar"><nav aria-label="Pages"><h3>Pages</h3><ul><li><a href="/other">Sidebar only link</a></li></ul></nav></aside>
+<main id="content">
+  <h1 id="page-title">Fixture guide</h1>
+  <p>Read this with <code>inline code</code> and a <a href="https://example.com/docs">documentation link</a>.</p>
+  <p id="status">loading</p>
+  <button id="btn" onclick="this.textContent = 'clicked ' + (++window.clicks)">Click me</button>
+  <label>Name <input id="name" oninput="document.getElementById('echo').textContent = this.value"></label>
+  <span id="echo"></span>
+
+  <h2 id="install">Install</h2>
+  <ol><li>Add the server to the configuration</li><li>Restart the client</li></ol>
+  <pre><code class="language-json">{ "servers": { "example": {} } }</code></pre>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <details><summary>Connection fails</summary><p>Run the bridge helper between the client and the server.</p></details>
+  <details><summary>Slow start</summary><p>The first start downloads the runtime.</p></details>
+  <div>
+    <button id="more" aria-expanded="false" aria-controls="more-body" onclick="this.setAttribute('aria-expanded', 'true'); document.getElementById('more-body').hidden = false">More options</button>
+    <div id="more-body" hidden><p>Pass the scope flag to limit the project.</p></div>
+  </div>
+  <div role="tablist" aria-label="Clients">
+    <button role="tab" id="tab-a" aria-selected="true" aria-controls="panel-a">Desktop</button>
+    <button role="tab" id="tab-b" aria-selected="false" aria-controls="panel-b">Terminal</button>
+  </div>
+  <div role="tabpanel" id="panel-a"><p>Open the settings of the desktop client.</p></div>
+  <div role="tabpanel" id="panel-b" hidden><p>Edit the configuration file of the terminal client.</p></div>
+  <div class="heading-wrap"><h3 id="known-issues">Known issues</h3><span class="edit">edit</span></div>
+  <p>Some clients cache the server list until they restart.</p>
+
+  <h2 id="faq">FAQ</h2>
+  <table>
+    <tr><th>Question</th><th>Answer</th></tr>
+    <tr><td>Is it free?</td><td>Yes</td></tr>
+    <tr><td>Does it need an account?</td><td>No</td></tr>
+  </table>
+  <p>Interactive authorization happens in the browser.</p>
+</main>
+<footer>Footer text</footer>
+<script>
+  window.clicks = 0
+  for (const tab of document.querySelectorAll('[role=tab]')) {
+    tab.addEventListener('click', () => {
+      for (const other of document.querySelectorAll('[role=tab]')) {
+        const selected = other === tab
+        other.setAttribute('aria-selected', String(selected))
+        document.getElementById(other.getAttribute('aria-controls')).hidden = !selected
+      }
+    })
+  }
+  setTimeout(() => {
+    const ready = document.createElement('div')
+    ready.id = 'ready'
+    ready.textContent = 'Ready now'
+    document.getElementById('content').appendChild(ready)
+    document.getElementById('status').textContent = 'done'
+  }, 1200)
+</script>
+</body>
+</html>
