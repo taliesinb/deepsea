@@ -1,0 +1,8 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers the /login, /logout and /logins slash commands (host), their chat
+# card and the Models page's Add login (browser half, lib/client.js). Needs the
+# harness topics pi-ai-oauth-routes (sign-in routes) and settings-models-signins
+# (the Plans section's seat). No config.
+- insert:
+    - id: deepsea-login
+      name: "@deepsea/login"
