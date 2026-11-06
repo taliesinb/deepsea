@@ -33,8 +33,8 @@ test('directories: the variant log directory per platform, or the home\'s own lo
   assert.equal(logRoot({ XDG_STATE_HOME: '/state' }, 'linux'), '/state')
   const env = { DEEPSEA_LOG_ROOT: '/logs' }
   assert.equal(variantLogDirectory(join(homedir(), '.deepsea', 'personal'), env), '/logs/io.github.taliesinb.deepsea.personal')
-  assert.equal(pluginLogDirectory('billing', join(homedir(), '.deepsea', 'personal'), env), '/logs/io.github.taliesinb.deepsea.personal/plugins/billing')
-  assert.equal(pluginLogDirectory('billing', '/tmp/some-home', env), '/tmp/some-home/logs/plugins/billing')
+  assert.equal(pluginLogDirectory('llm-billing', join(homedir(), '.deepsea', 'personal'), env), '/logs/io.github.taliesinb.deepsea.personal/plugins/llm-billing')
+  assert.equal(pluginLogDirectory('llm-billing', '/tmp/some-home', env), '/tmp/some-home/logs/plugins/llm-billing')
 })
 
 test('run logs: <ts>-<tag>.log, the identity first, latest follows renames', () => {

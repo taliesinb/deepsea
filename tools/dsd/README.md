@@ -41,7 +41,7 @@ build compiles `native/system`), and for agents' commands bubblewrap
 (`bwrap`, the harness's Linux sandbox: without it the default sandbox mode
 refuses to run them); on NixOS, for example, `nix profile add
 nixpkgs#pnpm_11 nixpkgs#gcc nixpkgs#bubblewrap`, plus `nixpkgs#lsof` for the
-tailscale plugin's port forwarding.
+host-tailscale plugin's port forwarding.
 
 The node must be an official build (nodejs.org's `linux-x64` tarball runs
 on NixOS through nix-ld): the harness reaches Node's internal loaders with
@@ -69,7 +69,7 @@ checks the node running dsd.
 
 On a machine with several people's accounts, everything below a variant's
 relay listens on loopback, where every account can connect: another account
-could send the tailscale plugin's proxy a forged identity header. And the
+could send the host-tailscale plugin's proxy a forged identity header. And the
 machine's own tailscaled is often a tagged node that only root may publish
 Serve paths on. Three settings of `dsd new` fit such a machine without dsd
 knowing anything about it:
@@ -81,7 +81,7 @@ knowing anything about it:
   `--ports <first>` takes the one block starting there.
 - `--tailscale-socket <path>`: serve the variant from a tailscaled of the
   account's own, a userspace one (`tailscaled --tun=userspace-networking
-  --socket=<path>`) logged in as the person: dsd and the tailscale plugin
+  --socket=<path>`) logged in as the person: dsd and the host-tailscale plugin
   pass it `--socket`, so the variant gets that node's name, its owner's login
   (admitted without a list) and a Serve path the account publishes itself;
   the node is the person's alone, so the default path does. Its shields must
@@ -101,7 +101,7 @@ gives the variant a path of the person's own on the machine's node:
 publishing it takes a Tailscale operator (`tailscale set
 --operator=<user>`, as root), or root publishing it once (`tailscale serve
 --bg --https=443 --set-path=<path> http://127.0.0.1:<block+3>`): tailscaled
-keeps it, and the tailscale plugin counts a path that points at its relay as
+keeps it, and the host-tailscale plugin counts a path that points at its relay as
 its own.
 
 ## Variants
@@ -148,7 +148,7 @@ dsd run lab                             # open it
 dsd remove lab --home                   # uninstall it
 ```
 
-The server is a URL or the short forms of remote-workspaces' Add remote:
+The server is a URL or the short forms of workspace-remote's Add remote:
 `host` (`/deepsea/` on its MagicDNS name), `user@host` (`/deepsea-<user>/`),
 `host/<path>`, `host:<port>`; loopback addresses are `http`. The app is
 admitted as any device is, by Tailscale identity (the server's own login, or
@@ -367,10 +367,10 @@ left is reported as unknown and its rows are carried as they are.
 | `settings.yaml` | as it is; DSH 0.2 moves it into the profile patch at its first start (`settings.yaml.imported`). Sections the new profile has its own row for are left out (a conflict; in a throwaway, dsd's rows win); sections of plugins that are gone are reported (DSH logs them at the import and keeps them only in `settings.yaml.imported`) |
 | `.credentials.yaml` | API keys (`refs`); Plan sign-ins only with `--move-sign-ins`; never the home's browser-session secret |
 | `.agent-presets/<name>/` | the same, except presets a DeepSea plugin ships (`minimal-no-tools`) |
-| an old plugin's files and directories (the table's `entries`) | its DeepSea plugin's place (each plugin's README → Storage): a billing store into `plugins/billing/`, brand profiles into `plugins/brand-kit/` (`state.json`, `profiles/<name>/`), uploads into `plugins/import-sessions/`, remote servers into `plugins/remote-workspaces/workspaces.json`, the tailscale token, allowed logins and session owners into `plugins/tailscale/`; a third-party plugin's state where it was |
+| an old plugin's files and directories (the table's `entries`) | its DeepSea plugin's place (each plugin's README → Storage): a billing store into `plugins/llm-billing/`, brand profiles into `plugins/ui-brand-kit/` (`state.json`, `profiles/<name>/`), uploads into `plugins/session-import/`, remote servers into `plugins/workspace-remote/workspaces.json`, the tailscale token, allowed logins and session owners into `plugins/host-tailscale/`; a third-party plugin's state where it was |
 | `session-move-backups/` | the same (DSH's copies of moved sessions) |
-| `<old home>-backups/*.zip` | `~/.deepsea/_backups/<v>/` (old format: import-sessions reads them, `/restore` does not) |
-| `profiles/web/cordis.patch.yml` | rows of harness packages (Notion over `@deepseek-ai/dsh-mcp-client`, `session-title-llm`, `session-log-deepseek`, `session-telemetry-otel`) and of third-party bundles as they are; rows of old plugins translated to the DeepSea row where the plugin has the same setting (the table's `translations`: a trace file becomes `trace: true`; tailscale keeps `identityOperators`, `loopbackForward`; the old colour becomes a new variant's `color`), else dropped and reported. Into the new profile's own patch layer |
+| `<old home>-backups/*.zip` | `~/.deepsea/_backups/<v>/` (old format: session-import reads them, `/restore` does not) |
+| `profiles/web/cordis.patch.yml` | rows of harness packages (Notion over `@deepseek-ai/dsh-mcp-client`, `session-title-llm`, `session-log-deepseek`, `session-telemetry-otel`) and of third-party bundles as they are; rows of old plugins translated to the DeepSea row where the plugin has the same setting (the table's `translations`: a trace file becomes `trace: true`; host-tailscale keeps `identityOperators`, `loopbackForward`; the old colour becomes a new variant's `color`), else dropped and reported. Into the new profile's own patch layer |
 | `profiles/web/package.json` | third-party bundles installed as the harness does (`dsh plugin --profile web add <name>@<spec>` with `DSH_HOME` the new home); a bundle dsh refuses (an untested version) is reported and its rows stay out |
 | `cache/`, `logs/`, `tmp/`, `.anonymous-user-id` | not carried |
 

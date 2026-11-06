@@ -14,7 +14,7 @@ The harness baseline redirects every model provider's host when
 `DSH_PROVIDER_SIMULATOR` names a loopback URL (`provider-simulation.ts` in
 `@deepseek-ai/dsh-llm`): `https://openrouter.ai/api/v1/models` becomes
 `<simulator>/openrouter.ai/api/v1/models`. Everything else in the stack (the
-provider SDKs inside pi-ai, DeepSeek's own adapter, billing's account reads)
+provider SDKs inside pi-ai, DeepSeek's own adapter, llm-billing's account reads)
 runs unchanged. A provider the simulator does not serve answers 501, so a
 simulated home never reaches a real service.
 
@@ -97,8 +97,8 @@ for providers with a Plan sign-in.
 1. List every endpoint DeepSea's stack calls for it: pi-ai's provider code
    (`dist/api/*.js`, `dist/auth/oauth/*.js` and the `*.models.js` catalogs
    under the harness build's `packages/llm/llm-pi-ai/node_modules/@earendil-works/pi-ai/`),
-   the harness's adapters and sign-in flows (`packages/llm/`), and billing's
-   account reads (`plugins/billing`).
+   the harness's adapters and sign-in flows (`packages/llm/`), and llm-billing's
+   account reads (`plugins/llm-billing`).
 2. Write `providers/<name>.mjs` (see `providers/index.mjs` for its exports;
    `common.mjs`'s `generate()` plays the script in the OpenAI or Anthropic
    wire format; `wire-responses.mjs` (OpenAI Responses), `wire-gemini.mjs`
@@ -109,7 +109,7 @@ for providers with a Plan sign-in.
    the route reads its key from (`env`) and the rows the route needs
    (`settings`); a Plan fixture names its route (`signIn`).
 4. Test it in `tests/<name>.test.mjs`, then in a `--simulated` throwaway with
-   the plugins that use it (billing, login).
+   the plugins that use it (llm-billing, llm-sign-in).
 
 ## Tests
 

@@ -63,7 +63,7 @@ Code-level names:
 
 | Thing | Name |
 |---|---|
-| Plugin directory | `plugins/<name>` (short, no product prefix: `tailscale`, `login`, `billing`) |
+| Plugin directory | `plugins/<name>`, `<family>-<subject>` with no product prefix (`host-tailscale`, `llm-sign-in`, `llm-billing`; plugins/AGENTS.md → Names) |
 | Plugin package | `@deepsea/<name>` (also the client bundle's module id) |
 | Loader row id | `deepsea-<name>` (prefixed so it never collides with an upstream row) |
 | Page globals set by the native app | `__DEEPSEA_APP__` (identity, `openExternal`, view mode) |
@@ -205,9 +205,9 @@ with the variant (the home already is the variant):
 ~/.deepsea/<v>/
   variant.yml              the variant's configuration (written by `dsd`)
   adopted.json             what `dsd adopt` brought from old DSH homes, per source (tools/dsd/README.md)
-  plugins/<name>/          e.g. plugins/billing/, plugins/tailscale/state.json,
-                           plugins/tailscale/session-owners.json,
-                           plugins/remote-workspaces/workspaces.json
+  plugins/<name>/          e.g. plugins/llm-billing/, plugins/host-tailscale/state.json,
+                           plugins/host-tailscale/session-owners.json,
+                           plugins/workspace-remote/workspaces.json
   logs -> ~/Library/Logs/<variant name>/
   support -> ~/Library/Application Support/<variant name>/
   source -> the build (or, for a throwaway, the worktree) this variant runs
@@ -268,7 +268,7 @@ For example, with `release`, `personal` and one throwaway:
     app/latest.log -> 2026-10-07T19-04-14-4410.log
     server/2026-10-07T09-12-40-4398.log
     relay/2026-10-07T09-12-39-4390.log
-    plugins/browser/2026-10-07T09-12-40-4398.jsonl
+    plugins/tool-browser/2026-10-07T09-12-40-4398.jsonl
   io.github.taliesinb.deepsea.personal/
     app/…  server/…  relay/…  plugins/…
   io.github.taliesinb.deepsea.personal-3f9a1c/
@@ -337,7 +337,7 @@ launchd ── <variant name>.relay (RunAtLoad, KeepAlive)
 - The LaunchAgent and the server host name the build path itself, never
   `<home>/source` (nothing outside the home depends on the home's links).
 - The relay (`apps/relay`) is part of every installed variant, with or
-  without the tailscale plugin. While `dsh web` starts it answers 503 with
+  without the host-tailscale plugin. While `dsh web` starts it answers 503 with
   `x-deepsea-relay: starting` and a page that reloads itself; the app shows
   that page.
 - Clients on this machine (the app's fallback URL) reach `dsh web` through
@@ -347,7 +347,7 @@ launchd ── <variant name>.relay (RunAtLoad, KeepAlive)
   `/?token=<standing token>` always logs in and DSH's own browser cookie
   then admits the client, across restarts.
 - Clients on the tailnet come through Tailscale Serve to the relay, which
-  hands them to the tailscale plugin's proxy on the block's +4: Tailscale
+  hands them to the host-tailscale plugin's proxy on the block's +4: Tailscale
   identity, the proxy's own token and cookie (per variant:
   `deepsea-tailscale-<v>`, `Path=<serve path>`). Without the plugin, tailnet
   requests are refused.
@@ -359,7 +359,7 @@ launchd ── <variant name>.relay (RunAtLoad, KeepAlive)
   block and Serve path in its `variant.yml`, picks the first free block (no
   listener on any of its ten ports, no other variant of this account
   recording it), and when another account already serves the default path
-  uses `/deepsea-<user>/` (release) or `/deepsea-<v>-<user>/`. The tailscale
+  uses `/deepsea-<user>/` (release) or `/deepsea-<v>-<user>/`. The host-tailscale
   plugin never replaces a Serve mapping it does not own (one whose target is
   not this variant's relay).
 - Ports: each variant gets a block of ten from 3200 (`release`: 3200, then 3210,

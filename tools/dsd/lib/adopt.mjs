@@ -405,7 +405,7 @@ export function adopt(o) {
   const zips = readdirSafe(oldBackups).filter(n => n.endsWith('.zip'))
   if (zips.length && (o.throwaway || !o.backups)) report.skipped.push({ what: oldBackups, why: 'backups hold credentials: not into a throwaway', bytes: sizeOf(oldBackups) })
   else if (zips.length) {
-    for (const zip of zips) syncFile({ srcPath: join(oldBackups, zip), destPath: join(o.backups, zip), key: join('_backups', zip), category: 'backups (old format: import-sessions reads them; /restore does not)' })
+    for (const zip of zips) syncFile({ srcPath: join(oldBackups, zip), destPath: join(o.backups, zip), key: join('_backups', zip), category: 'backups (old format: session-import reads them; /restore does not)' })
     report.translated.push(`${oldBackups}/ → ${o.backups}/`)
   }
 

@@ -102,7 +102,7 @@ test('check: added lines with their numbers; built-in patterns flag leaks but no
   const [path, address, tailnet, mail] = ['/Users/' + 'alice', ['192', '168', '1', '4'].join('.'), 'tail123' + '.ts.net', 'bob' + '@corp.io']
   const diff = ['--- a/a.md', '+++ b/a.md', '@@ -0,0 +1,7 @@',
     `+see ${path}/x and /Users/USER/ok`, `+host ${address}, loopback 127.0.0.1`, `+node.example.ts.net vs box.${tailnet}`,
-    `+mail ${mail} or user@example.com`, '+pnpm@11.7.0 react@18.3.1 "@deepsea/login"', '+++ starts with two pluses', '+last'].join('\n')
+    `+mail ${mail} or user@example.com`, '+pnpm@11.7.0 react@18.3.1 "@deepsea/llm-sign-in"', '+++ starts with two pluses', '+last'].join('\n')
   const lines = addedLines(diff)
   assert.equal(lines.length, 7)
   assert.deepEqual(lines.at(-2), { file: 'a.md', line: 6, text: '++ starts with two pluses' })
@@ -461,7 +461,7 @@ test('logs: kinds and references, the current run, last lines, export names', as
   const ids = new Set(['release-3f9a1c', 'app'])
   assert.deepEqual(parseLogArgs([], ids), { ref: undefined, kind: 'server', plugin: undefined })
   assert.deepEqual(parseLogArgs(['relay'], ids), { ref: undefined, kind: 'relay', plugin: undefined })
-  assert.deepEqual(parseLogArgs(['3f9a', 'plugin', 'billing'], ids), { ref: '3f9a', kind: 'plugin', plugin: 'billing' })
+  assert.deepEqual(parseLogArgs(['3f9a', 'plugin', 'llm-billing'], ids), { ref: '3f9a', kind: 'plugin', plugin: 'llm-billing' })
   assert.deepEqual(parseLogArgs(['app', 'dsd'], ids), { ref: 'app', kind: 'dsd', plugin: undefined })
   assert.throws(() => parseLogArgs(['x', 'plugin'], ids), /plugin <name>/)
   assert.throws(() => parseLogArgs(['x', 'nope'], ids), /no log kind/)

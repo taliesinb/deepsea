@@ -28,39 +28,73 @@ Dependencies on the harness are `link:` devDependencies through the
 
 Every name a plugin puts into a namespace it shares with the harness or
 with other plugins carries a DeepSea prefix, so it can never collide with an
-upstream name and can be found by searching for `deepsea`. Plugin names
-leave out implementation suffixes (`-command`, `-tool`, `-status`): the
-plugin is called after what it does (`login`, `billing`, `reboot`).
+upstream name and can be found by searching for `deepsea`.
+
+A plugin's own name is `<family>-<subject>`, lowercase kebab, at most three
+words, never `deepsea` inside (the scope and the row prefix supply it):
+
+- the family is the plane or registry it contributes to, in upstream's
+  words: `tool-` (model tools), `command-` (slash commands), `ui-` (browser
+  only), `llm-` (model providers and request shaping), `session-`,
+  `workspace-`, `preset-`, `host-` (server infrastructure), `dev-` (test
+  only);
+- the subject is the name the person or the model already uses: the tool
+  (`tool-wait`), the command (`command-reboot` for `/reboot`) or the product
+  (`host-tailscale`); the role, not the mechanism (`llm-sign-in`, not
+  `-oauth`).
+
+Its English title (`locale/en.json`, `meta.title`) is for people, in
+sentence case with the family noun where it helps ("Server reboot",
+"Browser tools"); Settings shows the row id beside it.
 
 | Namespace | Form | Example |
 |---|---|---|
-| Plugin directory, package, loader row | `plugins/<name>`, `@deepsea/<name>`, `deepsea-<name>` | `plugins/reboot`, `@deepsea/reboot`, `deepsea-reboot` |
-| Cordis plugin `name` export | the loader row id | `deepsea-reboot` |
+| Plugin directory, package, loader row | `plugins/<name>`, `@deepsea/<name>`, `deepsea-<name>` | `plugins/command-reboot`, `@deepsea/command-reboot`, `deepsea-command-reboot` |
+| Cordis plugin `name` export | the loader row id | `deepsea-command-reboot` |
 | Services a plugin provides (`ctx.provide`) | `deepsea<Feature>` | `deepseaBilling` |
 | Fetch routes (`ctx.connection.fetch`, under `/api`) | `/api/deepsea-<name>/…` | `/api/deepsea-billing/snapshot` |
 | Web server routes (outside `/api`) | `/deepsea-<name>/…` | `/deepsea-test-driver/health` |
 | HTTP headers of our own | `x-deepsea-<name>[-…]` | `x-deepsea-tailscale` |
 | CSS classes, DOM ids, `data-*` attributes | `deepsea-<name>-…`, `data-deepsea-…` | `deepsea-billing-pill` |
 | Page globals | `__DEEPSEA_<NAME>__` | `__DEEPSEA_APP__` |
-| Browser storage keys, `Symbol.for` keys | `deepsea.<name>.<key>` | `deepsea.billing.dismissed` |
-| Config schema `vendor` | the loader row id | `deepsea-billing` |
+| Browser storage keys, `Symbol.for` keys | `deepsea.<name>.<key>` | `deepsea.ui-numbered-switching.slots` |
+| Config schema `vendor` | the loader row id | `deepsea-llm-billing` |
 
 Names the model or the person sees keep their meaning and stay as they are:
 tool names (`list_dir`, `wait`), slash commands (`/reboot`), setting labels.
 
-Contracts between plugins, so plugins ported separately agree:
+**Wire names are protocol.** Routes, headers, page globals, services and
+remote or event names, archive suffixes and formats, preset ids
+(`minimal-no-tools`) and CSS classes or `data-deepsea-*` attributes that
+apps and themes may target keep their names when a plugin is renamed: each
+is an explicit constant, not derived from the package name, with a one-line
+comment saying it is a wire name kept from the old name. That is why some
+examples above carry a plugin's former name. What a plugin persists under
+its name moves with it:
+
+- `$DSH_HOME/plugins/<old>/`: the plugin reads `plugins/<new>/`, and when
+  it starts with only the old directory present it renames it itself;
+- browser storage `deepsea.<old>.<key>`: the browser half reads the old key
+  once when the new one is absent, writes the new one and removes the old;
+- profile-patch rows `id: deepsea-<old>`, state directories and a variant's
+  plugin list: dsd migrates homes (tools/dsd/README.md → Renamed plugins),
+  from its table of renames, `tools/dsd/lib/renames.mjs`, where every old
+  name is added.
+
+Contracts between plugins, so plugins ported separately agree (the first
+column holds wire names, which keep a renamed plugin's former name):
 
 | Contract | Provided by | Used by |
 |---|---|---|
-| service `deepseaBilling` (session snapshots) | `billing` | (tests) |
-| environment `DEEPSEA_RELAY` (the URL of the relay that started this server; absent without one) | the relay (`apps/relay`) | `reboot`, `backup-restore`, `tailscale` |
-| service `deepseaSessionOwners` (which login drives which session) | `tailscale` | `billing` |
-| service `deepseaRemoteWorkspaces` (remote session rows) | `remote-workspaces` (browser half) | `numbered-switching` |
-| headers `x-deepsea-tailscale: 1`, `x-deepsea-tailscale-self: 1`, `x-deepsea-tailscale-admitted: user\|cookie\|public`, `x-deepsea-tailscale-login: <login>` on proxied requests | `tailscale` | `import-sessions` (the first two); the plugin itself |
-| header `x-deepsea-relay: starting\|failed` on the relay's 503 while `dsh web` starts | the relay | the macOS app (shows the relay's page), `reboot` |
-| route `<serve path>/api/deepsea-tailscale/loopback-forward?port=<n>` (WebSocket) and its refusal header `X-DeepSea-Forward-Error` | `tailscale` | the macOS app |
-| attribute `data-deepsea-remote-session` on remote session rows | `remote-workspaces` | `numbered-switching` |
-| page global `__DEEPSEA_SESSION_TITLE_SLUG__` (`{ parseSlug }`) | `session-title-slug` | `remote-workspaces` (slug previews on its New Session rows) |
+| service `deepseaBilling` (session snapshots) | `llm-billing` | (tests) |
+| environment `DEEPSEA_RELAY` (the URL of the relay that started this server; absent without one) | the relay (`apps/relay`) | `command-reboot`, `host-backup`, `host-tailscale` |
+| service `deepseaSessionOwners` (which login drives which session) | `host-tailscale` | `llm-billing` |
+| service `deepseaRemoteWorkspaces` (remote session rows) | `workspace-remote` (browser half) | `ui-numbered-switching` |
+| headers `x-deepsea-tailscale: 1`, `x-deepsea-tailscale-self: 1`, `x-deepsea-tailscale-admitted: user\|cookie\|public`, `x-deepsea-tailscale-login: <login>` on proxied requests | `host-tailscale` | `session-import` (the first two); the plugin itself |
+| header `x-deepsea-relay: starting\|failed` on the relay's 503 while `dsh web` starts | the relay | the macOS app (shows the relay's page), `command-reboot` |
+| route `<serve path>/api/deepsea-tailscale/loopback-forward?port=<n>` (WebSocket) and its refusal header `X-DeepSea-Forward-Error` | `host-tailscale` | the macOS app |
+| attribute `data-deepsea-remote-session` on remote session rows | `workspace-remote` | `ui-numbered-switching` |
+| page global `__DEEPSEA_SESSION_TITLE_SLUG__` (`{ parseSlug }`) | `session-title-slug` | `workspace-remote` (slug previews on its New Session rows) |
 
 A plugin that uses a contract whose provider is not ported yet keeps the use
 (optional, as before) under the new name. `dialog-keys.ts` (Enter presses a

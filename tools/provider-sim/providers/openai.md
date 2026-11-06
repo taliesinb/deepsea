@@ -11,7 +11,7 @@ What uses them: the `openai` route is pi-ai's `openai-responses` API
 `openai-codex-oauth` route is pi-ai's ChatGPT Plus/Pro sign-in
 (`auth/oauth/openai-codex.js`) and `openai-codex-responses` API; the
 harness's `subscription-usage.ts` reads `wham/usage` and the token's claims;
-the billing plugin reads the `x-codex-*` headers of Codex responses. Nothing
+the llm-billing plugin reads the `x-codex-*` headers of Codex responses. Nothing
 in the stack calls chat completions for `openai`; they are served for an
 `openai-completions` route pointed at the API.
 

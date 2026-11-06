@@ -13,7 +13,7 @@ pi-ai reaches these as three providers: `moonshotai` and `moonshotai-cn`
 `KIMI_API_KEY` or the Kimi Code sign-in of `auth/oauth/kimi-coding.js`, whose
 route is `kimi-coding-oauth`, "Kimi For Coding Plan"). Nothing in the stack
 reads a Moonshot balance (`/v1/users/me/balance`) or Kimi Code usage
-(`/coding/v1/usages`): billing estimates from tokens, and the harness's
+(`/coding/v1/usages`): llm-billing estimates from tokens, and the harness's
 `subscription-usage.ts` reads only Anthropic and Codex. So neither is served.
 
 ## The Kimi API

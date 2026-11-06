@@ -12,7 +12,7 @@
  * replaces the old. `dsd run <v>` opens it, `dsd remove <v> [--home]`
  * uninstalls it, `dsd list` shows it.
  *
- * The server: a URL, or the short forms remote-workspaces takes (`host` →
+ * The server: a URL, or the short forms workspace-remote takes (`host` →
  * `https://host.<magic-dns-suffix>/deepsea/`, `user@host` → `/deepsea-<user>/`,
  * `host/<path>`, `host:<port>`; loopback is http). The app is admitted the way
  * any device is: by its Tailscale identity, as the server's own login or an

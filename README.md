@@ -63,38 +63,40 @@ rebased and rebuilt as the work moves; see [AGENTS.md](AGENTS.md).
 
 | Plugin | |
 |---|---|
-| [ask](plugins/ask) | `/ask`: side questions about a session, answered from its context while it keeps working |
-| [backup-restore](plugins/backup-restore) | `/backup` and `/restore` of the whole home as verified ZIPs |
-| [billing](plugins/billing) | per-session cost, plan quota and request counts in the composer; a `/billing` report |
-| [brand-kit](plugins/brand-kit) | re-brands the web GUI from brand profiles (mark, wordmark, fonts, accent colour) |
-| [browser](plugins/browser) | per-chat Safari Technology Preview and Chrome windows for agents, a page reader, screenshots in the chat |
-| [chat-title](plugins/chat-title) | lets the agent rename a chat whose automatic title is wrong or stale |
-| [dash-docsets](plugins/dash-docsets) | search and read documentation from [Dash](https://kapeli.com/dash) |
-| [enforce-model-preset](plugins/enforce-model-preset) | an agent preset per model |
-| [fs-tools](plugins/fs-tools) | batch filesystem tools: `list_dir`, `read_many`, `edit_many`, `search` |
-| [import-api-keys](plugins/import-api-keys) | `/import-api-keys` from pi, another home, a JSON key map or a `.env` file |
-| [import-sessions](plugins/import-sessions) | `/import-claude`, `/import-pi`, `/import-dsh`: transcripts become resumable sessions |
-| [local-model-supervisor](plugins/local-model-supervisor) | local model servers (AFM, llama.cpp, …) started on demand and stopped when idle |
-| [login](plugins/login) | `/login`, `/logout`, `/logins` for provider sign-ins |
-| [no-global-tools](plugins/no-global-tools) | a tool-less agent preset, for tiny local models |
-| [numbered-switching](plugins/numbered-switching) | ⌘1…⌘5 for the five most recently viewed sessions |
-| [phone-ui](plugins/phone-ui) | a chat-only layout at phone width |
-| [prompt-excision](plugins/prompt-excision) | removes configured paragraphs from the system prompt of chosen routes |
-| [reboot](plugins/reboot) | `/reboot` the server from inside a session |
-| [reload-on-restart](plugins/reload-on-restart) | reloads the page when the server comes back on new code |
-| [remote-workspaces](plugins/remote-workspaces) | other DeepSea servers' workspaces in this sidebar |
-| [llm-scripted](plugins/llm-scripted) | a deterministic model scripted by the prompt, for tests |
-| [host-server-log](plugins/host-server-log) | the server's own log messages in the variant's log |
-| [session-introspect](plugins/session-introspect) | `transcript_*` tools: agents read other agents' transcripts |
-| [session-reference-picker](plugins/session-reference-picker) | `%` in the composer picks a session to reference |
-| [session-title-slug](plugins/session-title-slug) | `some-slug: …` as a first prompt names the session |
-| [settings-shortcut](plugins/settings-shortcut) | ⌘. toggles Settings |
-| [tailscale](plugins/tailscale) | the variant on a tailnet: Serve path, settings, QR codes, port forwarding |
+| [command-ask](plugins/command-ask) | `/ask`: side questions about a session, answered from its context while it keeps working |
+| [command-import-api-keys](plugins/command-import-api-keys) | `/import-api-keys` from pi, another home, a JSON key map or a `.env` file |
+| [command-reboot](plugins/command-reboot) | `/reboot` the server from inside a session |
+| [command-tools](plugins/command-tools) | `/tools` lists the agent's tools without a model turn |
 | [dev-test-driver](plugins/dev-test-driver) | the halves of `dsd drive` |
-| [tools](plugins/tools) | `/tools` lists the agent's tools without a model turn |
-| [transcript-grace-margin](plugins/transcript-grace-margin) | space under the last row of a transcript |
-| [variant-identity](plugins/variant-identity) | tells variants apart: name, colour, window title |
-| [wait](plugins/wait) | a `wait` tool with a live progress bar instead of `sleep` |
+| [host-backup](plugins/host-backup) | `/backup` and `/restore` of the whole home as verified ZIPs |
+| [host-server-log](plugins/host-server-log) | the server's own log messages in the variant's log |
+| [host-tailscale](plugins/host-tailscale) | the variant on a tailnet: Serve path, settings, QR codes, port forwarding |
+| [llm-billing](plugins/llm-billing) | per-session cost, plan quota and request counts in the composer; a `/billing` report |
+| [llm-local-servers](plugins/llm-local-servers) | local model servers (AFM, llama.cpp, …) started on demand and stopped when idle |
+| [llm-prompt-excision](plugins/llm-prompt-excision) | removes configured paragraphs from the system prompt of chosen routes |
+| [llm-scripted](plugins/llm-scripted) | a deterministic model scripted by the prompt, for tests |
+| [llm-sign-in](plugins/llm-sign-in) | `/login`, `/logout`, `/logins` for provider sign-ins |
+| [preset-chat-only](plugins/preset-chat-only) | a tool-less agent preset, for tiny local models |
+| [preset-per-model](plugins/preset-per-model) | an agent preset per model |
+| [session-export](plugins/session-export) | `/export-workspace`, `/export-session`: a workspace or a session as a ZIP, for another machine |
+| [session-import](plugins/session-import) | `/import-claude`, `/import-pi`, `/import-dsh`: transcripts become resumable sessions |
+| [session-move](plugins/session-move) | Move to…, Copy to… and Rehome… between workspaces, from the sidebar |
+| [session-title-slug](plugins/session-title-slug) | `some-slug: …` as a first prompt names the session |
+| [tool-browser](plugins/tool-browser) | per-chat Safari Technology Preview and Chrome windows for agents, a page reader, screenshots in the chat |
+| [tool-dash-docsets](plugins/tool-dash-docsets) | search and read documentation from [Dash](https://kapeli.com/dash) |
+| [tool-fs-batch](plugins/tool-fs-batch) | batch filesystem tools: `list_dir`, `read_many`, `edit_many`, `search` |
+| [tool-rename-chat](plugins/tool-rename-chat) | lets the agent rename a chat whose automatic title is wrong or stale |
+| [tool-transcripts](plugins/tool-transcripts) | `transcript_*` tools: agents read other agents' transcripts |
+| [tool-wait](plugins/tool-wait) | a `wait` tool with a live progress bar instead of `sleep` |
+| [ui-brand-kit](plugins/ui-brand-kit) | re-brands the web GUI from brand profiles (mark, wordmark, fonts, accent colour) |
+| [ui-numbered-switching](plugins/ui-numbered-switching) | ⌘1…⌘5 for the five most recently viewed sessions |
+| [ui-phone](plugins/ui-phone) | a chat-only layout at phone width |
+| [ui-reload-on-restart](plugins/ui-reload-on-restart) | reloads the page when the server comes back on new code |
+| [ui-session-reference-picker](plugins/ui-session-reference-picker) | `%` in the composer picks a session to reference |
+| [ui-settings-entry](plugins/ui-settings-entry) | the Settings button in the sidebar, and ⌘. to toggle Settings |
+| [ui-transcript-margin](plugins/ui-transcript-margin) | space under the last row of a transcript |
+| [ui-variant-identity](plugins/ui-variant-identity) | tells variants apart: name, colour, window title |
+| [workspace-remote](plugins/workspace-remote) | other DeepSea servers' workspaces in this sidebar |
 
 Each plugin's README is its documentation. A few more plugins drive licensed
 software and are kept apart from this repository; `dsd` finds them when they
