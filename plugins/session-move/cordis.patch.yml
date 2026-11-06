@@ -1,0 +1,7 @@
+# Bundle patch, used when the package is installed into a profile.
+# Browser-only: Move to…, Copy to…, Rehome… and moving a session by dropping
+# it on another workspace group come from the browser half (lib/client.js);
+# the host row only carries it. No config.
+- insert:
+    - id: deepsea-session-move
+      name: "@deepsea/session-move"

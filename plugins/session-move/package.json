@@ -1,0 +1,63 @@
+{
+  "name": "@deepsea/session-move",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: Move to… and Copy to… on session rows and Rehome… on workspace rows, plus dragging a session row onto another workspace group, move or copy sessions (with their subagent sessions) between workspaces through the Host's session.move, session.moveMany and session.copy; other plugins add destinations such as another host's workspaces.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "deepsea": {
+    "requires": [
+      "session-relocation",
+      "workspace-seats",
+      "modal-width"
+    ]
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts",
+    "check": "node --check index.js && node --test tests/*.test.ts",
+    "prepare": "node build.mjs"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-api-remote-access": "link:../../harness/packages/api/remote-access",
+    "@deepseek-ai/dsh-api-session-controller": "link:../../harness/packages/api/session-controller",
+    "@deepseek-ai/dsh-api-workspace-controller": "link:../../harness/packages/api/workspace-controller",
+    "@deepseek-ai/dsh-client-store": "link:../../harness/packages/client/store",
+    "@deepseek-ai/dsh-client-ui-context-menu": "link:../../harness/packages/client/ui-context-menu",
+    "@deepseek-ai/dsh-client-ui-layout": "link:../../harness/packages/client/ui-layout",
+    "@deepseek-ai/dsh-client-ui-primitives": "link:../../harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@deepseek-ai/dsh-client-ui-workspace": "link:../../harness/packages/client/ui-workspace",
+    "@deepseek-ai/dsh-session": "link:../../harness/packages/core/session",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}
