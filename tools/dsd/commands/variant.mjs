@@ -28,6 +28,7 @@ import {
 import { buildsDir, homeOf, logDirOf, variantName } from '../lib/paths.mjs'
 import { installBundles, selectPlugins } from '../lib/plugins.mjs'
 import { currentName, isPlugin } from '../lib/renames.mjs'
+import { migrateHome, migrationSummary } from '../lib/migrate-home.mjs'
 import { linuxLeftovers, macosLeftovers, refuseOwnHome } from '../lib/remove.mjs'
 import { lingering, UNIT_NAME } from '../lib/systemd.mjs'
 import { openClient } from './client.mjs'
@@ -166,6 +167,8 @@ export async function build(argv) {
 
   // Only an install touches the home: the running server reads its profile's bundles.
   installBundles(plugins, home, harnessBuild)
+  // Before the relay job is loaded (it starts the server): state and rows under the plugins' new names.
+  const migrated = migrationSummary(migrateHome(home))
   const supportDir = supportDirOf(id)
   const app = builtApp ? installApp(id, builtApp.app) : undefined
   if (out) rmSync(out, { recursive: true, force: true })
@@ -187,7 +190,7 @@ export async function build(argv) {
   writeVariant(id, { ...config, build: commit.slice(0, 10), installed: isoLocal() })
   if (!DARWIN && lingering() === false) note('this account does not linger (loginctl enable-linger): the relay stops at the last logout and starts again at the next login')
   printJson({
-    ...result, ...(app ? { app } : {}), ...(host ? { serverHost: host.bundle, serverHostChanged: host.changed } : {}),
+    ...result, ...(migrated ? { migrated } : {}), ...(app ? { app } : {}), ...(host ? { serverHost: host.bundle, serverHostChanged: host.changed } : {}),
     relay: `http://127.0.0.1:${port.relay}/`, [DARWIN ? 'launchAgent' : 'unit']: job.file, label: job.label, ...(dock !== undefined ? { dock } : {}),
   })
 }
@@ -205,12 +208,14 @@ export async function runNamed(id, args) {
   const config = namedConfig(id)
   if (config.client) return openClient(id, config)
   if (!relayService.installed(id)) throw new DsdError(`${id} is not installed (dsd build ${id} --install)`)
+  // Plugin names from before a rename, for the plugins its build has under the new names (lib/migrate-home.mjs).
+  const migrated = migrationSummary(migrateHome(homeOf(id)))
   await relayService.start(id)
   const port = ports(config)
   for (let i = 0; i < 50 && !(await listening(port.relay)); i++) await sleep(200)
   const openApp = DARWIN && !args['no-app']
   if (openApp) execFileSync('/usr/bin/open', [appPathOf(id)])
-  printJson({ id, ...(await namedStatus(id, config)), relayUrl: `http://127.0.0.1:${port.relay}/`, app: openApp ? appPathOf(id) : undefined })
+  printJson({ id, ...(await namedStatus(id, config)), relayUrl: `http://127.0.0.1:${port.relay}/`, app: openApp ? appPathOf(id) : undefined, ...(migrated ? { migrated } : {}) })
 }
 
 /** dsd stop <v> for a named variant: stop its relay job, which stops the relay and its server. */

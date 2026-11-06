@@ -124,7 +124,8 @@ build: 2cb0966d55                # written by build --install: the commit instal
 
 `plugins: all` on a named variant means every plugin of its build,
 machine-wide ones included, except the test-only `dev-test-driver` and
-`llm-scripted`; `host-server-log` is always first.
+`llm-scripted`; `host-server-log` is always first. A plugin renamed since
+the list was written answers to its old name (below, Renamed plugins).
 
 **Thin clients** (`dsd client`, macOS) are named variants with no server
 here: the DeepSea app for a server elsewhere (another Mac, a Linux server).
@@ -400,6 +401,41 @@ a model the throwaway cannot reach (a local server) need a simulated route
 first: `dsd drive invoke session selectModel '{"request": {"sessionId": "…",
 "provider": "anthropic-oauth", "model": "claude-opus-5-5"}}'`.
 `--move-sign-ins` refuses `--throwaway`.
+
+## Renamed plugins
+
+Plugins renamed after their first release are listed in
+`lib/renames.mjs`, old directory name → new (packages `@deepsea/<dir>`, rows
+`deepsea-<dir>`); that table is the one place the old names live.
+
+- `--plugins` and a variant's `plugins:` take an old name as the new one
+  (with a note), and a build of a commit from before a rename (`--source`)
+  has its plugins found under their new names, so a throwaway of an old
+  build gets its own test driver, server log and scripted model, not a
+  second one from this checkout.
+- **Home migration** (`migrateHome`, `lib/migrate-home.mjs`): before dsd
+  starts a server (a throwaway once its plugins are installed, `dsd run
+  <v>`, `dsd build <v> --install` before it loads the relay job) and on
+  `dsd adopt`'s target (`--dry-run`: reported, nothing written), it renames
+  `plugins/<old>/` to `plugins/<new>/` when only the old one exists (both:
+  both stay, reported under `conflicts`); rewrites `id: deepsea-<old>` and
+  `name: "@deepsea/<old>"` lines of the home's `cordis.patch.yml` and every
+  `profiles/<p>/cordis.patch.yml`, line by line, keeping comments and
+  layout; renames the plugins of `variant.yml`'s `plugins:`; and moves
+  `adopted.json`'s records of those files and rows with them, so a later
+  adopt finds them unchanged. A plugin a profile still has installed under
+  its old package (the variant runs a build from before the rename) is left
+  as it is, under `waiting`, since that build reads the old places; the
+  next `dsd build <v> --install` installs the new package and migrates it.
+  The profile's `package.json` and `deepsea-bundles.json` are not edited:
+  they record the packages installed, and the next install rewrites them.
+  Idempotent; what it did is the `migrated` field of the command's output,
+  absent when there was nothing to do.
+- Each renamed plugin also renames `plugins/<old>/` itself at start, for a
+  home not started through dsd, and its browser half moves its storage keys
+  (plugins/AGENTS.md → Names).
+- The adopt table (`adopt-map.mjs`, above) may name DeepSea plugins, rows
+  and state places by their old names: they are read as the new ones.
 
 ## Driving a throwaway
 

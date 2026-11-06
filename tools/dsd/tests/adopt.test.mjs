@@ -132,11 +132,11 @@ function oldHome(name) {
 /** The old world's table (the shape of the extras' adopt-map.mjs), with made-up old names. */
 const MAP = noHarness ? undefined : normalizeMap({
   packages: {
-    'old-identity-pkg': { plugin: 'variant-identity', rows: ['old-identity'] },
-    'old-tailscale-pkg': { plugin: 'tailscale', rows: ['old-tailscale'] },
-    'old-browser-pkg': { plugin: 'browser', rows: ['old-browser'] },
-    'old-chat-title-pkg': { plugin: 'chat-title', rows: ['old-chat-title'] },
-    'old-billing-pkg': { plugin: 'billing', rows: ['old-billing'] },
+    'old-identity-pkg': { plugin: 'ui-variant-identity', rows: ['old-identity'] },
+    'old-tailscale-pkg': { plugin: 'host-tailscale', rows: ['old-tailscale'] },
+    'old-browser-pkg': { plugin: 'tool-browser', rows: ['old-browser'] },
+    'old-chat-title-pkg': { plugin: 'tool-rename-chat', rows: ['old-chat-title'] },
+    'old-billing-pkg': { plugin: 'llm-billing', rows: ['old-billing'] },
   },
   translations: {
     'old-tailscale': { keep: ['identityOperators', 'loopbackForward', 'tailscalePath'], gone: 'the variant gives these', drop: (key, value) => key === 'tailscalePath' && value === '' },
@@ -146,11 +146,11 @@ const MAP = noHarness ? undefined : normalizeMap({
   settings: { 'old-kernel': { row: 'deepsea-kernel', keys: ['kernelPath'] } },
   color: { row: 'old-identity', key: 'brandColor' },
   entries: [
-    { name: 'billing', tree: 'plugins/billing', what: 'billing store' },
-    { name: 'brand-profiles', tree: 'plugins/brand-kit/profiles', files: { 'state.json': 'plugins/brand-kit/state.json' }, what: 'brand profiles' },
-    { name: 'remote-workspaces.json', file: 'plugins/remote-workspaces/workspaces.json', what: 'remote servers', secret: 'servers' },
-    { match: /^tailscale-remote(-[a-z0-9-]+)?\.json$/, file: 'plugins/tailscale/state.json', what: 'tailscale state', secret: 'token' },
-    { match: /^session-owners(-[a-z0-9-]+)?\.json$/, file: 'plugins/tailscale/session-owners.json', what: 'session owners' },
+    { name: 'billing', tree: 'plugins/llm-billing', what: 'billing store' },
+    { name: 'brand-profiles', tree: 'plugins/ui-brand-kit/profiles', files: { 'state.json': 'plugins/ui-brand-kit/state.json' }, what: 'brand profiles' },
+    { name: 'remote-workspaces.json', file: 'plugins/workspace-remote/workspaces.json', what: 'remote servers', secret: 'servers' },
+    { match: /^tailscale-remote(-[a-z0-9-]+)?\.json$/, file: 'plugins/host-tailscale/state.json', what: 'tailscale state', secret: 'token' },
+    { match: /^session-owners(-[a-z0-9-]+)?\.json$/, file: 'plugins/host-tailscale/session-owners.json', what: 'session owners' },
     { name: 'rewind-snapshots', tree: 'rewind-snapshots', what: 'a third-party plugin' },
     { name: 'ledger', skip: 'an old ledger nothing reads' },
   ],
@@ -158,10 +158,10 @@ const MAP = noHarness ? undefined : normalizeMap({
 
 /** The DeepSea plugins a fake build has. */
 const PLUGINS = new Map([
-  ['tailscale', { rows: ['deepsea-tailscale'], presets: [] }],
-  ['browser', { rows: ['deepsea-browser'], presets: [] }],
-  ['billing', { rows: ['deepsea-billing'], presets: [] }],
-  ['no-global-tools', { rows: ['deepsea-no-global-tools', 'deepsea-preset-minimal-no-tools'], presets: ['minimal-no-tools'] }],
+  ['host-tailscale', { rows: ['deepsea-host-tailscale'], presets: [] }],
+  ['tool-browser', { rows: ['deepsea-tool-browser'], presets: [] }],
+  ['llm-billing', { rows: ['deepsea-llm-billing'], presets: [] }],
+  ['preset-chat-only', { rows: ['deepsea-preset-chat-only', 'deepsea-preset-minimal-no-tools'], presets: ['minimal-no-tools'] }],
   ['kernel', { rows: ['deepsea-kernel'], presets: [] }],
 ])
 
@@ -230,12 +230,12 @@ test('first adopt: sessions, registry, attachments, settings, keys, plugin state
   assert.deepEqual(report.credentials.signIns, ['llm-pi-ai/anthropic-oauth'])
   assert.deepEqual(report.credentials.keys, ['DEEPSEEK_API_KEY', 'llm-pi-ai/openrouter'])
   // Old plugins' state in the DeepSea places.
-  assert.ok(existsSync(join(target, 'plugins', 'billing', 'sessions', `${S1}.jsonl`)))
-  assert.equal(JSON.parse(read(target, 'plugins', 'tailscale', 'state.json')).token, 'fake-tailscale-token-0123456789')
-  assert.ok(existsSync(join(target, 'plugins', 'tailscale', 'session-owners.json')))
-  assert.equal(JSON.parse(read(target, 'plugins', 'remote-workspaces', 'workspaces.json')).servers[0].token, 'fake-remote-token')
-  assert.equal(read(target, 'plugins', 'brand-kit', 'state.json'), '{"active":"Acme"}')
-  assert.ok(existsSync(join(target, 'plugins', 'brand-kit', 'profiles', 'Acme', 'profile.json')))
+  assert.ok(existsSync(join(target, 'plugins', 'llm-billing', 'sessions', `${S1}.jsonl`)))
+  assert.equal(JSON.parse(read(target, 'plugins', 'host-tailscale', 'state.json')).token, 'fake-tailscale-token-0123456789')
+  assert.ok(existsSync(join(target, 'plugins', 'host-tailscale', 'session-owners.json')))
+  assert.equal(JSON.parse(read(target, 'plugins', 'workspace-remote', 'workspaces.json')).servers[0].token, 'fake-remote-token')
+  assert.equal(read(target, 'plugins', 'ui-brand-kit', 'state.json'), '{"active":"Acme"}')
+  assert.ok(existsSync(join(target, 'plugins', 'ui-brand-kit', 'profiles', 'Acme', 'profile.json')))
   assert.ok(existsSync(join(target, 'rewind-snapshots', 'snap-1.json')))
   // Presets: a plugin's own preset is not copied; another is.
   assert.equal(existsSync(join(target, '.agent-presets', 'minimal-no-tools')), false)
@@ -248,7 +248,7 @@ test('first adopt: sessions, registry, attachments, settings, keys, plugin state
   assert.ok(existsSync(join(target, MANIFEST)))
   // Third-party bundles installed as the harness does; old plugins and local links not.
   assert.deepEqual(installs, ['dsh-rewind-plugin@^0.7.5'])
-  assert.equal(report.bundles.oldPlugins['old-billing-pkg'], 'billing')
+  assert.equal(report.bundles.oldPlugins['old-billing-pkg'], 'llm-billing')
   assert.ok(report.bundles.thirdParty.some(b => b.name === 'my-local' && /local link/.test(b.result)))
 })
 
@@ -259,8 +259,8 @@ test('profile rows: harness and third-party rows carried, old plugins translated
   const text = read(target, 'profiles', 'web', 'cordis.patch.yml')
   const rows = Y.parse(text, { customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: s => ({ js: s }) }] })
   const byId = id => rows.find(r => r.id === id || r.insert?.[0]?.id === id)
-  assert.deepEqual(byId('deepsea-tailscale'), { id: 'deepsea-tailscale', config: { identityOperators: true } })
-  assert.deepEqual(byId('deepsea-browser'), { id: 'deepsea-browser', config: { subagents: true, chrome: { headless: false }, trace: true } })
+  assert.deepEqual(byId('deepsea-host-tailscale'), { id: 'deepsea-host-tailscale', config: { identityOperators: true } })
+  assert.deepEqual(byId('deepsea-tool-browser'), { id: 'deepsea-tool-browser', config: { subagents: true, chrome: { headless: false }, trace: true } })
   // A row's config replaces its bundle row's: the keys the old row lacked come from the bundle row.
   assert.deepEqual(byId('session-title-llm').config, { targetCjkCharacters: 10, maxInputBytes: 4096, maxOutputTokens: 4096, timeoutMs: 60000, targetWords: 5, style: 'slug' })
   assert.ok(report.rows.carried.includes('id:session-title-llm (completed: targetCjkCharacters, maxInputBytes, maxOutputTokens, timeoutMs)'))
@@ -269,7 +269,7 @@ test('profile rows: harness and third-party rows carried, old plugins translated
   assert.match(text, /# Notion over mcp-remote/)
   assert.doesNotMatch(text, /^- id: old-|Your patch layer/m)
   assert.ok(report.rows.dropped.some(d => d.row === 'old-identity'))
-  assert.ok(report.rows.dropped.some(d => d.row === 'old-chat-title' && /plugin chat-title is not in this variant/.test(d.why)))
+  assert.ok(report.rows.dropped.some(d => d.row === 'old-chat-title' && /plugin tool-rename-chat is not in this variant/.test(d.why)))
   assert.deepEqual(report.rows.translated.find(t => t.from === 'old-tailscale').notCarried, ['instance', 'listenPort', 'mountPath', 'tailscalePath'])
   // splitRows keeps a row's comment and drops a paragraph that belongs to none.
   const split = splitRows('# h\n\n# a\n- id: a\n\n# loose\n\n- id: b\n')
@@ -361,9 +361,9 @@ test('a throwaway gets no credentials, backups or access tokens', { skip }, () =
   assert.ok(report.credentials.leftOut.some(l => l.what === 'API keys: DEEPSEEK_API_KEY, llm-pi-ai/openrouter'))
   assert.ok(report.credentials.leftOut.some(l => /sign-ins/.test(l.what)))
   assert.ok(report.credentials.leftOut.some(l => l.what === 'llm-pi-ai-installation/device-id'))
-  assert.equal(JSON.parse(read(target, 'plugins', 'tailscale', 'state.json')).token, undefined)
-  assert.deepEqual(JSON.parse(read(target, 'plugins', 'tailscale', 'state.json')).allowedUsers, ['user@example.com'])
-  assert.equal(JSON.parse(read(target, 'plugins', 'remote-workspaces', 'workspaces.json')).servers[0].token, undefined)
+  assert.equal(JSON.parse(read(target, 'plugins', 'host-tailscale', 'state.json')).token, undefined)
+  assert.deepEqual(JSON.parse(read(target, 'plugins', 'host-tailscale', 'state.json')).allowedUsers, ['user@example.com'])
+  assert.equal(JSON.parse(read(target, 'plugins', 'workspace-remote', 'workspaces.json')).servers[0].token, undefined)
   assert.ok(report.skipped.some(s => s.what === `${source}-backups`))
   assert.equal(existsSync(join(root, 'deepsea', '_backups')), false)
   assert.ok(existsSync(join(target, 'sessions', PROJECT, S1)))

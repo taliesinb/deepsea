@@ -3,7 +3,8 @@
  * (package `@deepsea/<dir>`, row id `deepsea-<dir>`; plugins/AGENTS.md →
  * Names). A migration table: homes, patches, variant configurations and
  * older builds still carry the old names, so dsd reads them through this
- * table (lib/plugins.mjs). The old names appear nowhere else.
+ * table (lib/migrate-home.mjs, lib/plugins.mjs, lib/adopt-map.mjs). The old
+ * names appear nowhere else.
  */
 export const PLUGIN_RENAMES = Object.freeze({
   'scripted-model': 'llm-scripted',

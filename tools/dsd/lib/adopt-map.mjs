@@ -10,6 +10,7 @@
  * The table module's exports, all optional:
  *
  *   packages      old package → { plugin: <DeepSea plugin dir> | null, rows: [<old row ids>], note? }
+ *                 (DeepSea names from before a plugin's rename are read as its new ones: lib/renames.mjs)
  *   translations  old row id → { keep: [<config keys the DeepSea plugin has with the same meaning>],
  *                 extra?(config) → more keys, drop?(key, value), gone?: <why the rest is not carried> }
  *   settings      old settings.yaml section → a note (the section is copied, and reported), or
@@ -24,6 +25,7 @@ import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { extrasDir, mainCheckout } from './paths.mjs'
+import { currentName, currentRowId, currentStatePath } from './renames.mjs'
 import { DsdError } from './util.mjs'
 
 /** Default bundles of a harness profile: never reinstalled by adopt. */
@@ -58,16 +60,27 @@ export async function loadAdoptMap(path = process.env.DEEPSEA_ADOPT_MAP ?? [join
   }
 }
 
-/** A table with every part present, and the old row id → old package index. */
+/**
+ * A table with every part present, and the old row id → old package index. The DeepSea names
+ * it gives (plugin directories, their rows, their state under `plugins/<dir>/`) are read through
+ * lib/renames.mjs, so a table written before a plugin was renamed names its new place.
+ */
 export function normalizeMap(table, path) {
-  const packages = table.packages ?? {}
+  const packages = Object.fromEntries(Object.entries(table.packages ?? {}).map(([pkg, entry]) => [pkg, entry?.plugin ? { ...entry, plugin: currentName(entry.plugin) } : entry]))
+  const settings = Object.fromEntries(Object.entries(table.settings ?? {}).map(([section, rule]) => [section, rule && typeof rule === 'object' && rule.row ? { ...rule, row: currentRowId(rule.row) } : rule]))
+  const entry = e => ({
+    ...e,
+    ...(typeof e.tree === 'string' ? { tree: currentStatePath(e.tree) } : {}),
+    ...(typeof e.file === 'string' ? { file: currentStatePath(e.file) } : {}),
+    ...(e.files ? { files: Object.fromEntries(Object.entries(e.files).map(([f, to]) => [f, typeof to === 'string' ? currentStatePath(to) : to])) } : {}),
+  })
   return {
     path,
     packages,
     rows: Object.fromEntries(Object.entries(packages).flatMap(([pkg, entry]) => (entry.rows ?? []).map(row => [row, pkg]))),
     translations: table.translations ?? {},
-    settings: table.settings ?? {},
+    settings,
     color: table.color,
-    entries: [...DSH_ENTRIES, ...(table.entries ?? [])],
+    entries: [...DSH_ENTRIES, ...(table.entries ?? []).map(entry)],
   }
 }

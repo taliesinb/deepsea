@@ -24,6 +24,8 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { adopt, availablePlugins, oldColor, yamlLib } from '../lib/adopt.mjs'
 import { loadAdoptMap } from '../lib/adopt-map.mjs'
+import { migrateHome, migrationSummary } from '../lib/migrate-home.mjs'
+import { currentName } from '../lib/renames.mjs'
 import { buildPaths, buildReady } from '../lib/harness.mjs'
 import { deepseaRoot, extrasDir, homeOf, REPO } from '../lib/paths.mjs'
 import { SERVER_ENTRY } from '../lib/remove.mjs'
@@ -89,7 +91,7 @@ export async function adoptCommand(argv) {
     if (dryRun) {
       // As the run would select them: every plugin but the machine-wide ones, unless --plugins names some.
       const all = availablePlugins(pluginRoots(args.source))
-      const named = typeof args.plugins === 'string' && args.plugins !== 'all' ? args.plugins.split(',') : undefined
+      const named = typeof args.plugins === 'string' && args.plugins !== 'all' ? args.plugins.split(',').map(currentName) : undefined
       const plugins = new Map([...all].filter(([name, p]) => (named ? named.includes(name) : !p.machineWide)))
       printJson(adopt({ source, target: join(tmpdir(), `deepsea-adopt-dry-run-${process.pid}`), throwaway: true, dryRun, plugins, map }))
       return
@@ -105,7 +107,7 @@ export async function adoptCommand(argv) {
       prepareHome: ({ home, build, source: built, plugins: loaded }) => {
         // Only the plugins this throwaway loads: a row for another would name no entry.
         const all = availablePlugins([built?.dir, REPO, extrasDir()].filter(Boolean))
-        const plugins = new Map([...all].filter(([name]) => loaded.includes(name)))
+        const plugins = new Map([...all].filter(([name]) => loaded.map(currentName).includes(name)))
         report = adopt({ source, target: home, throwaway: true, plugins, map, installBundle: bundleInstaller(home, build), yaml: yamlLib(build) })
         note(`adopted ${source}: ${report.sessions.new} sessions, ${report.workspaces.added.length} workspaces, ${report.conflicts.length} conflicts`)
       },
@@ -143,5 +145,7 @@ export async function adoptCommand(argv) {
     plugins: availablePlugins(pluginRoots(sourceRef)),
     installBundle,
   })
-  printJson({ variant: created ?? { id: variant, existing: true }, ...report, next: dryRun ? undefined : `dsd build ${variant} --install` })
+  // What the target had under plugin names from before a rename (lib/migrate-home.mjs).
+  const migrated = existsSync(target) ? migrationSummary(migrateHome(target, { dryRun })) : undefined
+  printJson({ variant: created ?? { id: variant, existing: true }, ...report, ...(migrated ? { migrated } : {}), next: dryRun ? undefined : `dsd build ${variant} --install` })
 }

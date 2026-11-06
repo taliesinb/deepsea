@@ -43,6 +43,7 @@ import { buildPaths, ensureBuild, harnessRepo, linkHarness, readLock, resolveHar
 import { openRunLog } from '../lib/logs.mjs'
 import { installBundles, preparePlugin, selectPlugins } from '../lib/plugins.mjs'
 import { currentRowId, isPlugin } from '../lib/renames.mjs'
+import { migrateHome, migrationSummary } from '../lib/migrate-home.mjs'
 import { homeOf, logDirOf, REPO, variantName } from '../lib/paths.mjs'
 import { alive, freePort, listenerPids } from '../lib/processes.mjs'
 import { removeVariant, SERVER_ENTRY } from '../lib/remove.mjs'
@@ -311,6 +312,8 @@ export async function run(argv, hooks = {}) {
   // The plugins as bundles of the profile (each loads from its own bundle patch), then the
   // caller's patches, which come after every bundle layer: a later layer replaces a row's whole config.
   installBundles(plugins, home, build)
+  // Plugin names from before a rename (an adopted home's state and rows) follow the installed plugins.
+  const migrated = migrationSummary(migrateHome(home))
   const patches = extraPatches
   const serverArgs = ['--import', 'tsx/esm', relay ? join(build, SERVER_ENTRY) : SERVER_ENTRY, '--profile', 'web', ...patches.flatMap(p => ['--patch', p]), '--no-open', '--port', String(port)]
   const pluginNote = plugins.length ? ` plugins ${plugins.map(p => p.name).join(',')}` : ''
@@ -407,6 +410,7 @@ export async function run(argv, hooks = {}) {
     pid: child.pid, port, log: facts.log, harness: commit.slice(0, 10), ...(source ? { source: `${source.ref} (${source.commit.slice(0, 10)})` } : {}), plugins: plugins.map(p => p.name), detached: Boolean(args.detach), expires,
     ...(relay ? { relay: { pid: child.pid, ...facts.relay } } : {}),
     ...(bundle ? { app: { path: bundle.app, pid: appChild.pid, socket: appSocketOf(id), log: hello.log, visible: Boolean(args.visible), source: app.describe } } : {}),
+    ...(migrated ? { migrated } : {}),
     ...(hooks.output?.() ?? {}),
   })
 

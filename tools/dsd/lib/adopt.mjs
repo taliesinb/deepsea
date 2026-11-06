@@ -15,6 +15,7 @@ import {
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { HARNESS_BUNDLE, normalizeMap } from './adopt-map.mjs'
 import { mainCheckout, REPO } from './paths.mjs'
+import { currentName } from './renames.mjs'
 import { DsdError, git, isoLocal } from './util.mjs'
 
 export const MANIFEST = 'adopted.json'
@@ -819,7 +820,8 @@ export function availablePlugins(roots) {
       ? (() => { try { return git(mainCheckout(), ['ls-tree', '--name-only', `${root.commit}:plugins`]).split('\n').filter(Boolean) } catch { return [] } })()
       : readdirSafe(join(root, 'plugins'))
     for (const name of names) {
-      if (out.has(name)) continue
+      // Keyed by the current name (lib/renames.mjs): an older build has a renamed plugin under its old one.
+      if (out.has(currentName(name))) continue
       const dir = atCommit ? `${root.commit.slice(0, 10)}:plugins/${name}` : join(root, 'plugins', name)
       if (atCommit ? show(`plugins/${name}/package.json`) === undefined : !existsSync(join(dir, 'package.json'))) continue
       let patch = ''
@@ -829,7 +831,7 @@ export function availablePlugins(roots) {
       const presets = [...patch.matchAll(/name:\s*['"]?@deepseek-ai\/dsh-agent-preset['"]?\s*\n\s*config:\s*\n\s*id:\s*['"]?([\w-]+)/g)].map(x => x[1])
       let machineWide = false
       try { machineWide = Boolean(JSON.parse(atCommit ? show(`plugins/${name}/package.json`) : readFileSync(join(dir, 'package.json'), 'utf8')).deepsea?.machineWide) } catch { /* unreadable */ }
-      out.set(name, { dir, rows: rows.filter(r => r === `deepsea-${name}`).concat(rows.filter(r => r !== `deepsea-${name}`)), presets, machineWide })
+      out.set(currentName(name), { dir, rows: rows.filter(r => r === `deepsea-${name}`).concat(rows.filter(r => r !== `deepsea-${name}`)), presets, machineWide })
     }
   }
   return out
