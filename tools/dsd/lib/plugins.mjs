@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { extrasDir, REPO } from './paths.mjs'
+import { GENERATED_DIR, writePresetLayer } from './presets.mjs'
 import { currentName, formerName } from './renames.mjs'
 import { DsdError, note, usage } from './util.mjs'
 
@@ -109,12 +110,16 @@ export const profileDirOf = home => join(home, 'profiles', 'web')
  * lists it as an installed bundle, with its card. dsd owns the packages it
  * installed (recorded in the profile's `deepsea-bundles.json`; before that
  * record, the `@deepsea/*` ones): those not selected now are taken out;
- * anything else the person installed stays.
+ * anything else the person installed stays. Last comes the generated preset
+ * layer (lib/presets.mjs), rewritten each time: the presets the plugins
+ * join, as a bundle of its own after theirs.
  * @param {object[]} plugins - from selectPlugins, in load order.
  * @param {string} home - the variant's home.
  * @param {string} harnessBuild - the harness build the variant runs.
+ * @param {{ patches?: string[] }} [options] - `patches`: the `--patch` files the server will get (they count as the person's layers).
+ * @returns {{ profile: string, bundles: string[], presets?: object }} `presets`: what the generated layer holds and what it left out.
  */
-export function installBundles(plugins, home, harnessBuild) {
+export function installBundles(plugins, home, harnessBuild, { patches = [] } = {}) {
   const dir = profileDirOf(home)
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   // The harness's own profile setup, with the web profile's default bundles.
@@ -144,14 +149,29 @@ profile.initProfile(${JSON.stringify(dir)}, templates.web.bundles)`],
   // Links of packages dsd installed before and not now (any scope, or none).
   const previous = recorded ? [...recorded] : (existsSync(join(dir, 'node_modules', '@deepsea')) ? readdirSync(join(dir, 'node_modules', '@deepsea')).map(e => `@deepsea/${e}`) : [])
   for (const name of previous) if (!names.includes(name)) rmSync(join(dir, 'node_modules', name), { recursive: true, force: true })
-  writeFileSync(recordPath, `${JSON.stringify({ note: 'packages dsd installed into this profile (tools/dsd/lib/plugins.mjs)', bundles: names }, null, 2)}\n`)
+  const record = owned => writeFileSync(recordPath, `${JSON.stringify({ note: 'packages dsd installed into this profile (tools/dsd/lib/plugins.mjs)', bundles: owned }, null, 2)}\n`)
+  record(names)
   for (const plugin of plugins) {
     mkdirSync(dirname(join(dir, 'node_modules', plugin.pkg.name)), { recursive: true })
     const link = join(dir, 'node_modules', plugin.pkg.name)
     rmSync(link, { recursive: true, force: true })
     symlinkSync(plugin.dir, link)
   }
-  return { profile: dir, bundles: names }
+  // The generated preset layer, composed from the bundles just written (it is out of the manifest now).
+  const presets = writePresetLayer({ plugins, profileDir: dir, home, harnessBuild, patches })
+  if (presets?.bundle) {
+    manifest.dependencies[presets.bundle] = `link:./${GENERATED_DIR}`
+    manifest.dsh.profile.bundles.push(presets.bundle)
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    record([...names, presets.bundle])
+  }
+  for (const [preset, why] of Object.entries(presets?.skipped ?? {})) note(`preset ${preset}: left as it is (${why}); the DeepSea plugins that would join it are not in it`)
+  return { profile: dir, bundles: names, ...(presets ? { presets: presetSummary(presets) } : {}) }
+}
+
+/** The generated layer's report for a command's output. */
+function presetSummary({ bundle, layer, ...report }) {
+  return { ...(layer ? { layer } : {}), ...report }
 }
 
 /** The record of the packages dsd installed into a profile. */

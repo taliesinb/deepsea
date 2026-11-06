@@ -135,6 +135,39 @@ copies identical.
   authentication; a state-changing route takes POST with a JSON body so a
   cross-site form cannot reach it without a CORS preflight.
 
+## Presets
+
+A DeepSea plugin is a global plugin by default: its bundle patch inserts a
+Host row, and Settings → Built-in plugins lists it under Global plugins. A
+plugin that is **preset-capable** may join the harness's agent presets
+instead, where it lists under Session plugins, as upstream's `tool-fs` and
+`tool-jobs` do. Preset-capable means everything it registers works from an
+agent preset's context, which is shared by the agents of that preset and
+mounted once per preset: tools, system-prompt sections and runtime-context
+lines, read Host services (`inject`, `ctx.get`). No routes, no browser
+half, no service another row reads (a preset that publishes one outside an
+`isolate` realm fails to mount), nothing process-wide; and it must load
+without failing, since one failed row fails the whole preset. It declares
+the presets it joins in package.json:
+
+```json
+"deepsea": { "presets": { "joinWith": ["@deepseek-ai/dsh-tool-fs-search"] } }
+```
+
+`joinWith` (one module name or a list) means: every agent preset, as
+composed for the web profile, whose plugin list has an enabled row of one
+of these modules (inside a group too). Its own row (the one its bundle patch
+inserts, named after the package) is added right after that row, and the
+global one is disabled. Name upstream modules, not row ids or preset ids,
+so the rule holds when upstream adds, renames or reorders presets; pick the
+upstream tool the plugin goes with, so it joins exactly the presets that
+have that capability (a preset without tools, such as `minimal-no-tools`,
+never gets one). dsd writes the presets at each install and the person's
+edits win (tools/dsd/README.md → Generated presets). A row's `config` in a
+preset is set there, in the Web preset editor or in a `--patch` row for
+its own id (which dsd carries into the presets). The plugin's README says
+what it joins with and why.
+
 ## Browser half
 
 - Declared by `{ "dsh": { "client": { "platform": "web" } } }` and the

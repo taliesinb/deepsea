@@ -183,7 +183,8 @@ name not found in the source build or this checkout is looked up in the
 includes them; the main checkout's `dsd link` points the extras' `harness`
 at its pinned build.
 `--patch` files come after every bundle layer, so a row there replaces a
-plugin's whole config. The panel's **Uninstall** takes a plugin out of that
+plugin's whole config. Plugins that declare presets join the agent presets
+through a bundle dsd generates last (below, Generated presets). The panel's **Uninstall** takes a plugin out of that
 variant until its next `dsd build` (a throwaway: until it is thrown away).
 `--patch <file>[,<file>…]` passes patch files of your own after the plugins'
 patches: a row there replaces a plugin row's whole `config`, or inserts a
@@ -401,6 +402,62 @@ a model the throwaway cannot reach (a local server) need a simulated route
 first: `dsd drive invoke session selectModel '{"request": {"sessionId": "…",
 "provider": "anthropic-oauth", "model": "claude-opus-5-5"}}'`.
 `--move-sign-ins` refuses `--throwaway`.
+
+## Generated presets
+
+A plugin that only registers per-agent things (tools, prompt sections)
+can live inside the harness's agent presets, where Settings → Built-in
+plugins lists it under **Session plugins**, as upstream's own tool rows are;
+it declares which presets it joins in package.json (plugins/AGENTS.md →
+Presets). The harness has no patch operation that adds a row to a preset,
+only one that replaces a preset row's whole `config`, so dsd writes that
+replacement each time it installs a variant's plugins (`dsd build <v>
+--install`, `dsd run --throwaway…`, `dsd play`; `lib/presets.mjs`):
+
+- it composes the profile's bundle layers with the variant's harness build
+  (its own profile code, as the server will) and reads every agent preset
+  (`@deepseek-ai/dsh-agent-preset` rows) from the result;
+- each declaring plugin's own row joins every preset that has an enabled
+  row of one of its `joinWith` modules (inside a group too), right after the
+  top-level row holding it (after rows joined there before it, in the
+  variant's plugin order); a preset that already has the row is left alone;
+- the presets that changed, upstream's lists with the rows added, and a
+  `disabled: true` for each joined plugin's own row ("disabled globally,
+  enabled in presets", so it lists as a session plugin, not a global one) go
+  into `profiles/web/deepsea-generated-presets/cordis.patch.yml`, the
+  package `@deepsea/generated-presets`, installed as the profile's last
+  bundle (dsd owns it, as it owns the plugins' packages).
+
+The file is rewritten on every install and is the same for the same
+plugins and harness build; upstream's lists are copied fresh, so they follow
+the harness pin, and a plugin taken out of the variant leaves the presets
+(with no declaring plugin left, the bundle is removed). A named variant's
+`dsd run` installs nothing, so its layer is the one its last `build
+--install` wrote.
+
+**The person's layers win.** They come after every bundle (the profile's
+`cordis.patch.yml`, which the Web preset editor writes, the home's
+`cordis.patch.yml`, and a throwaway's `--patch` files), and dsd reads them
+first:
+
+- a preset whose row they give a `config` (an edit saved in the preset
+  editor) is left as it is: not in the generated file, reported under
+  `presets.skipped` with the file, and in a note. The editor starts from
+  the generated list, so a preset edited after an install keeps the joined
+  rows the person did not remove; one edited before (an adopted home) has
+  none of them;
+- a plugin whose own row they give `disabled` (turned off, or turned on as a
+  global plugin) joins no preset and keeps that setting, reported under
+  `presets.global`, as is a plugin that found no preset to join, which stays
+  a global plugin;
+- a `config` they give a plugin's own row (a `--patch` file's row, an edit
+  from before it moved to the presets) goes with the row into each preset.
+
+The output of `build --install` and `run` carries `presets`: `layer` (the
+file, when there is one), `joined` (preset id → the rows added), `skipped`
+and `global`. A preset without tool rows, such as preset-chat-only's
+`minimal-no-tools`, never matches a tool plugin's `joinWith`, so it stays
+without tools.
 
 ## Renamed plugins
 

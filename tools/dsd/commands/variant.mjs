@@ -166,7 +166,7 @@ export async function build(argv) {
   if (!args.install) { printJson(result); return }
 
   // Only an install touches the home: the running server reads its profile's bundles.
-  installBundles(plugins, home, harnessBuild)
+  const { presets } = installBundles(plugins, home, harnessBuild)
   // Before the relay job is loaded (it starts the server): state and rows under the plugins' new names.
   const migrated = migrationSummary(migrateHome(home))
   const supportDir = supportDirOf(id)
@@ -190,7 +190,7 @@ export async function build(argv) {
   writeVariant(id, { ...config, build: commit.slice(0, 10), installed: isoLocal() })
   if (!DARWIN && lingering() === false) note('this account does not linger (loginctl enable-linger): the relay stops at the last logout and starts again at the next login')
   printJson({
-    ...result, ...(migrated ? { migrated } : {}), ...(app ? { app } : {}), ...(host ? { serverHost: host.bundle, serverHostChanged: host.changed } : {}),
+    ...result, ...(migrated ? { migrated } : {}), ...(presets ? { presets } : {}), ...(app ? { app } : {}), ...(host ? { serverHost: host.bundle, serverHostChanged: host.changed } : {}),
     relay: `http://127.0.0.1:${port.relay}/`, [DARWIN ? 'launchAgent' : 'unit']: job.file, label: job.label, ...(dock !== undefined ? { dock } : {}),
   })
 }

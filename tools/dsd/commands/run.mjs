@@ -311,7 +311,7 @@ export async function run(argv, hooks = {}) {
 
   // The plugins as bundles of the profile (each loads from its own bundle patch), then the
   // caller's patches, which come after every bundle layer: a later layer replaces a row's whole config.
-  installBundles(plugins, home, build)
+  const { presets } = installBundles(plugins, home, build, { patches: extraPatches })
   // Plugin names from before a rename (an adopted home's state and rows) follow the installed plugins.
   const migrated = migrationSummary(migrateHome(home))
   const patches = extraPatches
@@ -411,6 +411,7 @@ export async function run(argv, hooks = {}) {
     ...(relay ? { relay: { pid: child.pid, ...facts.relay } } : {}),
     ...(bundle ? { app: { path: bundle.app, pid: appChild.pid, socket: appSocketOf(id), log: hello.log, visible: Boolean(args.visible), source: app.describe } } : {}),
     ...(migrated ? { migrated } : {}),
+    ...(presets ? { presets } : {}),
     ...(hooks.output?.() ?? {}),
   })
 
