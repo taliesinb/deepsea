@@ -112,8 +112,13 @@ export function installBundles(plugins, home, harnessBuild) {
   const dir = profileDirOf(home)
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   // The harness's own profile setup, with the web profile's default bundles.
+  // The templates moved from app-boot to official-bundles in dsh-v0.2.2;
+  // older pins (still used by topic worktrees) keep them in app-boot.
   const init = spawnSync(process.execPath, ['--import', 'tsx/esm', '--input-type=module', '-e',
-    `import { initProfile, PROFILE_TEMPLATES } from './packages/boot/app-boot/src/profile.ts'; initProfile(${JSON.stringify(dir)}, PROFILE_TEMPLATES.web.bundles)`],
+    `import * as profile from './packages/boot/app-boot/src/profile.ts'
+const bundles = await import('./packages/util/official-bundles/src/index.ts').catch(() => ({}))
+const templates = bundles.PROFILE_TEMPLATES ?? profile.PROFILE_TEMPLATES
+profile.initProfile(${JSON.stringify(dir)}, templates.web.bundles)`],
   { cwd: harnessBuild, encoding: 'utf8' })
   if (init.status !== 0) throw new DsdError(`setting up the profile in ${dir} failed: ${(init.stderr || init.stdout).trim().split('\n').slice(-3).join(' ')}`)
   const manifestPath = join(dir, 'package.json')
