@@ -56,7 +56,9 @@ function oldHome(name) {
     'records:',
     '  {',
     '    client-connection/browser-session: { kind: grant, payload: { version: 1, secret: fake-secret } },',
-    '    llm-pi-ai/anthropic-oauth: { kind: grant, payload: { type: oauth, refresh: fake-refresh, access: fake-access, expires: 1 } }',
+    '    llm-pi-ai/anthropic-oauth: { kind: grant, payload: { type: oauth, refresh: fake-refresh, access: fake-access, expires: 1 } },',
+    '    llm-pi-ai/openrouter: { kind: api-key, key: fake-openrouter-key },',
+    '    llm-pi-ai-installation/device-id: { kind: grant, payload: { id: 00000000-0000-4000-8000-000000000001 } }',
     '  }',
     'refs:',
     '  DEEPSEEK_API_KEY: fake-deepseek-key',
@@ -178,9 +180,12 @@ function snapshot(dir) {
 }
 
 const read = (...p) => readFileSync(join(...p), 'utf8')
+/** The harness bundle rows a test home's carried rows are completed from (a titler with no defaults). */
+const BUNDLE_ROWS = new Map([['session-title-llm', { targetWords: 5, targetCjkCharacters: 10, maxInputBytes: 4096, maxOutputTokens: 4096, timeoutMs: 60000 }]])
+
 const run = (source, target, more = {}) => {
   const installs = []
-  const report = adopt({ source, target, plugins: PLUGINS, map: MAP, yaml: Y, installBundle: (spec) => { installs.push(spec); return { ok: true } }, ...more })
+  const report = adopt({ source, target, plugins: PLUGINS, map: MAP, yaml: Y, bundleRows: BUNDLE_ROWS, installBundle: (spec) => { installs.push(spec); return { ok: true } }, ...more })
   return { report, installs }
 }
 
@@ -217,8 +222,13 @@ test('first adopt: sessions, registry, attachments, settings, keys, plugin state
   assert.deepEqual(creds.refs, { DEEPSEEK_API_KEY: 'fake-deepseek-key' })
   assert.equal(creds.records?.['llm-pi-ai/anthropic-oauth'], undefined)
   assert.equal(creds.records?.['client-connection/browser-session'], undefined)
+  // A key a provider's key login stored is a key, not a sign-in; the device id travels only with sign-ins.
+  assert.deepEqual(creds.records?.['llm-pi-ai/openrouter'], { kind: 'api-key', key: 'fake-openrouter-key' })
+  assert.equal(creds.records?.['llm-pi-ai-installation/device-id'], undefined)
+  assert.ok(report.credentials.leftOut.some(l => l.what === 'llm-pi-ai-installation/device-id' && /--move-sign-ins/.test(l.why)))
   assert.equal(statSync(join(target, '.credentials.yaml')).mode & 0o777, 0o600)
   assert.deepEqual(report.credentials.signIns, ['llm-pi-ai/anthropic-oauth'])
+  assert.deepEqual(report.credentials.keys, ['DEEPSEEK_API_KEY', 'llm-pi-ai/openrouter'])
   // Old plugins' state in the DeepSea places.
   assert.ok(existsSync(join(target, 'plugins', 'billing', 'sessions', `${S1}.jsonl`)))
   assert.equal(JSON.parse(read(target, 'plugins', 'tailscale', 'state.json')).token, 'fake-tailscale-token-0123456789')
@@ -251,7 +261,9 @@ test('profile rows: harness and third-party rows carried, old plugins translated
   const byId = id => rows.find(r => r.id === id || r.insert?.[0]?.id === id)
   assert.deepEqual(byId('deepsea-tailscale'), { id: 'deepsea-tailscale', config: { identityOperators: true } })
   assert.deepEqual(byId('deepsea-browser'), { id: 'deepsea-browser', config: { subagents: true, chrome: { headless: false }, trace: true } })
-  assert.deepEqual(byId('session-title-llm').config, { targetWords: 5, style: 'slug' })
+  // A row's config replaces its bundle row's: the keys the old row lacked come from the bundle row.
+  assert.deepEqual(byId('session-title-llm').config, { targetCjkCharacters: 10, maxInputBytes: 4096, maxOutputTokens: 4096, timeoutMs: 60000, targetWords: 5, style: 'slug' })
+  assert.ok(report.rows.carried.includes('id:session-title-llm (completed: targetCjkCharacters, maxInputBytes, maxOutputTokens, timeoutMs)'))
   assert.deepEqual(byId('dsh-rewind-plugin'), { id: 'dsh-rewind-plugin', disabled: true })
   assert.match(text, /cwd: !!js process\.cwd\(\)/, 'the Notion row is carried as it was')
   assert.match(text, /# Notion over mcp-remote/)
@@ -323,8 +335,12 @@ test('--move-sign-ins: the old credentials lose the sign-ins, the new ones gain 
   assert.deepEqual(report.credentials.movedSignIns, ['llm-pi-ai/anthropic-oauth'])
   const now = Y.parse(read(target, '.credentials.yaml'))
   assert.equal(now.records['llm-pi-ai/anthropic-oauth'].payload.refresh, 'fake-refresh')
+  // The installation device id travels with them, and the old home keeps it.
+  assert.equal(now.records['llm-pi-ai-installation/device-id'].payload.id, '00000000-0000-4000-8000-000000000001')
   const old = Y.parse(read(source, '.credentials.yaml'))
   assert.equal(old.records['llm-pi-ai/anthropic-oauth'], undefined)
+  assert.equal(old.records['llm-pi-ai-installation/device-id'].payload.id, '00000000-0000-4000-8000-000000000001')
+  assert.deepEqual(old.records['llm-pi-ai/openrouter'], { kind: 'api-key', key: 'fake-openrouter-key' })
   assert.equal(old.records['client-connection/browser-session'].payload.secret, 'fake-secret', 'the rest of the old document stays')
   assert.equal(old.refs.DEEPSEEK_API_KEY, 'fake-deepseek-key')
   assert.equal(statSync(join(source, '.credentials.yaml')).mode & 0o777, statSync(join(original, '.credentials.yaml')).mode & 0o777)
@@ -342,8 +358,9 @@ test('a throwaway gets no credentials, backups or access tokens', { skip }, () =
   const target = join(root, 'deepsea', 'release-0a0b0c')
   const { report } = run(source, target, { throwaway: true })
   assert.equal(existsSync(join(target, '.credentials.yaml')), false)
-  assert.ok(report.credentials.leftOut.some(l => /API keys: DEEPSEEK_API_KEY/.test(l.what)))
+  assert.ok(report.credentials.leftOut.some(l => l.what === 'API keys: DEEPSEEK_API_KEY, llm-pi-ai/openrouter'))
   assert.ok(report.credentials.leftOut.some(l => /sign-ins/.test(l.what)))
+  assert.ok(report.credentials.leftOut.some(l => l.what === 'llm-pi-ai-installation/device-id'))
   assert.equal(JSON.parse(read(target, 'plugins', 'tailscale', 'state.json')).token, undefined)
   assert.deepEqual(JSON.parse(read(target, 'plugins', 'tailscale', 'state.json')).allowedUsers, ['user@example.com'])
   assert.equal(JSON.parse(read(target, 'plugins', 'remote-workspaces', 'workspaces.json')).servers[0].token, undefined)

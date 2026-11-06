@@ -136,6 +136,7 @@ export function readManifest(home) {
  * @param {(spec: string) => {ok: boolean, message?: string}} [o.installBundle] - `dsh plugin add <spec>` into the new home.
  * @param {object} [o.map] - the old world's table (lib/adopt-map.mjs, loadAdoptMap); default none.
  * @param {object} [o.yaml] - the YAML library (default: the harness build's).
+ * @param {Map<string, object>} [o.bundleRows] - the harness bundles' row configs by row id (default: read from the harness build).
  */
 export function adopt(o) {
   const source = resolve(o.source)
@@ -355,7 +356,8 @@ export function adopt(o) {
 
   // --- The profile: third-party bundles, then its own patch layer's rows (a third-party row only with its bundle).
   const missingBundles = adoptBundles({ source, target, report, installBundle: o.installBundle, dryRun, plugins: o.plugins, map })
-  adoptRows({ source, target, io, m, report, conflict, Y, plugins: o.plugins, throwaway: Boolean(o.throwaway), missingBundles, map, settingsInto })
+  const bundleRows = o.bundleRows ?? harnessBundleRows(Y)
+  adoptRows({ source, target, io, m, report, conflict, Y, plugins: o.plugins, throwaway: Boolean(o.throwaway), missingBundles, map, settingsInto, bundleRows })
   for (const profile of readdirSafe(join(source, 'profiles'))) if (profile !== 'web') report.unknown.push({ what: join('profiles', profile), bytes: sizeOf(join(source, 'profiles', profile)) })
 
   // --- Old plugins' state, into the DeepSea plugins' places; everything else reported.
@@ -514,11 +516,14 @@ function adoptRegistry({ source, target, io, m, fresh, report, dryRun }) {
 
 /**
  * Credentials (`.credentials.yaml`, DSH's version-1 document): API keys
- * (`refs`) are copied; Plan sign-ins (`records` holding an OAuth grant) only
- * with `moveSignIns`, which then removes them from the old home in the same
- * step, since two homes refreshing one grant sign each other out; this home's
- * browser-session secret stays. A throwaway gets none of it: everything is
- * reported instead.
+ * (`refs`, and `api-key` records a provider's key login stored) are copied;
+ * Plan sign-ins (`records` holding an OAuth grant) only with `moveSignIns`,
+ * which then removes them from the old home in the same step, since two homes
+ * refreshing one grant sign each other out. The installation device id that
+ * ChatGPT sign-in presents travels with moved sign-ins (copied: it names the
+ * installation, not a grant), so OpenAI keeps seeing the same installation.
+ * This home's browser-session secret stays. A throwaway gets none of it:
+ * everything is reported instead.
  */
 function adoptCredentials({ source, target, io, m, report, conflict, Y, throwaway, moveSignIns, dryRun }) {
   const srcPath = join(source, '.credentials.yaml')
@@ -526,15 +531,22 @@ function adoptCredentials({ source, target, io, m, report, conflict, Y, throwawa
   const old = Y.parse(readFileSync(srcPath, 'utf8')) ?? {}
   const refs = old.refs ?? {}
   const records = old.records ?? {}
-  const isGrant = (key, record) => !key.startsWith('client-connection/') && (record?.payload?.type === 'oauth' || key.startsWith('llm-pi-ai/'))
+  const DEVICE_ID = 'llm-pi-ai-installation/device-id'
+  const isKeyRecord = record => record?.kind === 'api-key'
+  const isGrant = (key, record) => !key.startsWith('client-connection/') && key !== DEVICE_ID && !isKeyRecord(record)
+    && (record?.payload?.type === 'oauth' || key.startsWith('llm-pi-ai/'))
   const signIns = Object.keys(records).filter(key => isGrant(key, records[key]))
-  report.credentials.keys = Object.keys(refs)
+  const keyRecords = Object.keys(records).filter(key => isKeyRecord(records[key]))
+  const deviceId = records[DEVICE_ID] === undefined ? undefined : DEVICE_ID
+  report.credentials.keys = [...Object.keys(refs), ...keyRecords]
   report.credentials.signIns = signIns
   for (const key of Object.keys(records)) {
-    if (!signIns.includes(key)) report.credentials.leftOut.push({ what: key, why: key.startsWith('client-connection/') ? "this home's browser-session secret (each home has its own)" : 'not an API key or a sign-in' })
+    if (signIns.includes(key) || keyRecords.includes(key) || key === deviceId) continue
+    report.credentials.leftOut.push({ what: key, why: key.startsWith('client-connection/') ? "this home's browser-session secret (each home has its own)" : 'not an API key or a sign-in' })
   }
   if (throwaway) {
-    if (Object.keys(refs).length) report.credentials.leftOut.push({ what: `API keys: ${Object.keys(refs).join(', ')}`, why: 'a throwaway never gets credentials' })
+    if (report.credentials.keys.length) report.credentials.leftOut.push({ what: `API keys: ${report.credentials.keys.join(', ')}`, why: 'a throwaway never gets credentials' })
+    if (deviceId) report.credentials.leftOut.push({ what: deviceId, why: 'a throwaway never gets credentials' })
     if (signIns.length) report.credentials.leftOut.push({ what: `sign-ins: ${signIns.join(', ')}`, why: 'a throwaway never gets credentials' })
     return
   }
@@ -555,11 +567,14 @@ function adoptCredentials({ source, target, io, m, report, conflict, Y, throwawa
   }
   if (doc.get('version') === undefined) doc.set('version', 1)
   for (const [name, value] of Object.entries(refs)) put(['refs', name], value, `key ${name}`)
+  for (const key of keyRecords) put(['records', key], records[key], `key ${key}`)
   const moved = []
   if (moveSignIns) {
     for (const key of signIns) if (put(['records', key], records[key], `sign-in ${key}`) !== 'conflict') moved.push(key)
-  } else if (signIns.length) {
-    report.credentials.leftOut.push({ what: `sign-ins: ${signIns.join(', ')}`, why: 'Plan sign-ins move only with --move-sign-ins (two homes sharing a refresh token sign each other out)' })
+    if (deviceId) put(['records', deviceId], records[deviceId], 'installation device id')
+  } else {
+    if (signIns.length) report.credentials.leftOut.push({ what: `sign-ins: ${signIns.join(', ')}`, why: 'Plan sign-ins move only with --move-sign-ins (two homes sharing a refresh token sign each other out)' })
+    if (deviceId) report.credentials.leftOut.push({ what: deviceId, why: 'travels only with --move-sign-ins; a new home without them is a new installation' })
   }
   if (changed) io.write(destPath, doc.toString())
   if (moved.length === 0) return
@@ -614,12 +629,38 @@ function rowKey(value, text) {
 const bare = text => text.split('\n').filter(l => !/^\s*#/.test(l) && l.trim() !== '').join('\n')
 
 /**
- * The old profile's own patch layer, row by row, into the new one: rows of
- * harness packages and of third-party bundles as they are; rows of old
- * plugins (DeepSea bundles now) translated where the DeepSea plugin has the
- * same settings (lib/adopt-map.mjs), else dropped and reported.
+ * The configs of the rows the harness's own bundles insert, by row id
+ * (`packages/bundle/<name>/cordis.patch.yml`). A profile row's config replaces
+ * its bundle row's whole config, so a carried row is completed from these.
+ * @param {object} Y - the YAML library.
+ * @param {string} [harness] - the harness build.
+ * @returns {Map<string, object>}
  */
-function adoptRows({ source, target, io, m, report, conflict, Y, plugins, throwaway, missingBundles, map, settingsInto = {} }) {
+export function harnessBundleRows(Y, harness = join(REPO, 'harness')) {
+  const rows = new Map()
+  const visit = (entries) => {
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      if (Array.isArray(entry?.insert)) visit(entry.insert)
+      else if (typeof entry?.id === 'string' && entry.config && typeof entry.config === 'object' && !Array.isArray(entry.config)) rows.set(entry.id, entry.config)
+    }
+  }
+  for (const bundle of readdirSafe(join(harness, 'packages', 'bundle'))) {
+    const file = join(harness, 'packages', 'bundle', bundle, 'cordis.patch.yml')
+    if (!existsSync(file)) continue
+    try { visit(Y.parse(readFileSync(file, 'utf8'), { customTags: [JS_TAG] })) } catch { /* not ours to judge */ }
+  }
+  return rows
+}
+
+/**
+ * The old profile's own patch layer, row by row, into the new one: rows of
+ * harness packages and of third-party bundles as they are, a harness row's
+ * config completed with the keys its bundle row now sets and the old row did
+ * not (the bundle's settings could have defaults then and none now); rows of
+ * old plugins (DeepSea bundles now) translated where the DeepSea plugin has
+ * the same settings (lib/adopt-map.mjs), else dropped and reported.
+ */
+function adoptRows({ source, target, io, m, report, conflict, Y, plugins, throwaway, missingBundles, map, settingsInto = {}, bundleRows = new Map() }) {
   const srcPath = join(source, 'profiles', 'web', 'cordis.patch.yml')
   const fromSettings = (rowId) => {
     const { from, ...keys } = settingsInto[rowId] ?? {}
@@ -651,6 +692,15 @@ function adoptRows({ source, target, io, m, report, conflict, Y, plugins, throwa
     const id = value.id
     if (typeof id === 'string' && missingBundles.has(id)) { report.rows.dropped.push({ row: id, why: 'its bundle is not installed' }); continue }
     if (typeof id !== 'string' || !map.rows[id]) {
+      const base = typeof id === 'string' ? bundleRows.get(id) : undefined
+      const missing = base && value.config && typeof value.config === 'object' ? Object.keys(base).filter(key => !(key in value.config)) : []
+      if (missing.length) {
+        const row = { ...value, config: { ...Object.fromEntries(missing.map(key => [key, base[key]])), ...value.config } }
+        const comment = text.split('\n').filter(l => l.startsWith('#'))
+        const out = [...comment, `# completed from the harness bundle row: ${missing.join(', ')}`, Y.stringify([row], { customTags: [JS_TAG] }).trimEnd()].join('\n')
+        wanted.push({ key: rowKey(value, text), text: out, outcome: { carried: `${rowKey(value, text)} (completed: ${missing.join(', ')})` } })
+        continue
+      }
       wanted.push({ key: rowKey(value, text), text, outcome: { carried: rowKey(value, text) } })
       continue
     }
