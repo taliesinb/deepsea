@@ -204,6 +204,62 @@ test('integration: merges in order, reuses unchanged merges, stops at a conflict
   } finally { rmSync(repo, { recursive: true, force: true }) }
 })
 
+test('integration: a conflict only in generated files goes on and is made again; any other conflict stops', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { planIntegration, regenerate } = await import('../lib/integrate.mjs')
+  const repo = mkdtempSync(join(tmpdir(), 'dsd-regenerate-'))
+  const worktree = join(mkdtempSync(join(tmpdir(), 'dsd-regenerate-wt-')), 'wt')
+  const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' }
+  const g = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', env }).trim()
+  const generated = { generators: ['gen-catalog'], isGenerated: p => p === 'catalog.md' || p.endsWith('README.i18n.yaml') }
+  // A fake toolchain: the generator writes the catalog from the sources; --write records a README pair.
+  const ran = []
+  const run = (cmd, cwd) => {
+    ran.push(cmd.join(' '))
+    if (cmd.includes('gen-catalog')) writeFileSync(join(cwd, 'catalog.md'), `${readdirSync(cwd).filter(f => f.endsWith('.src')).sort().join('\n')}\n`)
+    if (cmd.includes('--write')) writeFileSync(join(cwd, cmd.at(-1).replace(/\.md$/, '.i18n.yaml')), 'recorded\n')
+  }
+  try {
+    g('init', '-q', '-b', 'main')
+    writeFileSync(join(repo, 'catalog.md'), '\n'); writeFileSync(join(repo, 'README.i18n.yaml'), 'base\n'); writeFileSync(join(repo, 'README.md'), 'readme\n')
+    g('add', '.'); g('commit', '-qm', 'base')
+    for (const topic of ['a', 'b']) {
+      g('checkout', '-qb', `topic/${topic}`, 'main')
+      writeFileSync(join(repo, `${topic}.src`), `${topic}\n`)
+      writeFileSync(join(repo, 'catalog.md'), `${topic}.src\n`)
+      writeFileSync(join(repo, 'README.i18n.yaml'), `${topic}\n`)
+      g('add', '.'); g('commit', '-qm', topic)
+    }
+    g('checkout', '-q', 'main')
+    const plan = planIntegration(repo, 'main', ['topic/a', 'topic/b'], 'integration/main', { isGenerated: generated.isGenerated })
+    assert.equal(plan.conflict, undefined)
+    assert.deepEqual(plan.regenerate.sort(), ['README.i18n.yaml', 'catalog.md'])
+    // Without isGenerated it is a conflict, as before.
+    assert.equal(planIntegration(repo, 'main', ['topic/a', 'topic/b'], 'integration/main').conflict.topic, 'topic/b')
+    const tip = regenerate({ repo, base: 'main', tip: plan.tip, branch: 'integration/main', conflicted: plan.regenerate, worktree, generated, run })
+    assert.notEqual(tip, plan.tip)
+    assert.equal(g('log', '-1', '--format=%P %s', tip), `${plan.tip} Regenerate generated files`)
+    assert.equal(g('show', `${tip}:catalog.md`), 'a.src\nb.src')
+    assert.equal(g('show', `${tip}:README.i18n.yaml`), 'recorded')
+    assert.ok(ran.includes('pnpm run verify-translation-pairing --write README.md'))
+    // The branch already has that commit: kept.
+    g('update-ref', 'refs/heads/integration/main', tip)
+    assert.equal(regenerate({ repo, base: 'main', tip: plan.tip, branch: 'integration/main', conflicted: plan.regenerate, worktree, generated, run }), tip)
+    // Nothing made the conflicted catalog again: refused.
+    assert.throws(() => regenerate({ repo, base: 'main', tip: plan.tip, branch: 'integration/main', conflicted: plan.regenerate, worktree, generated: { ...generated, generators: [] }, run }), /did not resolve: catalog\.md/)
+    // A hand-written file in the same conflict stops the plan.
+    g('checkout', '-q', 'topic/b'); writeFileSync(join(repo, 'README.md'), 'b readme\n'); g('commit', '-qam', 'b readme')
+    g('checkout', '-q', 'topic/a'); writeFileSync(join(repo, 'README.md'), 'a readme\n'); g('commit', '-qam', 'a readme')
+    g('checkout', '-q', 'main')
+    const stopped = planIntegration(repo, 'main', ['topic/a', 'topic/b'], 'integration/main', { isGenerated: generated.isGenerated })
+    assert.equal(stopped.conflict.topic, 'topic/b')
+    assert.ok(stopped.conflict.files.includes('README.md'))
+  } finally {
+    rmSync(repo, { recursive: true, force: true })
+    rmSync(join(worktree, '..'), { recursive: true, force: true })
+  }
+})
+
 test('pins: every harness commit a branch here pins is tagged once; a pin the harness lacks is reported', async () => {
   const { execFileSync } = await import('node:child_process')
   const { tagPins } = await import('../lib/harness.mjs')

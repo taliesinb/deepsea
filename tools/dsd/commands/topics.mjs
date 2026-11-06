@@ -17,12 +17,18 @@
  * commit this repository's history pins (`pin/<12 hex>`), so a pin keeps
  * building after its integration is replaced. Run a throwaway on the result
  * with `dsd run <v> --source integration/base`.
+ *
+ * The harness's generated files (catalogs, README translation records, the
+ * lockfile; lib/integrate.mjs HARNESS_GENERATED) are never merged by hand: a
+ * merge conflicting only in them goes on, and `integrate` makes them again in
+ * the `harness-integrate` worktree as a last commit, `Regenerate generated
+ * files`. `check` reports such conflicts as `regenerate`, not as conflicts.
  */
 import { readFileSync, rmSync } from 'node:fs'
 import { collectBuilds } from './manage.mjs'
 import { join } from 'node:path'
 import { harnessRepo, readLock, tagPins, takeLock } from '../lib/harness.mjs'
-import { checkedOutAt, mergeTrees, moveBranch, planIntegration } from '../lib/integrate.mjs'
+import { checkedOutAt, HARNESS_GENERATED, mergeTrees, moveBranch, planIntegration, regenerate } from '../lib/integrate.mjs'
 import { restack } from '../lib/restack.mjs'
 import { execFileSync } from 'node:child_process'
 import { buildsDir, mainCheckout, worktreesDir } from '../lib/paths.mjs'
@@ -87,18 +93,20 @@ export const DEEPSEA_INTEGRATION = 'integration/base'
 function integrations(sections, deepseaRows) {
   const harness = sections.harness
   return [
-    { repo: 'harness', path: harnessRepo(readLock()), base: harness.base, branch: `integration/${harness.upstream ?? harness.base}`, topics: harness.topics.map(t => t.name) },
+    { repo: 'harness', path: harnessRepo(readLock()), base: harness.base, branch: `integration/${harness.upstream ?? harness.base}`, topics: harness.topics.map(t => t.name), generated: HARNESS_GENERATED },
     { repo: 'deepsea', path: mainCheckout(), base: sections.deepsea?.base ?? 'topic/base', branch: DEEPSEA_INTEGRATION, topics: deepseaRows.map(r => `topic/${r.topic}`).sort() },
   ]
 }
 
-/** Every pair of a repository's topics that conflicts when merged. */
-function pairConflicts(path, topics) {
+/** Every pair of a repository's topics that conflicts when merged (only in generated files: `regenerate`). */
+function pairConflicts(path, topics, generated) {
   const found = []
   for (let i = 0; i < topics.length; i++) {
     for (let j = i + 1; j < topics.length; j++) {
       const merged = mergeTrees(path, `refs/heads/${topics[i]}`, `refs/heads/${topics[j]}`)
-      if (merged.conflicts) found.push({ topics: [short(topics[i]), short(topics[j])], files: merged.conflicts })
+      if (!merged.conflicts) continue
+      const only = generated && merged.conflicts.every(generated.isGenerated)
+      found.push({ topics: [short(topics[i]), short(topics[j])], files: merged.conflicts, ...(only ? { regenerate: true } : {}) })
     }
   }
   return found
@@ -118,15 +126,27 @@ async function integrateOrCheck(sections, deepseaRows, { move, dry, keepBuilds =
   const missing = deepseaRows.filter(r => r.missing.length).map(r => `${r.topic} requires ${r.missing.join(', ')}`)
   const report = { missing, dirty: dirtyWorktrees(deepseaRows.map(r => r.topic)), repos: [] }
   for (const integration of integrations(sections, deepseaRows)) {
-    const plan = planIntegration(integration.path, integration.base, integration.topics, integration.branch)
+    const plan = planIntegration(integration.path, integration.base, integration.topics, integration.branch, { isGenerated: integration.generated?.isGenerated })
     let current
     try { current = git(integration.path, ['rev-parse', '--verify', `refs/heads/${integration.branch}`]) } catch { /* none yet */ }
+    let tip = plan.conflict ? undefined : plan.tip
+    // The generated files, made again on the merged sources (not for check or a dry run). An
+    // integration whose merges are unchanged keeps its regeneration commit without running anything.
+    if (tip && integration.generated && move && !dry) {
+      const kept = current !== undefined && (current === tip || (git(integration.path, ['log', '-1', '--format=%P %s', current]) === `${tip} Regenerate generated files`))
+      if (kept) tip = current
+      else {
+        note(`${integration.repo}: making the generated files again (${plan.regenerate.length ? `conflicted: ${plan.regenerate.join(', ')}` : 'no conflicts'})`)
+        tip = regenerate({ repo: integration.path, base: integration.base, tip, branch: integration.branch, conflicted: plan.regenerate, worktree: join(worktreesDir(), `${integration.repo}-integrate`) })
+      }
+    }
     report.repos.push({
       repo: integration.repo, branch: integration.branch, base: integration.base,
-      tip: plan.conflict ? undefined : plan.tip, current, changed: !plan.conflict && plan.tip !== current,
-      merged: plan.steps.map(s => short(s.topic) + (s.skipped ? ` (${s.skipped})` : s.reused ? '' : ' (new merge)')),
+      tip, current, changed: tip !== undefined && tip !== current,
+      merged: plan.steps.map(s => short(s.topic) + (s.skipped ? ` (${s.skipped})` : s.reused ? '' : ' (new merge)') + (s.regenerate ? ` (regenerate: ${s.regenerate.join(', ')})` : '')),
       conflict: plan.conflict ? { topic: short(plan.conflict.topic), files: plan.conflict.files } : undefined,
-      pairs: move ? undefined : pairConflicts(integration.path, integration.topics),
+      ...(plan.regenerate.length ? { regenerate: plan.regenerate } : {}),
+      pairs: move ? undefined : pairConflicts(integration.path, integration.topics, integration.generated),
     })
   }
   const pinned = readLock().commit
