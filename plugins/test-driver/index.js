@@ -117,7 +117,10 @@ export function apply(ctx) {
     }
     return result.agent
   }
-  const eventsOf = async (sessionId, signal) => (await sc.inspect(sessionId, signal))?.events ?? []
+  // dsh-v0.2.2 split the Session Controller and dropped inspect(): the events are the Agent's Session's.
+  const eventsOf = async (sessionId, signal) => typeof sc.inspect === 'function'
+    ? (await sc.inspect(sessionId, signal))?.events ?? []
+    : (await agentOf(sessionId))?.session?.snapshotEvents?.() ?? []
   const nextSeq = events => (events.length === 0 ? 0 : (events.at(-1).seq ?? events.length - 1) + 1)
 
   const ops = {
