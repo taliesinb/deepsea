@@ -125,6 +125,7 @@ test('presets: the generated bundle, read back by the harness: last in the profi
     assert.equal(manifest().dsh.profile.bundles.at(-1), GENERATED_BUNDLE)
     assert.equal(manifest().dependencies[GENERATED_BUNDLE], `link:./${GENERATED_DIR}`)
     assert.ok(lstatSync(join(profile, 'node_modules', '@deepsea', 'generated-presets')).isSymbolicLink())
+    assert.equal(JSON.parse(readFileSync(join(profile, GENERATED_DIR, 'locale', 'en.json'), 'utf8')).meta.title, 'Generated presets')
     assert.deepEqual(Object.keys(first.presets.joined).sort(), ['cordis', 'ptc', 'standard'])
     // What the server composes from the profile, with the harness's own parser and patch code.
     const composed = compose(profile, home)
