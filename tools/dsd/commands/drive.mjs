@@ -1,6 +1,6 @@
 /**
  * dsd drive [-v <ref>] <op> … — one operation on a running throwaway, printed
- * as JSON. Server operations go to its test driver (plugins/test-driver), app
+ * as JSON. Server operations go to its test driver (plugins/dev-test-driver), app
  * operations to its app's automation socket (apps/macos, Automation.swift).
  *
  * Server:
@@ -36,7 +36,7 @@
  * the most recently active session on this throwaway, however it was made
  * (create-session, the GUI, a command); a prompt or command on a throwaway
  * with no session yet starts one. `-` reads the prompt from stdin (a
- * scripted-model script, say). `wait-page` that times out says what the
+ * llm-scripted script, say). `wait-page` that times out says what the
  * page shows. Exit status: 0; 3 when a waited turn ended with an error;
  * 4 when the wait timed out.
  */
@@ -85,6 +85,10 @@ function currentDriver(file) {
 }
 
 /**
+/** The driver's state file in the home: a wire name kept from the plugin's old name (test-driver), as is its route. */
+const DRIVER_STATE = join('run', 'test-driver.json')
+
+/**
  * The test driver of a running throwaway. Behind a relay the server comes and goes (`/reboot`,
  * `/restore`, a crash): each start writes a new endpoint with a new token, and the relay starts
  * the server on the next connection, so the driver is asked for after a knock on the relay.
@@ -92,10 +96,10 @@ function currentDriver(file) {
 export async function driverOf(variant, timeoutMs = 90_000) {
   if (!variant.throwaway) throw new DsdError(`${variant.id} is not a throwaway; dsd drive only drives throwaways`)
   if (!variant.running) throw new DsdError(`${variant.id} is not running`)
-  const file = join(homeOf(variant.id), 'run', 'test-driver.json')
+  const file = join(homeOf(variant.id), DRIVER_STATE)
   const relay = variant.state?.relay
   if (relay === undefined) {
-    if (!existsSync(file)) throw new DsdError(`${variant.id} has no test driver (${file} missing): it started without plugins/test-driver, or the plugin failed to load (see its log)`)
+    if (!existsSync(file)) throw new DsdError(`${variant.id} has no test driver (${file} missing): it started without plugins/dev-test-driver, or the plugin failed to load (see its log)`)
     return JSON.parse(readFileSync(file, 'utf8'))
   }
   const deadline = Date.now() + timeoutMs
@@ -155,6 +159,7 @@ export async function drive(argv) {
   if (op === 'open-session') {
     if (rest.length > 1) usage('dsd drive open-session [<session id | last>]')
     const sessionId = await session(rest[0])
+    // The page global is a wire name kept from the plugin's old name (test-driver).
     return printJson(await appOp(variant, 'eval', [`const driver = window.__DEEPSEA_TEST_DRIVER__
       if (!driver) throw new Error("the test driver's browser half is not loaded")
       return await driver.openSession(${JSON.stringify(sessionId)})`], {}))
@@ -167,7 +172,7 @@ export async function drive(argv) {
   if (op === 'restart-server') {
     const relay = variant.state?.relay
     if (relay === undefined) throw new DsdError(`${variant.id} runs its server without a relay; start it with --throwaway to restart its server`)
-    const before = currentDriver(join(home, 'run', 'test-driver.json'))
+    const before = currentDriver(join(home, DRIVER_STATE))
     const pids = listenerPids(variant.state.port)
     for (const pid of pids) { try { process.kill(pid, 'SIGTERM') } catch { /* gone */ } }
     for (let i = 0; i < 300 && (listenerPids(variant.state.port).length > 0 || pids.some(alive)); i++) await sleep(100)

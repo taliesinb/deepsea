@@ -77,10 +77,10 @@ copies identical.
   `apply` runs. A later patch layer replaces a row's whole `config`.
 - Host module edits need a server restart; module-source hot reload is off.
 - Log with `ctx.logger` (`info`, `warn`, `error`, `debug`). The harness keeps
-  no log sink after startup; `plugins/server-log` writes the messages to the
+  no log sink after startup; `plugins/host-server-log` writes the messages to the
   server's standard error, which `dsd` captures into the throwaway's server
   log (`dsd run` loads it into every throwaway). Messages logged at startup,
-  before server-log is active, are written when it starts, from the logger's
+  before host-server-log is active, are written when it starts, from the logger's
   buffer, except `debug` ones (the buffer keeps info and above).
 - State goes under `$DSH_HOME/plugins/<name>/`, traces and logs under the
   variant's log directory (LAYOUT.md §4-5), scratch under
@@ -128,9 +128,9 @@ copies identical.
   table): `dsd run release --throwaway-server --scripted --plugins <name>`
   (tools/dsd/README.md), never in the instance the user is working in. With `--scripted` every prompt is a JSONL script
   of the model's exact reply, so turns, tool calls and their UI can be
-  tested without an API key (plugins/scripted-model/README.md). Drive it
+  tested without an API key (plugins/llm-scripted/README.md). Drive it
   from the shell with `dsd drive` (create-session, prompt, command, events;
-  plugins/test-driver/README.md) rather than through a browser. For a
+  plugins/dev-test-driver/README.md) rather than through a browser. For a
   browser half, use `--throwaway-app`: the real macOS app, hidden, driven
   with `dsd drive` (wait-page, click, hover, type, eval, describe, snapshot) or a
   `dsd script` (tools/dsd/README.md), so what you check is what the person

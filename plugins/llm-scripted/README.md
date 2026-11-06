@@ -1,4 +1,4 @@
-# @deepsea/scripted-model
+# @deepsea/llm-scripted
 
 A model whose replies are scripted by the prompt, for testing. Each user
 message that starts with `{` is a script, one JSON command per line (JSONL),

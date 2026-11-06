@@ -47,7 +47,7 @@ removed when stopped, never touching the user's instances. No real keys or
 accounts are needed: every model provider can be **simulated**
 (tools/provider-sim/README.md) with test accounts that keep credit, Plan
 usage windows and prices, and the replies are scripts
-(plugins/scripted-model/README.md; type `help` as a prompt for the table).
+(plugins/llm-scripted/README.md; type `help` as a prompt for the table).
 
 | To | Run |
 |---|---|

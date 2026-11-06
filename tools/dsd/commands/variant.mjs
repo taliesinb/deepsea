@@ -27,6 +27,7 @@ import {
 } from '../lib/install.mjs'
 import { buildsDir, homeOf, logDirOf, variantName } from '../lib/paths.mjs'
 import { installBundles, selectPlugins } from '../lib/plugins.mjs'
+import { currentName, isPlugin } from '../lib/renames.mjs'
 import { linuxLeftovers, macosLeftovers, refuseOwnHome } from '../lib/remove.mjs'
 import { lingering, UNIT_NAME } from '../lib/systemd.mjs'
 import { openClient } from './client.mjs'
@@ -35,7 +36,7 @@ import { DsdError, isoLocal, note, onlyFlags, parseArgs, printJson, sleep, usage
 import { checkNamedId, displayName, listVariants, readVariant, writeVariant } from '../lib/variants.mjs'
 
 /** Plugins only throwaways get: a named variant loads them only when named in its list. */
-const TEST_ONLY = new Set(['test-driver', 'scripted-model'])
+const TEST_ONLY = new Set(['dev-test-driver', 'llm-scripted'])
 
 function namedConfig(id) {
   checkNamedId(id)
@@ -120,16 +121,16 @@ export async function createVariant(id, { source = 'integration/base', color, pl
 
 /**
  * The plugins a named variant loads, from its build: its list, or all of them (machine-wide ones too:
- * the rule that leaves those out is for throwaways) except the test-only ones. server-log comes first.
+ * the rule that leaves those out is for throwaways) except the test-only ones. host-server-log comes first.
  */
 function variantPlugins(config, dir) {
   const value = config.plugins ?? 'all'
   const picked = value === 'all'
-    ? selectPlugins('all', dir, { machineWide: true }).filter(p => !TEST_ONLY.has(p.name))
+    ? selectPlugins('all', dir, { machineWide: true }).filter(p => !TEST_ONLY.has(currentName(p.name)))
     : selectPlugins(value, dir)
-  const log = picked.findIndex(p => p.name === 'server-log')
+  const log = picked.findIndex(p => isPlugin(p.name, 'host-server-log'))
   if (log >= 0) picked.unshift(...picked.splice(log, 1))
-  else picked.unshift(...selectPlugins('server-log', dir))
+  else picked.unshift(...selectPlugins('host-server-log', dir))
   return picked
 }
 
@@ -174,7 +175,7 @@ export async function build(argv) {
     '--icon', join(app, 'Contents', 'Resources', 'AppIcon.icns'), '--cache', buildsDir()], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })) : undefined
   const { link, node } = linkRelayNode(supportDir, harnessBuild)
   mkdirSync(join(logDirOf(id), 'relay'), { recursive: true, mode: 0o700 })
-  const proxy = plugins.some(p => p.name === 'tailscale')
+  const proxy = plugins.some(p => isPlugin(p.name, 'host-tailscale'))
   const programArguments = [...(host ? [host.executable] : []), link, join(dir, 'apps', 'relay', 'relay.mjs'),
     '--variant', id, '--home', home, '--listen', `127.0.0.1:${port.relay}`, '--dsh', `127.0.0.1:${port.dsh}`,
     ...(proxy ? ['--proxy', `127.0.0.1:${port.proxy}`] : []), '--log-dir', logDirOf(id), '--cwd', harnessBuild,

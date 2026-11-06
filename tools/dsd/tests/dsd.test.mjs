@@ -446,12 +446,14 @@ test('components: the relay from a checkout that has it, else extracted (with pa
   assert.ok(existsSync(join(relay.dir, '..', '..', 'packages', 'logs', 'index.mjs')))
 })
 
-test('run: the tailscale proxy port only from a deepsea-tailscale row', async () => {
+test('run: the tailscale proxy port only from a deepsea-host-tailscale row (or its old id, in an older build)', async () => {
   const { proxyPortOf } = await import('../commands/run.mjs')
-  assert.equal(proxyPortOf(['- id: deepsea-tailscale\n  config:\n    proxyPort: 4321\n']), 4321)
-  assert.equal(proxyPortOf(['- insert:\n    - id: deepsea-tailscale\n      name: "@deepsea/tailscale"\n']), undefined)
-  assert.equal(proxyPortOf(['- id: other\n  config:\n    proxyPort: 9\n- id: deepsea-tailscale\n  disabled: false\n']), undefined)
-  assert.equal(proxyPortOf(['- id: "deepsea-tailscale"\n  config: \n    servePath: /x\n    proxyPort: 7000\n- id: next\n']), 7000)
+  assert.equal(proxyPortOf(['- id: deepsea-host-tailscale\n  config:\n    proxyPort: 4321\n']), 4321)
+  assert.equal(proxyPortOf(['- insert:\n    - id: deepsea-host-tailscale\n      name: "@deepsea/host-tailscale"\n']), undefined)
+  assert.equal(proxyPortOf(['- id: other\n  config:\n    proxyPort: 9\n- id: deepsea-host-tailscale\n  disabled: false\n']), undefined)
+  assert.equal(proxyPortOf(['- id: "deepsea-host-tailscale"\n  config: \n    servePath: /x\n    proxyPort: 7000\n- id: next\n']), 7000)
+  assert.equal(proxyPortOf(['- id: deepsea-tailscale\n  config:\n    proxyPort: 4322\n']), 4322, 'the row id from before the rename')
+  assert.equal(proxyPortOf(['- id: deepsea-host-tailscale-x\n  config:\n    proxyPort: 1\n']), undefined)
 })
 
 test('logs: kinds and references, the current run, last lines, export names', async () => {
@@ -549,10 +551,10 @@ test('plugins become bundles of the profile: dsd owns @deepsea/*, the rest stays
     }
     const home = join(root, 'home')
     const harness = realpathSync(join(REPO, 'harness'))
-    installBundles([plugin('server-log'), plugin('alpha')], home, harness)
+    installBundles([plugin('host-server-log'), plugin('alpha')], home, harness)
     const manifestPath = join(home, 'profiles', 'web', 'package.json')
     let manifest = JSON.parse(read(manifestPath, 'utf8'))
-    assert.deepEqual(manifest.dsh.profile.bundles.filter(b => b.startsWith('@deepsea/')), ['@deepsea/server-log', '@deepsea/alpha'])
+    assert.deepEqual(manifest.dsh.profile.bundles.filter(b => b.startsWith('@deepsea/')), ['@deepsea/host-server-log', '@deepsea/alpha'])
     assert.ok(manifest.dsh.profile.bundles.includes('@deepseek-ai/dsh-web-app'))
     assert.ok(lstatSync(join(home, 'profiles', 'web', 'node_modules', '@deepsea', 'alpha')).isSymbolicLink())
     // Something the person installed stays; a plugin no longer selected goes.
@@ -562,11 +564,11 @@ test('plugins become bundles of the profile: dsd owns @deepsea/*, the rest stays
     // A plugin of another scope that dsd installed is dsd's to take out again.
     const other = { name: 'other', dir: join(root, 'plugins', 'other'), pkg: { name: 'other-plugin' } }
     mkdirSync(other.dir, { recursive: true })
-    installBundles([plugin('server-log'), other], home, harness)
+    installBundles([plugin('host-server-log'), other], home, harness)
     assert.ok(lstatSync(join(home, 'profiles', 'web', 'node_modules', 'other-plugin')).isSymbolicLink())
-    installBundles([plugin('server-log')], home, harness)
+    installBundles([plugin('host-server-log')], home, harness)
     manifest = JSON.parse(read(manifestPath, 'utf8'))
-    assert.deepEqual(Object.keys(manifest.dependencies), ['left-alone', '@deepsea/server-log'])
+    assert.deepEqual(Object.keys(manifest.dependencies), ['left-alone', '@deepsea/host-server-log'])
     assert.ok(manifest.dsh.profile.bundles.includes('left-alone'))
     assert.ok(!manifest.dsh.profile.bundles.includes('other-plugin'))
     assert.equal(existsSync(join(home, 'profiles', 'web', 'node_modules', '@deepsea', 'alpha')), false)

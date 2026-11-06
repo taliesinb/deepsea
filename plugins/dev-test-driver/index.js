@@ -1,5 +1,5 @@
 /**
- * @deepsea/test-driver: the server half of `dsd drive`. Plain JSON over HTTP
+ * @deepsea/dev-test-driver: the server half of `dsd drive`. Plain JSON over HTTP
  * on the server's own port, calling the services the GUI calls, so an agent
  * can create sessions, run commands and prompts and read what happened from
  * a shell (README.md).
@@ -16,7 +16,7 @@ import { dirname, join, resolve } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { CHANNEL, rejectRequest, selectEvents, STATE_FILE, summarize } from './driver.mjs'
 
-export const name = 'deepsea-test-driver'
+export const name = 'deepsea-dev-test-driver'
 export const inject = ['webServer', 'sessionController', 'commands']
 
 const MAX_BODY = 4 * 1024 * 1024
@@ -87,7 +87,7 @@ export function parseModel(spec) {
 export function apply(ctx) {
   const home = resolveDshHome()
   if (!isThrowawayHome(home)) {
-    ctx.logger.warn(`test-driver: not armed, ${home} is not a throwaway home`)
+    ctx.logger.warn(`dev-test-driver: not armed, ${home} is not a throwaway home`)
     return
   }
   const token = randomBytes(32).toString('hex')
@@ -99,10 +99,10 @@ export function apply(ctx) {
     void (async () => {
       await mkdir(dirname(file), { recursive: true, mode: 0o700 })
       await writeFile(file, `${JSON.stringify({ pid: process.pid, port: ctx.webServer.port, baseUrl: baseUrl(), channel: CHANNEL, token, startedAt }, null, 2)}\n`, { mode: 0o600 })
-    })().catch(error => ctx.logger.warn(`test-driver: could not write ${file}: ${String(error)}`))
+    })().catch(error => ctx.logger.warn(`dev-test-driver: could not write ${file}: ${String(error)}`))
     // Remove only our own file: a restarted server may already have replaced it.
     return () => { readFile(file, 'utf8').then(t => (JSON.parse(t).token === token ? rm(file, { force: true }) : undefined)).catch(() => {}) }
-  }, 'test-driver: state file')
+  }, 'dev-test-driver: state file')
 
   const sc = ctx.sessionController
   const need = (args, key) => {
@@ -240,5 +240,5 @@ export function apply(ctx) {
         send(res, status, { ok: false, error: { code: error?.code ?? (error instanceof SyntaxError ? 'bad-json' : 'internal'), message: String(error?.message ?? error) } })
       }
     },
-  }), 'test-driver: route')
+  }), 'dev-test-driver: route')
 }

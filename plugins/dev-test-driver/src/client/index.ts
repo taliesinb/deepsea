@@ -7,7 +7,7 @@ import type { Context } from '@deepseek-ai/cordis'
 // Type-only (erased): merges `ctx.uiWorkspace` into the Context.
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 
-export const name = 'deepsea-test-driver'
+export const name = 'deepsea-dev-test-driver'
 export const inject = ['uiWorkspace']
 
 /** What the automation channel calls. */
@@ -17,6 +17,7 @@ export interface TestDriverPage {
 }
 
 declare global {
+  // A wire name kept from the plugin's old name (test-driver): the app's automation channel calls it.
   interface Window { __DEEPSEA_TEST_DRIVER__?: TestDriverPage }
 }
 
@@ -30,5 +31,5 @@ export function apply(ctx: Context): void {
   ctx.effect(() => {
     window.__DEEPSEA_TEST_DRIVER__ = face
     return () => { if (window.__DEEPSEA_TEST_DRIVER__ === face) delete window.__DEEPSEA_TEST_DRIVER__ }
-  }, 'test-driver: page face')
+  }, 'dev-test-driver: page face')
 }

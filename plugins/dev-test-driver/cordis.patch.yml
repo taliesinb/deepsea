@@ -2,5 +2,5 @@
 # The test driver arms only in a throwaway home; dsd run loads it into every
 # throwaway server.
 - insert:
-    - id: deepsea-test-driver
-      name: "@deepsea/test-driver"
+    - id: deepsea-dev-test-driver
+      name: "@deepsea/dev-test-driver"

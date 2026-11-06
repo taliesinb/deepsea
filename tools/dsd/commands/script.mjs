@@ -10,7 +10,7 @@
  *     return app('snapshot', { window: true })
  *   }
  *
- * `server(op, body)` is a test-driver operation (plugins/test-driver/README.md),
+ * `server(op, body)` is a test-driver operation (plugins/dev-test-driver/README.md),
  * `app(op, body)` an automation-channel request (apps/macos/Sources/Automation.swift);
  * both resolve the value or throw the error.
  */

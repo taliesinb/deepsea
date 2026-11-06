@@ -1,10 +1,10 @@
 # @deepsea/script
 
 The JSONL language a prompt uses to dictate a test model's exact reply, with
-no dependencies. The scripted model (`plugins/scripted-model`) plays scripts
+no dependencies. The scripted model (`plugins/llm-scripted`) plays scripts
 as a DSH model; the provider simulator (`tools/provider-sim`) plays the same
 scripts in each provider's wire protocol. The commands, their fields and the
-placement rules are in `plugins/scripted-model/README.md`; `help` as a plain
+placement rules are in `plugins/llm-scripted/README.md`; `help` as a plain
 prompt prints them.
 
 | Export | Does |
@@ -19,4 +19,4 @@ prompt prints them.
 | `ORDERS_REPLY`, `FINISHED_REPLY` | the standing reply, and the reply after a script's last tool results |
 
 `node --test tests/*.test.mjs` (the grammar's tests are the scripted model's,
-in `plugins/scripted-model/tests`).
+in `plugins/llm-scripted/tests`).

@@ -1,5 +1,5 @@
 /**
- * @deepsea/server-log: the server's own log messages (`ctx.logger` of every
+ * @deepsea/host-server-log: the server's own log messages (`ctx.logger` of every
  * plugin) as lines on its standard error, where `dsd` and the relay capture
  * them into the variant's server log (LAYOUT.md §5). The harness keeps no
  * log sink of its own after startup, so without this they are dropped.
@@ -8,17 +8,17 @@
  * (info and above; it keeps no debug messages), in their order and with their
  * own times.
  *
- *   2026-10-09T21:13:24.115+01:00 warn  deepsea-billing  usage read failed: …
+ *   2026-10-09T21:13:24.115+01:00 warn  deepsea-llm-billing  usage read failed: …
  */
 import { Logger } from '@deepseek-ai/cordis'
 
-export const name = 'deepsea-server-log'
+export const name = 'deepsea-host-server-log'
 
 /** Severity in the usual order; `level` keeps a message when its rank is at most the level's. (Cordis
  * numbers its levels error 0, info 1, warn 2, debug 3, so its own thresholds cannot drop info but keep warn.) */
 const RANK = { error: 0, warn: 1, info: 2, debug: 3 }
 
-export const Config = { '~standard': { version: 1, vendor: 'deepsea-server-log', validate(input = {}) {
+export const Config = { '~standard': { version: 1, vendor: 'deepsea-host-server-log', validate(input = {}) {
   if (input === null || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(k => k !== 'level')) return { issues: [{ message: 'config takes only "level"' }] }
   if (input.level !== undefined && !Object.hasOwn(RANK, input.level)) return { issues: [{ message: `level is one of ${Object.keys(RANK).join(', ')}` }] }
   return { value: { level: input.level ?? 'debug' } }
@@ -45,7 +45,7 @@ export function passes(type, level = 'debug') {
 }
 
 /** The last message written, by sequence number, for the whole process (a reload must not write a message twice). */
-const WRITTEN = Symbol.for('deepsea.server-log.written')
+const WRITTEN = Symbol.for('deepsea.host-server-log.written')
 
 /** Messages of the logger's buffer not written yet, oldest first. */
 export function backlog(buffer, written = 0) {

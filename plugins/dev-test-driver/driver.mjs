@@ -4,10 +4,10 @@
  */
 import { timingSafeEqual } from 'node:crypto'
 
-/** The driver's route on the server, outside DSH's own `/api`. */
+/** The driver's route on the server, outside DSH's own `/api`. A wire name kept from the plugin's old name (test-driver): dsd drive calls it. */
 export const CHANNEL = '/deepsea-test-driver'
 
-/** The state file, relative to the home: `{ pid, port, baseUrl, token, … }`. */
+/** The state file, relative to the home: `{ pid, port, baseUrl, token, … }`. A wire name kept from the plugin's old name (test-driver): dsd drive reads it. */
 export const STATE_FILE = 'run/test-driver.json'
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])

@@ -1,4 +1,4 @@
-# @deepsea/test-driver
+# @deepsea/dev-test-driver
 
 The halves of `dsd drive` inside a throwaway. The server half: plain JSON
 over HTTP on a throwaway server's own port, calling the services the GUI
@@ -11,11 +11,11 @@ the verb a sidebar row's click runs.
 
 `dsd run` loads it into every throwaway. Use it through `dsd drive`
 (tools/dsd/README.md); with `--scripted` every prompt is a script of the
-model's exact reply (plugins/scripted-model), so a whole turn is
+model's exact reply (plugins/llm-scripted), so a whole turn is
 deterministic:
 
 ```sh
-dsd run release --throwaway-server --detach --scripted --plugins billing
+dsd run release --throwaway-server --detach --scripted --plugins llm-billing
 dsd drive create-session --title billing-test
 dsd drive prompt last - <<'EOF'
 {"cmd": "tool", "name": "bash", "args": {"command": "echo ok", "description": "Print ok"}}
@@ -31,7 +31,10 @@ dsd stop
 
 Each is `POST /deepsea-test-driver/<op>` with a JSON object body; the reply
 is `{ "ok": true, "value": … }` or `{ "ok": false, "error": { "code",
-"message" } }`.
+"message" } }`. The route, the state file (`run/test-driver.json`) and the
+page global keep the plugin's former name, `test-driver`: they are wire
+names that `dsd drive` and the app call, also in builds from before the
+rename.
 
 | Op | Body | Value |
 |---|---|---|

@@ -1,5 +1,5 @@
 {
-  "name": "@deepsea/test-driver",
+  "name": "@deepsea/dev-test-driver",
   "version": "0.1.0",
   "private": true,
   "description": "DeepSea plugin: `dsd drive`'s halves. Server: JSON over HTTP on a throwaway server's own port to create sessions, run commands and prompts, wait for turns and read their events. Browser: what only the page can do (open a session), for the app's automation channel.",

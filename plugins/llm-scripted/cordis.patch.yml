@@ -2,5 +2,5 @@
 # Registers the `scripted` route (model `script`). For throwaway and test
 # variants; `dsd run … --scripted` loads it and makes it the default model.
 - insert:
-    - id: deepsea-scripted-model
-      name: "@deepsea/scripted-model"
+    - id: deepsea-llm-scripted
+      name: "@deepsea/llm-scripted"

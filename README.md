@@ -83,14 +83,14 @@ rebased and rebuilt as the work moves; see [AGENTS.md](AGENTS.md).
 | [reboot](plugins/reboot) | `/reboot` the server from inside a session |
 | [reload-on-restart](plugins/reload-on-restart) | reloads the page when the server comes back on new code |
 | [remote-workspaces](plugins/remote-workspaces) | other DeepSea servers' workspaces in this sidebar |
-| [scripted-model](plugins/scripted-model) | a deterministic model scripted by the prompt, for tests |
-| [server-log](plugins/server-log) | the server's own log messages in the variant's log |
+| [llm-scripted](plugins/llm-scripted) | a deterministic model scripted by the prompt, for tests |
+| [host-server-log](plugins/host-server-log) | the server's own log messages in the variant's log |
 | [session-introspect](plugins/session-introspect) | `transcript_*` tools: agents read other agents' transcripts |
 | [session-reference-picker](plugins/session-reference-picker) | `%` in the composer picks a session to reference |
 | [session-title-slug](plugins/session-title-slug) | `some-slug: …` as a first prompt names the session |
 | [settings-shortcut](plugins/settings-shortcut) | ⌘. toggles Settings |
 | [tailscale](plugins/tailscale) | the variant on a tailnet: Serve path, settings, QR codes, port forwarding |
-| [test-driver](plugins/test-driver) | the halves of `dsd drive` |
+| [dev-test-driver](plugins/dev-test-driver) | the halves of `dsd drive` |
 | [tools](plugins/tools) | `/tools` lists the agent's tools without a model turn |
 | [transcript-grace-margin](plugins/transcript-grace-margin) | space under the last row of a transcript |
 | [variant-identity](plugins/variant-identity) | tells variants apart: name, colour, window title |

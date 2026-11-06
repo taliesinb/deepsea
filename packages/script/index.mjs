@@ -2,7 +2,7 @@
  * Model scripts: the JSONL language a prompt uses to dictate a model's exact
  * reply (text, reasoning, tool calls, checks, usage, errors), with parsing,
  * validation, the split into responses, and the plain prompts (`say <text>`,
- * `help`). Shared by the scripted model (plugins/scripted-model) and the
+ * `help`). Shared by the scripted model (plugins/llm-scripted) and the
  * provider simulator (tools/provider-sim), which plays the same scripts in
  * each provider's wire protocol. Pure: no dependencies.
  */

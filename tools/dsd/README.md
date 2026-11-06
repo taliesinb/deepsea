@@ -123,8 +123,8 @@ build: 2cb0966d55                # written by build --install: the commit instal
 ```
 
 `plugins: all` on a named variant means every plugin of its build,
-machine-wide ones included, except the test-only `test-driver` and
-`scripted-model`; `server-log` is always first.
+machine-wide ones included, except the test-only `dev-test-driver` and
+`llm-scripted`; `host-server-log` is always first.
 
 **Thin clients** (`dsd client`, macOS) are named variants with no server
 here: the DeepSea app for a server elsewhere (another Mac, a Linux server).
@@ -169,7 +169,7 @@ topic together (`dsd topics integrate`). `--plugins <names|all>` selects
 them, and they are installed into the variant's web profile as bundles, as
 `dsh plugin add` installs them: each a `link:` dependency and a
 `dsh.profile.bundles` entry of `profiles/web/package.json` (after the
-profile's own bundles, server-log first), with `node_modules/<package>`
+profile's own bundles, host-server-log first), with `node_modules/<package>`
 linked to its directory. The server loads each through its own bundle
 patch (`cordis.patch.yml`, so every plugin needs one), and the Plugins panel
 lists it as an installed bundle, with its card and switches. dsd owns the
@@ -188,11 +188,11 @@ variant until its next `dsd build` (a throwaway: until it is thrown away).
 patches: a row there replaces a plugin row's whole `config`, or inserts a
 fixture row (a fake server, a test tool).
 
-`--scripted` loads `plugins/scripted-model` and makes its `scripted/script`
+`--scripted` loads `plugins/llm-scripted` and makes its `scripted/script`
 model the throwaway's default: every prompt is then a JSONL script of the
 exact reply (text, reasoning, tool calls, usage, provider errors), so a
 throwaway can run real turns, tool calls and their UI with no API key and
-the same result every time (plugins/scripted-model/README.md).
+the same result every time (plugins/llm-scripted/README.md).
 
 **Throwaway apps** (`--throwaway-app`): the DeepSea macOS app built for the
 throwaway (`DeepSea <V> <hex>.app`, bundle id its variant name, an orange
@@ -232,10 +232,10 @@ relay as the throwaway's process (its pid and signature are recorded; the
 server's change on every restart): `list` shows `relay only` while the
 server is down, stopping SIGTERMs the relay, which stops its server's
 process group, and a server whose relay was killed is found by its port
-and stopped too. `dsd drive` reads the server's test-driver endpoint on
+and stopped too. `dsd drive` reads the server's dev-test-driver endpoint on
 each call and, when the server is down, knocks on the relay and waits for
 the new one, so it follows `/reboot`, `/restore` and crashes. The relay
-gets `--proxy` only when `tailscale` is loaded and a patch gives its row a
+gets `--proxy` only when `host-tailscale` is loaded and a patch gives its row a
 `proxyPort`. Logs: `relay/` (its runs, and `console.log`: its standard
 output and error) and one `server/` file per start.
 
@@ -278,7 +278,7 @@ taken over. Build logs: `~/Library/Logs/io.github.taliesinb.deepsea/builds/`.
 | `dsd build <v> [--install [--dock]] [--self]` | make sure the build of its source commit exists, install its plugins into its profile as bundles, and on macOS build its app (`apps/macos`); `--install` installs the app (`~/Applications`), the server host and relay link (Application Support), the relay LaunchAgent (loaded at once; LAYOUT.md §6) and the home's `source` link, and with `--dock` a Dock tile. The server host is replaced only when its signature changes, so privacy grants survive. On Linux (below): no app; `--install` installs the relay link and the relay's systemd user unit |
 | `dsd adopt <old home> (<v> \| --throwaway [run options…]) [--move-sign-ins] [--dry-run]` | bring an old DSH home (`~/.dsh…`) into a variant: copies sessions and attachments, the workspace registry, settings.yaml, API keys, each old plugin's state in its DeepSea place, the old profile's own rows and third-party bundles; re-runnable (it brings what is new or changed, and reports a conflict for anything changed on both sides); creates `<v>` as `new` would if missing (not built: `dsd build <v> --install` stays yours); `--throwaway` adopts into a fresh throwaway and starts it (run options pass through); `--move-sign-ins` moves Plan sign-ins out of the old home; `--dry-run` touches nothing (below) |
 | `dsd remove <v> [--home] [--self]` | uninstall a named variant: its LaunchAgent or systemd unit (stopping relay and server), its own Serve path, Dock tile, app, preferences and `~/Library` (Linux: XDG data and state) leftovers; the home stays unless `--home` |
-| `dsd run <v> [--throwaway \| --throwaway-app \| --throwaway-server] [--visible] [--detach] [--scripted] [--plugins <names\|all>] [--patch <file>,…] [--app <checkout \| ref>] [--source <ref>] [--harness <ref>] [--ttl <min>] [--keep]` | start it, building first if needed (a throwaway always gets plugins/test-driver and plugins/server-log); prints id, home, URL, login URL (with token), pids, log, app path, automation socket, and with `--throwaway` the relay's pid, port, URL and log. `--source <ref>` runs a build of that commit of this repository (plugins, harness pin, app; a named plugin, or under `all` any plugin, that build lacks comes from this checkout, so a topic not integrated yet runs beside the integration); `--harness` names a harness commit directly; `--simulated [--accounts <names>]` points every model provider at the provider simulator with fresh test accounts (default `standard`: one account per provider route, keys and signed-in Plans; a later account replaces an earlier one of the same route, so `standard,openrouter-low` swaps in a nearly spent OpenRouter key; `none` for none; tools/provider-sim/README.md) |
+| `dsd run <v> [--throwaway \| --throwaway-app \| --throwaway-server] [--visible] [--detach] [--scripted] [--plugins <names\|all>] [--patch <file>,…] [--app <checkout \| ref>] [--source <ref>] [--harness <ref>] [--ttl <min>] [--keep]` | start it, building first if needed (a throwaway always gets plugins/dev-test-driver and plugins/host-server-log); prints id, home, URL, login URL (with token), pids, log, app path, automation socket, and with `--throwaway` the relay's pid, port, URL and log. `--source <ref>` runs a build of that commit of this repository (plugins, harness pin, app; a named plugin, or under `all` any plugin, that build lacks comes from this checkout, so a topic not integrated yet runs beside the integration); `--harness` names a harness commit directly; `--simulated [--accounts <names>]` points every model provider at the provider simulator with fresh test accounts (default `standard`: one account per provider route, keys and signed-in Plans; a later account replaces an earlier one of the same route, so `standard,openrouter-low` swaps in a nearly spent OpenRouter key; `none` for none; tools/provider-sim/README.md) |
 | `dsd stop [<ref>] [--keep]` | stop it: a named variant's relay job is unloaded or its unit stopped (relay and server stop; the LaunchAgent or unit stays and starts again at login or with `dsd run`); a throwaway's home, logs and macOS leftovers are removed unless `--keep` |
 | `dsd sim [status] \| start \| stop \| accounts [<provider>] \| account <provider> <credential> [--set <json>] \| fixtures` | the provider simulator (tools/provider-sim/README.md): one per checkout, sharing one store of accounts, started on demand and left running |
 | `dsd list [--builds]` | variants, what is running, ports, ids; with `--builds`, the builds and what uses each |
@@ -408,9 +408,9 @@ does not choose. Without `-v`, it drives the caller's one running throwaway.
 
 | Layer | Operations |
 |---|---|
-| Server driver (plugins/test-driver, loaded into every throwaway; done) | `health`, `create-session`, `prompt`, `wait`, `command`, `events`, `cancel`, `sessions`, `restart-server`, `invoke`, `url` |
+| Server driver (plugins/dev-test-driver, loaded into every throwaway; done) | `health`, `create-session`, `prompt`, `wait`, `command`, `events`, `cancel`, `sessions`, `restart-server`, `invoke`, `url` |
 | App automation socket (`apps/macos`, throwaway apps only; done) | `load`, `reload`, `wait-page`, `eval`, `resize`, `view desktop\|mobile`, `appearance light\|dark\|system`, `click`, `hover`, `type` (real input events in the app's own window), `describe`, `snapshot` (element or page), `window-info`, `app-log`, `opened`, `quit` |
-| Page helpers (test-driver plugin, browser half: `window.__DEEPSEA_TEST_DRIVER__`) | `open-session` (done); `new-session`, `archive`, `select-model`, `set-mode`, `last-card` when a topic needs them |
+| Page helpers (dev-test-driver plugin, browser half: `window.__DEEPSEA_TEST_DRIVER__`) | `open-session` (done); `new-session`, `archive`, `select-model`, `set-mode`, `last-card` when a topic needs them |
 
 The server driver's operations:
 
@@ -418,7 +418,7 @@ The server driver's operations:
 |---|---|
 | `health` | pid, port, home, uptime, loader rows that failed or are stuck |
 | `create-session [--cwd <dir>] [--preset <p>] [--model <provider/model[:effort]>] [--title <t>]` | a new session (blank until prompted); it becomes `last` |
-| `prompt [<session>] <text \| -> [--no-wait] [--steer] [--timeout <s>]` | send a prompt (to `last` when no session is named; on a throwaway with none yet, to a new one) (`-`: from stdin, e.g. a scripted-model script) and, unless `--no-wait`, wait for the turn and summarize it: text, reasoning, tool calls with outcomes and output, command results, how the turn ended |
+| `prompt [<session>] <text \| -> [--no-wait] [--steer] [--timeout <s>]` | send a prompt (to `last` when no session is named; on a throwaway with none yet, to a new one) (`-`: from stdin, e.g. an llm-scripted script) and, unless `--no-wait`, wait for the turn and summarize it: text, reasoning, tool calls with outcomes and output, command results, how the turn ended |
 | `wait <session> [--since <seq>] [--timeout <s>]` | wait for the agent to go idle, then summarize from `since` |
 | `command [<session>] <line>` | run a slash command (in `last`, or a new session when there is none); its result, with the session it ran in |
 | `events <session> [--since <seq>] [--types <a,b/*>] [--limit <n>]` | raw session events |
@@ -461,11 +461,11 @@ across restarts (above).
 1. Shared builds (`_builds/`, the build lock, the `harness` link),
    `run --throwaway-server` with `--plugins` and the machine-wide rule,
    `stop`, `list`, `gc` with ownership and time limits, `worktree`,
-   `topics list`, `check`, `--scripted`, `drive` with the test-driver's
+   `topics list`, `check`, `--scripted`, `drive` with the dev-test-driver's
    server half (done). This comes first, before agents work on topics in
    parallel.
 2. `apps/macos` builds, `run --throwaway-app`, the automation socket, the
-   app operations of `drive`, `script` (done); the page helpers (test-driver
+   app operations of `drive`, `script` (done); the page helpers (dev-test-driver
    browser half: `open-session` done, others when a topic needs them).
 3. Named variants: `new`, `build --install`, `run`, `stop`, `remove`;
    `run --throwaway` with the relay; `logs` (done).

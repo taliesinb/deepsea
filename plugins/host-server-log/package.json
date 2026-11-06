@@ -1,5 +1,5 @@
 {
-  "name": "@deepsea/server-log",
+  "name": "@deepsea/host-server-log",
   "version": "0.1.0",
   "private": true,
   "description": "DeepSea plugin: the server's own log messages (ctx.logger of every plugin) on its standard error, captured into the variant's server log.",

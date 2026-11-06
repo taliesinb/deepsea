@@ -3,5 +3,5 @@
 # default), info, warn or error keeps that severity and the more severe ones. dsd run loads it into every
 # throwaway.
 - insert:
-    - id: deepsea-server-log
-      name: "@deepsea/server-log"
+    - id: deepsea-host-server-log
+      name: "@deepsea/host-server-log"

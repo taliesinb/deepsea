@@ -3,20 +3,20 @@ import assert from 'node:assert/strict'
 import { apply, backlog, Config, passes, render, timestamp } from '../index.js'
 
 const exporter = { colors: false }
-const message = (type, args, name = 'deepsea-billing') => ({ sn: 1, ts: Date.parse('2026-10-09T20:13:24.115Z'), type, level: 1, name, args })
+const message = (type, args, name = 'deepsea-llm-billing') => ({ sn: 1, ts: Date.parse('2026-10-09T20:13:24.115Z'), type, level: 1, name, args })
 
 test('lines carry the local time, level and logger name; placeholders and objects are formatted', () => {
   assert.match(timestamp(Date.now()), /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}[+-]\d\d:\d\d$/)
   const line = render(message('warn', ['usage read failed: %s (%d tries)', 'timeout', 3]), exporter)
-  assert.match(line, / warn  deepsea-billing  usage read failed: timeout \(3 tries\)$/)
-  assert.match(render(message('info', ['state', { a: 1 }]), exporter), /info  deepsea-billing  state \{"a":1\}$/)
+  assert.match(line, / warn  deepsea-llm-billing  usage read failed: timeout \(3 tries\)$/)
+  assert.match(render(message('info', ['state', { a: 1 }]), exporter), /info  deepsea-llm-billing  state \{"a":1\}$/)
 })
 
 test('a multi-line message (a stack) gets the prefix on every line', () => {
   const error = new Error('boom')
   const lines = render(message('error', [error]), exporter).split('\n')
   assert.ok(lines.length > 1)
-  for (const line of lines) assert.match(line, / error deepsea-billing  /)
+  for (const line of lines) assert.match(line, / error deepsea-llm-billing  /)
   assert.match(lines[0], /Error: boom$/)
 })
 
@@ -43,7 +43,7 @@ test('messages logged before it was active are written first, once', () => {
   try {
     const exporters = []
     const ctx = { logger: { buffer: [at(101), at(102)], exporter: e => exporters.push(e) } }
-    delete globalThis[Symbol.for('deepsea.server-log.written')]
+    delete globalThis[Symbol.for('deepsea.host-server-log.written')]
     apply(ctx)
     apply(ctx)
     assert.equal(written.length, 2)

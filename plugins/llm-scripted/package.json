@@ -1,5 +1,5 @@
 {
-  "name": "@deepsea/scripted-model",
+  "name": "@deepsea/llm-scripted",
   "version": "0.1.0",
   "private": true,
   "description": "DeepSea plugin: a deterministic model whose replies are scripted by the prompt (JSONL commands: say, think, tool, expect, sleep, usage, error, end, title), for testing.",

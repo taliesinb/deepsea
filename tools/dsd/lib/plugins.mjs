@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { extrasDir, REPO } from './paths.mjs'
+import { currentName, formerName } from './renames.mjs'
 import { DsdError, note, usage } from './util.mjs'
 
 const pluginsDir = (root = REPO) => join(root, 'plugins')
@@ -44,15 +45,17 @@ export function selectPlugins(value, root = REPO, { machineWide = false } = {}) 
   if (value === undefined || value === true) return []
   // A plugin the source build (`--source`) does not have comes from this checkout (a topic's
   // plugin not integrated yet runs beside the integration), else from the extras repository
-  // (private plugins, never in a build of this one).
+  // (private plugins, never in a build of this one). A renamed plugin answers to its old name
+  // too (lib/renames.mjs): in a list written before the rename, and in a build made before it.
   const has = (dir, name) => existsSync(join(pluginsDir(dir), name, 'package.json'))
+  const at = (dir, name) => [currentName(name), formerName(currentName(name))].find(n => n && has(dir, n))
   const extras = extrasDir()
-  const own = name => root !== REPO && !has(root, name) && has(REPO, name)
-  const extra = name => !has(root, name) && !own(name) && has(extras, name)
+  const own = name => root !== REPO && !at(root, name) && at(REPO, name)
+  const extra = name => !at(root, name) && !own(name) && at(extras, name)
   const from = (name) => {
-    if (own(name)) { note(`plugins/${name} from this checkout (${REPO}): the source build has no such plugin`); return describe(name, REPO) }
-    if (extra(name)) return describe(name, extras)
-    return describe(name, root)
+    if (own(name)) { note(`plugins/${own(name)} from this checkout (${REPO}): the source build has no such plugin`); return describe(own(name), REPO) }
+    if (extra(name)) return describe(extra(name), extras)
+    return describe(at(root, name) ?? name, root)
   }
   if (value === 'all') {
     const more = [...(root === REPO ? [] : allPlugins(REPO).filter(own)), ...allPlugins(extras).filter(extra)]
@@ -62,7 +65,10 @@ export function selectPlugins(value, root = REPO, { machineWide = false } = {}) 
     if (skipped.length) note(`leaving out machine-wide plugins (name them to include): ${skipped.map(p => `${p.name} (${p.machineWide})`).join(', ')}`)
     return picked.filter(p => !p.machineWide)
   }
-  return String(value).split(',').map(s => s.trim()).filter(Boolean).map(from)
+  return String(value).split(',').map(s => s.trim()).filter(Boolean).map((name) => {
+    if (currentName(name) !== name) note(`plugins/${name} is plugins/${currentName(name)} now`)
+    return from(name)
+  })
 }
 
 /** The newest modification time among a plugin's own files (not dependencies, output or tests). */

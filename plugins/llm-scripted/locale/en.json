@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Scripted Model",
+    "title": "Scripted model",
     "description": "A model whose replies are scripted by the prompt, for testing without a real provider."
   }
 }

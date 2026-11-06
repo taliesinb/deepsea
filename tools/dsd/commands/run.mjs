@@ -42,6 +42,7 @@ import { credentialsDocument, ensureSim, provisionAccounts } from '../lib/sim.mj
 import { buildPaths, ensureBuild, harnessRepo, linkHarness, readLock, resolveHarnessCommit } from '../lib/harness.mjs'
 import { openRunLog } from '../lib/logs.mjs'
 import { installBundles, preparePlugin, selectPlugins } from '../lib/plugins.mjs'
+import { currentRowId, isPlugin } from '../lib/renames.mjs'
 import { homeOf, logDirOf, REPO, variantName } from '../lib/paths.mjs'
 import { alive, freePort, listenerPids } from '../lib/processes.mjs'
 import { removeVariant, SERVER_ENTRY } from '../lib/remove.mjs'
@@ -151,14 +152,16 @@ function tail(path, lines) {
 
 /**
  * The tailscale plugin's proxy port, when a patch gives its row one (`proxyPort: <n>` in the
- * `deepsea-tailscale` row): the relay then hands tailnet clients to it. A throwaway has no port
- * block, so the plugin runs a proxy only when configured.
+ * `deepsea-host-tailscale` row, or the row's id from before the rename in an older build): the
+ * relay then hands tailnet clients to it. A throwaway has no port block, so the plugin runs a
+ * proxy only when configured.
  */
 export function proxyPortOf(patchTexts) {
   let port
   for (const text of patchTexts) {
     for (const row of String(text).split(/^\s*-\s+(?=id:)/m)) {
-      if (!/^id:\s*['"]?deepsea-tailscale['"]?\s*$/m.test(row)) continue
+      const id = /^id:\s*['"]?([\w-]+)['"]?\s*$/m.exec(row)?.[1]
+      if (id === undefined || currentRowId(id) !== 'deepsea-host-tailscale') continue
       const m = /^\s*proxyPort:\s*(\d+)\s*$/m.exec(row)
       if (m) port = Number(m[1])
     }
@@ -262,11 +265,11 @@ export async function run(argv, hooks = {}) {
   // Every throwaway gets the test driver (dsd drive; it arms only in a throwaway home) and the
   // server log (plugin log messages into the server's log), first in order (rows still load
   // concurrently, so a message logged during startup can precede it).
-  for (const always of ['test-driver', ...(args.scripted ? ['scripted-model'] : [])]) {
-    if (!plugins.some(p => p.name === always)) plugins.push(...selectPlugins(always, source?.dir))
+  for (const always of ['dev-test-driver', ...(args.scripted ? ['llm-scripted'] : [])]) {
+    if (!plugins.some(p => isPlugin(p.name, always))) plugins.push(...selectPlugins(always, source?.dir))
   }
-  const serverLog = plugins.findIndex(p => p.name === 'server-log')
-  plugins.unshift(...(serverLog >= 0 ? plugins.splice(serverLog, 1) : selectPlugins('server-log', source?.dir)))
+  const serverLog = plugins.findIndex(p => isPlugin(p.name, 'host-server-log'))
+  plugins.unshift(...(serverLog >= 0 ? plugins.splice(serverLog, 1) : selectPlugins('host-server-log', source?.dir)))
   // A build's plugins are installed and built already; this checkout's are prepared on demand.
   if (plugins.length > 0 && !source) {
     await linkHarness()
@@ -314,7 +317,7 @@ export async function run(argv, hooks = {}) {
   let child
   let facts
   if (relay) {
-    const proxyPort = plugins.some(p => p.name === 'tailscale') ? proxyPortOf([...plugins.map(p => readFileSync(join(p.dir, 'cordis.patch.yml'), 'utf8')), ...patches.map(p => readFileSync(p, 'utf8'))]) : undefined
+    const proxyPort = plugins.some(p => isPlugin(p.name, 'host-tailscale')) ? proxyPortOf([...plugins.map(p => readFileSync(join(p.dir, 'cordis.patch.yml'), 'utf8')), ...patches.map(p => readFileSync(p, 'utf8'))]) : undefined
     const relayArgs = [relaySource.entry, '--variant', id, '--home', home, '--listen', `127.0.0.1:${relay.port}`, '--dsh', `127.0.0.1:${port}`,
       ...(proxyPort ? ['--proxy', `127.0.0.1:${proxyPort}`] : []), '--log-dir', logDirOf(id), '--cwd', build, '--', process.execPath, ...serverArgs]
     mkdirSync(join(logDirOf(id), 'relay'), { recursive: true, mode: 0o700 })
