@@ -6,5 +6,5 @@
 #   branch  where the commit came from (informational)
 #   commit  the pinned commit
 url ../deepsea-harness
-branch integration/dsh-v0.2.1-alpha.1
-commit 75722e5f582cd2dad6c0d16194ba5bf4215ee467
+branch integration/dsh-v0.2.2-rc.1
+commit 9798f4d912633ad0866f504b7fbe23b189750c47

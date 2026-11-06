@@ -93,7 +93,7 @@ Both this repository and the harness fork are kept as **topic branches**:
 - `topics.txt` lists the harness topics in merge order with their parents.
   This repository's topics are simply its `topic/*` branches: a topic
   declares the harness topics it needs in its plugins' package.json
-  (`"deepsea": { "requires": ["billing-metadata"] }`), so starting a topic
+  (`"deepsea": { "requires": ["llm-route-metadata"] }`), so starting a topic
   edits no shared file. `dsd topics` lists both, with what each requires and
   how far it is behind its parent.
 - `dsd topics check` merges every pair of topics and each repository's

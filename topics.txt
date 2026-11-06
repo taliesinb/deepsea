@@ -15,18 +15,18 @@
 #   topic <branch> [<parent topic>]
 
 [harness]
-upstream dsh-v0.2.1-alpha.1
+upstream dsh-v0.2.2-rc.1
 # The baseline every integration starts from: upstream plus what every
 # DeepSea variant always has (no Web preview notice).
 base topic/base
 
 # Fixes
-topic topic/fix-scheduler-symbol
 topic topic/fix-open-state-watchdog
 topic topic/fix-scroll-pin
 topic topic/provider-errors
 topic topic/request-image-max-dimension
 topic topic/fix-math-dollar
+topic topic/fix-hidden-sidebar-inert
 
 # DeepSea identity: default home ~/.deepsea/release
 topic topic/deepsea-home
@@ -38,23 +38,34 @@ topic topic/launch-token
 topic topic/darwin-web-shortcuts
 topic topic/modal-width
 topic topic/input-triggers
-topic topic/trigger-label-segments topic/input-triggers
 topic topic/command-claim-decoration
 topic topic/title-slug
 
 # Embedding, sessions and workspaces
 topic topic/embed-session
 topic topic/session-relocation
-topic topic/workspace-destinations topic/session-relocation
-topic topic/command-session topic/workspace-destinations
+topic topic/workspace-seats
+topic topic/command-session
 
-# Sign-in routes, billing metadata, the Models panel
-topic topic/pi-ai-oauth-routes
-topic topic/billing-metadata topic/pi-ai-oauth-routes
-topic topic/settings-models-signins topic/billing-metadata
-topic topic/model-catalog-capabilities topic/settings-models-signins
-topic topic/model-picker-sections topic/model-catalog-capabilities
-topic topic/model-picker-recent topic/model-picker-sections
+# Sign-in routes, billing and catalog metadata; the model picker
+topic topic/llm-route-metadata
+topic topic/model-picker topic/llm-route-metadata
+
+# Tools: job_output waits a plugin can release (tool-wait's Skip)
+topic topic/job-wait-release
+
+# Files: a write check plugins can ask; new files with open()'s mode
+topic topic/fs-check-write
+topic topic/fs-new-file-mode
+
+# Tool cards: a write or edit shows its diff while the model streams it
+topic topic/write-preview
+
+# Markdown: a code fence's language and actions float at its top right, no title row
+topic topic/code-block-toolbar
+
+# Composer: Up in an empty composer recalls the previous prompt; draft attachments survive Session switches
+topic topic/composer-recall
 
 [deepsea]
 base topic/base
