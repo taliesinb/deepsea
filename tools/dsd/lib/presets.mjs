@@ -53,6 +53,26 @@ export function joinRule(plugin) {
   return joinWith
 }
 
+/**
+ * The module whose rows join the presets: `deepsea.presets.module`, else the
+ * package itself. A plugin that also needs process-wide things (routes, a
+ * browser half, a service) keeps them in its package-root row and names a
+ * subpath row (`<package>/tools`, an export of the package) as the one that
+ * joins (plugins/AGENTS.md → Presets).
+ * @param {{ pkg: object }} plugin
+ * @returns {string}
+ */
+export function joinModule(plugin) {
+  const name = plugin.pkg.name
+  const module = plugin.pkg?.deepsea?.presets?.module
+  if (module === undefined || module === name) return name
+  const subpath = typeof module === 'string' && module.startsWith(`${name}/`) ? `./${module.slice(name.length + 1)}` : undefined
+  if (subpath === undefined || subpath === './') throw new DsdError(`${name}: deepsea.presets.module must be the package or one of its subpaths (${name}/<subpath>), not ${JSON.stringify(module)}`)
+  const exports = plugin.pkg.exports
+  if (exports === null || typeof exports !== 'object' || !Object.hasOwn(exports, subpath)) throw new DsdError(`${name}: deepsea.presets.module ${module}: the package exports no ${subpath}`)
+  return module
+}
+
 const isExpression = value => value !== null && typeof value === 'object' && typeof value.__jsExpr === 'string'
 /** A row is off only when `disabled` is literally true; an expression may enable it. */
 const isOff = row => row.disabled === true
@@ -99,8 +119,10 @@ export function planPresets({ rows, userLayers, plugins }) {
   for (const plugin of plugins) {
     const joinWith = joinRule(plugin)
     if (joinWith === undefined) continue
-    // The plugin's own rows: those its bundle patch inserted under its package name.
-    for (const row of rows.filter(r => r.name === plugin.pkg.name)) {
+    // The plugin's own rows that join: those its bundle patch inserted under its joining module
+    // (the package, or the subpath row `deepsea.presets.module` names; the package-root row then stays global).
+    const module = joinModule(plugin)
+    for (const row of rows.filter(r => r.name === module)) {
       const own = userSettings(userLayers, row.id)
       if (own.disabled !== undefined) { global[row.id] = `disabled: ${JSON.stringify(own.disabled.value)} in ${own.disabled.file}`; continue }
       if (isOff(row)) { global[row.id] = 'disabled by its bundle'; continue }

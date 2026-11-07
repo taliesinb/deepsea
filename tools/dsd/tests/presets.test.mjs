@@ -99,6 +99,24 @@ test('presets: the person\'s edits win: an edited preset is skipped, a row they 
 
 test('presets: a malformed declaration is refused', () => {
   assert.throws(() => planPresets({ rows: rows(), userLayers: [], plugins: [{ name: 'bad', pkg: { name: '@deepsea/bad', deepsea: { presets: { joinWith: [] } } } }] }), /joinWith/)
+  const bad = module => ({ name: 'bad', pkg: { name: '@deepsea/bad', exports: { '.': './index.js', './tools': './tools.js' }, deepsea: { presets: { joinWith: '@deepseek-ai/dsh-tool-web', module } } } })
+  assert.throws(() => planPresets({ rows: rows(), userLayers: [], plugins: [bad('@deepsea/other/tools')] }), /module must be the package or one of its subpaths/)
+  assert.throws(() => planPresets({ rows: rows(), userLayers: [], plugins: [bad('@deepsea/bad/missing')] }), /exports no \.\/missing/)
+})
+
+test('presets: a two-row package joins with its tools row; its package-root row stays global and untouched', () => {
+  const twoRows = { name: 'tool-wait', pkg: { name: '@deepsea/tool-wait', exports: { '.': './index.js', './tools': './tools.js' }, deepsea: { presets: { joinWith: '@deepseek-ai/dsh-tool-web', module: '@deepsea/tool-wait/tools' } } } }
+  const withTools = [...rows(), row('deepsea-tool-wait-tools', '@deepsea/tool-wait/tools')]
+  const plan = planPresets({ rows: withTools, userLayers: [], plugins: [twoRows] })
+  assert.deepEqual(plan.joined, { standard: ['deepsea-tool-wait-tools'] })
+  assert.deepEqual(ids(plan.patches[0].config.plugins).slice(-3), ['tool-web', 'deepsea-tool-wait-tools', 'present'])
+  assert.deepEqual(plan.patches.slice(1), [{ id: 'deepsea-tool-wait-tools', name: '@deepsea/tool-wait/tools', disabled: true }])
+  assert.ok(!plan.patches.some(p => p.id === 'deepsea-tool-wait'), 'the root row is neither joined nor disabled')
+  // The person's settings on the tools row follow the usual rules.
+  const off = planPresets({ rows: withTools, userLayers: [{ file: 'p.yml', patches: [{ id: 'deepsea-tool-wait-tools', disabled: false }] }], plugins: [twoRows] })
+  assert.deepEqual(off.global, { 'deepsea-tool-wait-tools': 'disabled: false in p.yml' })
+  const configured = planPresets({ rows: withTools, userLayers: [{ file: 'p.yml', patches: [{ id: 'deepsea-tool-wait-tools', config: { maxSeconds: 60 } }] }], plugins: [twoRows] })
+  assert.deepEqual(configured.patches[0].config.plugins.find(r => r.id === 'deepsea-tool-wait-tools').config, { maxSeconds: 60 })
 })
 
 const { REPO } = await import('../lib/paths.mjs')

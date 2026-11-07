@@ -50,6 +50,7 @@ sentence case with the family noun where it helps ("Server reboot",
 | Namespace | Form | Example |
 |---|---|---|
 | Plugin directory, package, loader row | `plugins/<name>`, `@deepsea/<name>`, `deepsea-<name>` | `plugins/command-reboot`, `@deepsea/command-reboot`, `deepsea-command-reboot` |
+| A plugin's preset row (Presets: two rows) | `@deepsea/<name>/tools`, `deepsea-<name>-tools` | `@deepsea/tool-wait/tools`, `deepsea-tool-wait-tools` |
 | Cordis plugin `name` export | the loader row id | `deepsea-command-reboot` |
 | Services a plugin provides (`ctx.provide`) | `deepsea<Feature>` | `deepseaBilling` |
 | Fetch routes (`ctx.connection.fetch`, under `/api`) | `/api/deepsea-<name>/…` | `/api/deepsea-billing/snapshot` |
@@ -167,6 +168,25 @@ edits win (tools/dsd/README.md → Generated presets). A row's `config` in a
 preset is set there, in the Web preset editor or in a `--patch` row for
 its own id (which dsd carries into the presets). The plugin's README says
 what it joins with and why.
+
+**Two rows, one package.** A plugin whose tools belong in presets but which
+also needs process-wide things (routes, a browser half, windows, timers, a
+service) keeps those in its package-root row, which stays global, and puts
+its tools and prompt sections in a second row from a subpath of the same
+package, `@deepsea/<name>/tools` (an `exports` entry `./tools`, its title in
+`locale/tools/*.json` exported as `./tools/locale/*.json`), with the row id
+`deepsea-<name>-tools`; upstream's `dsh-plugin-manager` and
+`dsh-plugin-manager/tools` are built the same way. It names the joining row:
+
+```json
+"deepsea": { "presets": { "joinWith": ["@deepseek-ai/dsh-tool-jobs"], "module": "@deepsea/tool-wait/tools" } }
+```
+
+The root must be the global half: only a Host row of a package root serves
+a browser half. The two talk through a service the root provides
+(`deepsea<Feature>`), which the tools row reads optionally (`ctx.get`, or
+`ctx.inject` in a sub-fiber), because preset rows mount before Host rows and
+a missing required service makes the preset unusable.
 
 ## Browser half
 

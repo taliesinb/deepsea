@@ -443,7 +443,9 @@ replacement each time it installs a variant's plugins (`dsd build <v>
 - it composes the profile's bundle layers with the variant's harness build
   (its own profile code, as the server will) and reads every agent preset
   (`@deepseek-ai/dsh-agent-preset` rows) from the result;
-- each declaring plugin's own row joins every preset that has an enabled
+- each declaring plugin's own row (the row of its package, or of the subpath
+  its `module` names, `@deepsea/<name>/tools`, when the package-root row must
+  stay global: plugins/AGENTS.md → Presets) joins every preset that has an enabled
   row of one of its `joinWith` modules (inside a group too), right after the
   top-level row holding it (after rows joined there before it, in the
   variant's plugin order); a preset that already has the row is left alone;
