@@ -23,6 +23,7 @@ dsd run release --throwaway-app --simulated                      # openrouter + 
 dsd run release --throwaway-app --simulated --accounts openrouter-low,deepseek-empty
 dsd run release --throwaway-app --simulated --accounts openrouter=sk-or-mine   # a persistent account
 dsd run release --throwaway-app --simulated --accounts anthropic,anthropic-max  # API key and a signed-in Plan
+dsd run release --throwaway-app --simulated --accounts standard,codex-plus-signed-out  # a Plan configured, signed out
 dsd sim status | start | stop | accounts [<provider>] | fixtures
 dsd sim account openrouter sk-or-mine --set '{"usageMicros": 0}'
 dsd sim account anthropic max@example.com --set '{"plan": "max20"}'      # an email: a Plan account
@@ -53,6 +54,8 @@ an account that persists across runs.
 
 A sign-in fixture (`kind: email`, `signIn: <route>`) starts the throwaway signed in, without a browser: dsd asks the simulator for tokens (`POST /_sim/sign-in`) and writes the grant pi-ai would have stored after a browser sign-in into the throwaway's `.credentials.yaml` (credentials-local's record `llm-pi-ai/<route>`: `{ type: oauth, access, refresh, expires }`). A throwaway holds one sign-in per route.
 
+Every sign-in fixture also comes **signed out**, as `<name>-signed-out` (`anthropic-max-signed-out`, `codex-plus-signed-out`, `kimi-plan-signed-out`, …; dsd derives them, so `dsd sim fixtures` lists them with `signedOut: true` and a new Plan fixture gets one without a second entry): the same account is created in the simulator with the fixture's state and the route's rows go into the profile, so the Models page shows the Plan, but no grant is stored. `run` prints the account with `signedOut: <route>`; signing in through the simulated sign-in page with that email (`max+3275dd@example.com`) then stores a grant for that account, as a real sign-in does. It replaces a signed-in fixture of the same route, so `standard,anthropic-max-signed-out` is the standard set with the Anthropic Plan signed out. This is the starting state; to sign a running throwaway out, use the sign-in UI (llm-sign-in's Log out keeps the route).
+
 The store is `~/.deepsea/_sim/sim.sqlite` (SQLite in WAL mode, every change in
 an immediate transaction, so several simulators or tools can share it);
 `~/.deepsea/_sim/sim.json` records the running simulator, and its run logs are
@@ -67,10 +70,10 @@ One module and one document each, in `providers/`, with the test accounts in
 |---|---|---|
 | [OpenRouter](providers/openrouter.md) | `openrouter.ai` | `openrouter`, `openrouter-low`, `openrouter-empty` |
 | [DeepSeek](providers/deepseek.md) | `api.deepseek.com` | `deepseek`, `deepseek-empty` |
-| [Anthropic](providers/anthropic.md), API key and Plan | `api.anthropic.com`, `claude.ai`, `platform.claude.com` | `anthropic`, `anthropic-low`, `anthropic-max`, `anthropic-max-80` |
-| [OpenAI](providers/openai.md), API key and the ChatGPT/Codex Plan | `api.openai.com`, `auth.openai.com`, `chatgpt.com` | `openai`, `openai-low`, `codex-plus`, `codex-pro-80` |
+| [Anthropic](providers/anthropic.md), API key and Plan | `api.anthropic.com`, `claude.ai`, `platform.claude.com` | `anthropic`, `anthropic-low`, `anthropic-max`, `anthropic-max-80` (and each Plan's `-signed-out`) |
+| [OpenAI](providers/openai.md), API key and the ChatGPT/Codex Plan | `api.openai.com`, `auth.openai.com`, `chatgpt.com` | `openai`, `openai-low`, `codex-plus`, `codex-pro-80` (and each Plan's `-signed-out`) |
 | [Gemini](providers/gemini.md) | `generativelanguage.googleapis.com` | `gemini`, `gemini-low` |
-| [Moonshot](providers/moonshot.md): Kimi API key and the Kimi Code Plan | `api.moonshot.ai`, `.cn`, `api.kimi.com`, `auth.kimi.com`, `www.kimi.com` | `kimi`, `kimi-plan` |
+| [Moonshot](providers/moonshot.md): Kimi API key and the Kimi Code Plan | `api.moonshot.ai`, `.cn`, `api.kimi.com`, `auth.kimi.com`, `www.kimi.com` | `kimi`, `kimi-plan` (and `kimi-plan-signed-out`) |
 | [Z.ai](providers/zai.md) | `api.z.ai`, `open.bigmodel.cn` | `zai`, `zai-empty` |
 
 Both wire formats stream (server-sent events) or answer whole, with text,
@@ -107,14 +110,16 @@ for providers with a Plan sign-in.
    the provider's own shapes and errors, and `providers/<name>.md`.
 3. Add `fixtures/<name>.json`: a key fixture names the environment variable
    the route reads its key from (`env`) and the rows the route needs
-   (`settings`); a Plan fixture names its route (`signIn`).
+   (`settings`); a Plan fixture names its route (`signIn`), and gets its
+   `-signed-out` form for free.
 4. Test it in `tests/<name>.test.mjs`, then in a `--simulated` throwaway with
    the plugins that use it (llm-billing, llm-sign-in).
 
 ## Tests
 
 `node --test tests/*.test.mjs`. dsd's own tests provision a Plan fixture and
-check the credentials document it writes.
+check the credentials document it writes, and its `-signed-out` form (the
+account and rows, no record).
 
 ## Not simulated yet
 

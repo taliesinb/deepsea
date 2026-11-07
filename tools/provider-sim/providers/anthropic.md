@@ -45,6 +45,7 @@ fields the harness's `subscription-usage.ts` reads.
 | `anthropic`, `anthropic-low` | Anthropic API key (`ANTHROPIC_API_KEY`, route `anthropic`): $10, 5¢ of credit |
 | `anthropic-max` | Anthropic Plan, Max 5×, `max@example.com`, signed in to `anthropic-oauth` |
 | `anthropic-max-80` | the same with the five-hour window at 80% (`max80@example.com`) |
+| `anthropic-max-signed-out`, `anthropic-max-80-signed-out` | the same accounts and route, not signed in (no grant stored) |
 
 A sign-in fixture (`kind: email`, `signIn: <route>`) starts the throwaway
 signed in, without a browser: dsd asks the simulator for tokens

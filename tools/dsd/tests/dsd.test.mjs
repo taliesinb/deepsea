@@ -477,7 +477,7 @@ test('logs: kinds and references, the current run, last lines, export names', as
   assert.equal(exportName('lab', 'plugin-browser', '/x/2026-10-07T19-04-14-4410.jsonl'), 'deepsea.lab-plugin-browser-2026-10-07T19-04-14.jsonl')
 })
 
-test('simulated accounts: a Plan fixture is signed in, its grant written as credentials-local stores it', async () => {
+test('simulated accounts: a Plan fixture is signed in, its grant written as credentials-local stores it; its -signed-out form stores none', async () => {
   const { createSimulator } = await import('../../provider-sim/server.mjs')
   const { credentialsDocument, expandAccounts, provisionAccounts } = await import('../lib/sim.mjs')
   const sim = await createSimulator({ db: join(root, 'sim.sqlite') })
@@ -496,6 +496,22 @@ test('simulated accounts: a Plan fixture is signed in, its grant written as cred
     // One account per slot: a later Plan of the same route replaces the earlier one.
     const replaced = await provisionAccounts({ url }, 'anthropic-max,anthropic-max-80', 'abc124')
     assert.deepEqual(replaced.map(a => a.name), ['anthropic-max-80'])
+    // Every Plan fixture also comes signed out: its route and rows, its account, no grant.
+    const { fixtures } = await import('../lib/sim.mjs')
+    const known = fixtures()
+    for (const [name, fixture] of Object.entries(known).filter(([, f]) => f.signIn && !f.signedOut)) {
+      const out = known[`${name}-signed-out`]
+      assert.deepEqual([out?.signedOut, out?.signIn, out?.credential, out?.settings, out?.standard], [true, fixture.signIn, fixture.credential, fixture.settings, undefined], name)
+    }
+    const signedOut = await provisionAccounts({ url }, 'standard,anthropic-max-signed-out', 'abc125')
+    const plan = signedOut.find(a => a.route === 'anthropic-oauth')
+    assert.deepEqual([plan.name, plan.credential, plan.grant, plan.settings], ['anthropic-max-signed-out', 'max+abc125@example.com', undefined, known['anthropic-max'].settings])
+    assert.equal(signedOut.filter(a => a.route === 'anthropic-oauth').length, 1)
+    assert.ok(!JSON.parse(credentialsDocument(signedOut)).records['llm-pi-ai/anthropic-oauth'])
+    assert.equal(credentialsDocument(signedOut.filter(a => a.route === 'anthropic-oauth')), undefined)
+    // Its account exists with the fixture's state, ready for a sign-in through the page.
+    const created = (await (await fetch(`${url}/_sim/accounts?provider=anthropic`)).json())
+    assert.ok(JSON.stringify(created).includes('max+abc125@example.com'))
     assert.deepEqual(expandAccounts('standard,openrouter-low', { openrouter: { env: 'OPENROUTER_API_KEY', standard: true }, 'openrouter-low': { env: 'OPENROUTER_API_KEY' }, deepseek: { env: 'DEEPSEEK_API_KEY', standard: true } }), ['deepseek', 'openrouter-low'])
   } finally {
     await new Promise(resolve => sim.server.close(resolve))

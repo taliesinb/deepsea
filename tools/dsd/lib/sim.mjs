@@ -14,7 +14,8 @@
  * persistent account, created on first use). A sign-in fixture (`kind:
  * email`, `signIn: <route>`) names an email address instead of a key (the
  * suffix goes before the `@`): the simulator signs it in and the throwaway
- * starts with the grant stored for that route.
+ * starts with the grant stored for that route. Every sign-in fixture also comes
+ * signed out, as `<name>-signed-out`: the same account and route rows, no grant.
  */
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -126,10 +127,25 @@ export function expandAccounts(spec, known = fixtures()) {
   return [...bySlot.values()]
 }
 
-/** The named test accounts. */
+/** The suffix that names a sign-in fixture's signed-out form. */
+export const SIGNED_OUT = '-signed-out'
+
+/**
+ * The named test accounts: the fixture files' accounts, each sign-in fixture
+ * followed by its signed-out form `<name>-signed-out` (`signedOut: true`, never
+ * `standard`): the same account in the simulator and the same route rows in
+ * the profile, but no grant stored, so the Plan is configured and signed out.
+ */
 export function fixtures() {
+  const read = {}
+  for (const file of readdirSync(FIXTURES()).filter(f => f.endsWith('.json')).sort()) Object.assign(read, JSON.parse(readFileSync(join(FIXTURES(), file), 'utf8')).accounts)
   const all = {}
-  for (const file of readdirSync(FIXTURES()).filter(f => f.endsWith('.json')).sort()) Object.assign(all, JSON.parse(readFileSync(join(FIXTURES(), file), 'utf8')).accounts)
+  for (const [name, fixture] of Object.entries(read)) {
+    all[name] = fixture
+    if (!fixture.signIn || fixture.signedOut || read[`${name}${SIGNED_OUT}`]) continue
+    const { standard: _standard, ...rest } = fixture
+    all[`${name}${SIGNED_OUT}`] = { ...rest, signedOut: true }
+  }
   return all
 }
 
@@ -144,7 +160,8 @@ async function simPost(sim, path, body, what) {
  * Accounts for a throwaway: each `name` or `name=<credential>` resolved,
  * created (or reset to the fixture's state when fresh) in the simulator. A
  * sign-in fixture is signed in: its `grant` is the OAuth credential pi-ai
- * stores for the route (`{ type: 'oauth', access, refresh, expires }`).
+ * stores for the route (`{ type: 'oauth', access, refresh, expires }`); a
+ * signed-out one keeps its `route` (and rows) with no grant.
  * @returns {Promise<Array<{ name, provider, credential, env?, settings?, route?, grant? }>>}
  */
 export async function provisionAccounts(sim, spec, suffix) {
@@ -161,9 +178,11 @@ export async function provisionAccounts(sim, spec, suffix) {
     if (fixture.signIn) {
       const route = fixture.signIn
       if (out.some(a => a.route === route)) throw new DsdError(`${out.find(a => a.route === route).name} and ${name} both sign in to ${route}; a throwaway holds one sign-in per route`)
+      account.route = route
+      if (fixture.signedOut) { out.push(account); continue }
       const issued = await simPost(sim, '/_sim/sign-in', { provider: fixture.provider, email: credential }, `the sign-in of ${name}`)
       // As pi-ai's login stores it: expiry five minutes early, so it refreshes in time.
-      Object.assign(account, { route, grant: { type: 'oauth', refresh: issued.refresh_token, access: issued.access_token, expires: Date.now() + issued.expires_in * 1000 - 5 * 60 * 1000 } })
+      Object.assign(account, { grant: { type: 'oauth', refresh: issued.refresh_token, access: issued.access_token, expires: Date.now() + issued.expires_in * 1000 - 5 * 60 * 1000 } })
     }
     out.push(account)
   }

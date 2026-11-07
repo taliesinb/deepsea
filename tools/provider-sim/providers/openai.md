@@ -84,6 +84,7 @@ started resets a full length from now).
 | `openai`, `openai-low` | OpenAI API key (`OPENAI_API_KEY`, route `openai`): $10, 5¢ of credit |
 | `codex-plus` | ChatGPT Plus, `plus@example.com`, signed in to `openai-codex-oauth` |
 | `codex-pro-80` | ChatGPT Pro with the primary window at 80% (`pro80@example.com`) |
+| `codex-plus-signed-out`, `codex-pro-80-signed-out` | the same accounts and route, not signed in (no grant stored) |
 
 A Plan fixture is signed in by dsd through `/_sim/sign-in` (the grant
 `{ type: oauth, access, refresh, expires }` in `.credentials.yaml`; pi-ai's

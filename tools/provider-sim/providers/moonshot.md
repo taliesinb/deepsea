@@ -64,6 +64,7 @@ script's `error` kinds as Anthropic's types.
 |---|---|
 | `kimi` | Kimi API key (`MOONSHOT_API_KEY`, route `moonshotai`): $10 |
 | `kimi-plan` | Kimi Code Plan, Pro, `kimi@example.com`, signed in to `kimi-coding-oauth` |
+| `kimi-plan-signed-out` | the same account and route, not signed in (no grant stored) |
 
 `kimi-plan` is signed in as every Plan fixture is (`/_sim/sign-in`, the grant
 pi-ai stores: `{ type: oauth, access, refresh, expires }`); `/login` → "Kimi

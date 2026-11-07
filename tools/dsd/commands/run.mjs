@@ -88,7 +88,8 @@ const merge = (a, b) => {
  * Point a throwaway at the provider simulator: start it if needed, provision
  * its accounts (default: `standard`, one per provider route), and write the settings
  * those routes need and the sign-ins of Plan accounts (the grant pi-ai would
- * have stored after a browser sign-in). Returns the environment for its server.
+ * have stored after a browser sign-in; none for a `-signed-out` fixture).
+ * Returns the environment for its server.
  */
 async function simulate(id, home, build, spec = 'standard') {
   const sim = await ensureSim(build)
@@ -404,7 +405,7 @@ export async function run(argv, hooks = {}) {
   }
 
   printJson({
-    ...(simulation ? { simulated: { url: simulation.url, accounts: simulation.accounts.map(a => ({ name: a.name, provider: a.provider, credential: a.credential, ...(a.route ? { signedIn: a.route } : {}) })) } } : {}),
+    ...(simulation ? { simulated: { url: simulation.url, accounts: simulation.accounts.map(a => ({ name: a.name, provider: a.provider, credential: a.credential, ...(a.route ? { [a.grant ? 'signedIn' : 'signedOut']: a.route } : {}) })) } } : {}),
     id, name: variantName(id), display: displayName(id), home, mode,
     url: facts.url, login, token: facts.token,
     pid: child.pid, port, log: facts.log, harness: commit.slice(0, 10), ...(source ? { source: `${source.ref} (${source.commit.slice(0, 10)})` } : {}), plugins: plugins.map(p => p.name), detached: Boolean(args.detach), expires,
