@@ -43,7 +43,7 @@ commands and unknown fields are errors.
 |---|---|---|
 | `say` | `text`; `chunks` (≥ 1), `chunkDelay` (seconds) | a text block, streamed in `chunks` pieces `chunkDelay` apart |
 | `think` | as `say` | a reasoning block |
-| `tool` | `name`; `args` (object, default `{}`), `id` | a tool call. Consecutive `tool` lines are parallel calls in one response. A tool call ends the response: the harness runs the tools and asks again, and the script continues after them |
+| `tool` | `name`; `args` (object, default `{}`), `id`; `chunks` (≥ 1), `chunkDelay` (seconds) | a tool call, its arguments streamed in `chunks` pieces `chunkDelay` apart (a long `write` as a model streams it). Consecutive `tool` lines are parallel calls in one response. A tool call ends the response: the harness runs the tools and asks again, and the script continues after them |
 | `expect` | `contains`, `equals` and/or `isError`; `tool` (an `id`) | checks a result of the tool calls just before it (the last one, or the one named by `tool`); a mismatch fails the request (`SCRIPT_EXPECTATION`) with what was expected and what came back |
 | `sleep` | `time` (seconds, ≤ 600) | waits; a cancelled turn ends it at once |
 | `usage` | `input`, `output`; `cacheRead`, `cacheWrite`, `reasoning` | the token usage to report for this response (otherwise four characters per token) |

@@ -116,7 +116,11 @@ export class ScriptedAdapter extends LlmAdapter {
           const id = `scripted-${hash}-${position}-${step.id ?? step.line}`
           const args = JSON.stringify(step.args ?? {})
           yield { type: 'block-start', index, blockType: 'tool-call' }
-          yield { type: 'tool-call-delta', index, id, name: step.name, argumentsDelta: args }
+          // The arguments stream in `chunks` pieces `chunkDelay` apart, as a model streams a long write.
+          for (const [i, piece] of chunk(args, step.chunks ?? 1).entries()) {
+            if (i > 0 && step.chunkDelay) await sleep(step.chunkDelay, signal)
+            yield { type: 'tool-call-delta', index, id, name: step.name, argumentsDelta: piece }
+          }
           yield { type: 'block-end', index, block: { type: 'tool-call', id, name: step.name, arguments: args } }
           calls.push(id)
           emitted += args.length

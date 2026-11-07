@@ -38,7 +38,7 @@ const isBool = v => typeof v === 'boolean'
 const SCHEMA = {
   say: { text: [isString, true, 'a string'], chunks: [isPositiveInt, false, 'a whole number ≥ 1'], chunkDelay: [isSeconds(60), false, 'seconds from 0 to 60'] },
   think: { text: [isString, true, 'a string'], chunks: [isPositiveInt, false, 'a whole number ≥ 1'], chunkDelay: [isSeconds(60), false, 'seconds from 0 to 60'] },
-  tool: { name: [isNonEmptyString, true, 'a tool name'], args: [isObject, false, 'an object'], id: [isNonEmptyString, false, 'a non-empty string'] },
+  tool: { name: [isNonEmptyString, true, 'a tool name'], args: [isObject, false, 'an object'], id: [isNonEmptyString, false, 'a non-empty string'], chunks: [isPositiveInt, false, 'a whole number ≥ 1'], chunkDelay: [isSeconds(60), false, 'seconds from 0 to 60'] },
   expect: { contains: [isString, false, 'a string'], equals: [isString, false, 'a string'], isError: [isBool, false, 'true or false'], tool: [isNonEmptyString, false, "a tool command's id"] },
   sleep: { time: [isSeconds(), true, 'seconds from 0 to 600'] },
   usage: { input: [isCount, true, 'a whole number ≥ 0'], output: [isCount, true, 'a whole number ≥ 0'], cacheRead: [isCount, false, 'a whole number ≥ 0'], cacheWrite: [isCount, false, 'a whole number ≥ 0'], reasoning: [isCount, false, 'a whole number ≥ 0'] },
@@ -51,7 +51,7 @@ const SCHEMA = {
 const PURPOSE = {
   say: 'a text block, streamed in `chunks` pieces `chunkDelay` s apart',
   think: 'a reasoning block, as `say`',
-  tool: 'a tool call; consecutive `tool` lines are one response, and the script continues after the results',
+  tool: 'a tool call, its arguments streamed in `chunks` pieces `chunkDelay` s apart; consecutive `tool` lines are one response, and the script continues after the results',
   expect: 'checks a result of the tool calls just before it (the last, or the one whose `id` is `tool`)',
   sleep: 'waits `time` s',
   usage: 'the token usage this response reports',
