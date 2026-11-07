@@ -101,8 +101,9 @@ Both this repository and the harness fork are kept as **topic branches**:
   conflicts. `dsd topics integrate` rebuilds the integration branches,
   `integration/<upstream>` in the harness and `integration/base` here,
   by merging the topics in order; `dsd run <v> --source integration/base`
-  runs everything together. Regenerating generated files (lockfiles,
-  notices, translation records) at integration is not built yet.
+  runs everything together. In the harness integration, dsd makes the
+  generated files again (the lockfile, the catalogs, the graph docs, and
+  the translation record of any README pair whose record conflicted).
 - **Only `topic/base` touches shared files and the harness pin.** Plugin
   topics add their own directories; registries that list plugins or recipes
   are derived by scanning, not edited by hand, so topics do not conflict.

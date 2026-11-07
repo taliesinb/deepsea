@@ -48,8 +48,12 @@ const isAncestor = (repo, a, b) => spawnSync('git', ['merge-base', '--is-ancesto
  * generated region inside a hand-written README) stops the integration.
  */
 export const HARNESS_GENERATED = {
-  /** Every catalog generator, run on every integration so a clean merge cannot leave a stale catalog either. */
-  generators: ['gen-config-catalog', 'gen-tool-catalog', 'gen-cordis-catalog', 'gen-cordis-inspect-catalog', 'gen-client-catalog'],
+  /**
+   * Every catalog generator, run on every integration so a clean merge cannot leave a stale catalog either;
+   * and the graph docs (`gen-doc-graphs`), whose generated tables cite source lines that topics shift. Those
+   * docs are partly hand-written, so a conflict in them still stops the integration (not in `isGenerated`).
+   */
+  generators: ['gen-config-catalog', 'gen-tool-catalog', 'gen-cordis-catalog', 'gen-cordis-inspect-catalog', 'gen-client-catalog', 'gen-doc-graphs'],
   /** Whole generated files. */
   isGenerated: path => path === 'pnpm-lock.yaml'
     || /(^|\/)README\.i18n\.yaml$/.test(path)
