@@ -55,7 +55,7 @@ usage windows and prices, and the replies are scripts
 | test a plugin's server half | `dsd run release --throwaway-server --detach --scripted --plugins <names>` |
 | test what a person sees | `dsd run release --throwaway-app --detach --scripted --plugins <names>`: the macOS app, hidden |
 | test restarts and cold starts | `--throwaway` instead: the app behind a relay, as installed |
-| involve providers (models, sign-in, billing, quotas, provider errors) | add `--simulated` (default accounts `standard`; `--accounts openrouter-low,anthropic-max-80` for edge states; `dsd sim fixtures` lists them) |
+| involve providers (models, sign-in, billing, quotas, provider errors) | add `--simulated` (default accounts `standard`; `--accounts openrouter-low,anthropic-max-80,codex-plus-signed-out` for edge states; `dsd sim fixtures` lists them) |
 | run everything together | add `--source integration/base` (after `dsd topics integrate`) |
 | drive it | `dsd drive -v <id> prompt - \| command /x \| open-session \| wait-page \| click \| hover \| type \| eval \| snapshot --window \| opened \| restart-server` (a prompt with no session goes to the latest, or a new one; read the snapshot PNGs) |
 | find an option | `dsd <command> --help`; `--get <path>` prints one field of any command's JSON (`--get id`, `--get summary.text`) |
