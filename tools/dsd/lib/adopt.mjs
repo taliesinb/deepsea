@@ -1,6 +1,6 @@
 /**
- * `dsd adopt`: bring an old DSH home (`~/.dsh…`, before DeepSea)
- * into a DeepSea home. It copies and never moves (Plan sign-ins only with
+ * `dsd adopt`: bring an old DSH home (`~/.dsh…`, before DeepSea), or another
+ * DeepSea variant's home, into a DeepSea home. It copies and never moves (Plan sign-ins only with
  * `moveSignIns`), never writes outside the new home (and its backups), and
  * is re-runnable: `<new home>/adopted.json` records what came from where,
  * so a later run brings what is new or changed in the old home and reports
@@ -13,9 +13,10 @@ import {
   constants, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync,
 } from 'node:fs'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
-import { HARNESS_BUNDLE, normalizeMap } from './adopt-map.mjs'
+import { DEEPSEA_ENTRIES, HARNESS_BUNDLE, normalizeMap } from './adopt-map.mjs'
+import { renameRowLines } from './migrate-home.mjs'
 import { mainCheckout, REPO } from './paths.mjs'
-import { currentName } from './renames.mjs'
+import { currentName, currentStatePath } from './renames.mjs'
 import { DsdError, git, isoLocal } from './util.mjs'
 
 export const MANIFEST = 'adopted.json'
@@ -115,6 +116,25 @@ function makeIo(roots, dryRun) {
   }
 }
 
+/**
+ * A DeepSea home's variant.yml (flat YAML, written by dsd), or undefined for an old DSH home.
+ * @returns {{ id?: string, client?: boolean, ports?: number } | undefined}
+ */
+export function sourceVariant(home) {
+  let text
+  try { text = readFileSync(join(home, 'variant.yml'), 'utf8') } catch { return undefined }
+  const field = name => new RegExp(`^${name}:\\s*(.*?)\\s*$`, 'm').exec(text)?.[1]?.replace(/^(["'])(.*)\1$/, '$2')
+  return { id: field('id'), client: field('client') === 'true', ...(field('ports') ? { ports: Number(field('ports')) } : {}) }
+}
+
+/** A JSON file's text without its access token(s) (`token`: the file's own; `servers`: each server's). */
+function withoutSecret(path, kind) {
+  const value = JSON.parse(readFileSync(path, 'utf8'))
+  if (kind === 'token') delete value.token
+  if (kind === 'servers') for (const server of value.servers ?? []) delete server.token
+  return `${JSON.stringify(value, null, 2)}\n`
+}
+
 /** The manifest of earlier adoptions into a home. */
 export function readManifest(home) {
   try {
@@ -143,7 +163,9 @@ export function adopt(o) {
   const source = resolve(o.source)
   const target = resolve(o.target)
   if (source === target) throw new DsdError('the old home and the new home are the same directory')
-  if (existsSync(join(source, 'variant.yml'))) throw new DsdError(`${source} is a DeepSea home (it has a variant.yml), not an old DSH home`)
+  // Another DeepSea variant's home (it has a variant.yml): its own per-variant entries stay behind.
+  const variant = sourceVariant(source)
+  if (variant?.client) throw new DsdError(`${source} is a thin client's home: it has no sessions`)
   if (!existsSync(join(source, 'sessions')) && !existsSync(join(source, 'settings.yaml'))) throw new DsdError(`${source} does not look like a DSH home (no sessions/, no settings.yaml)`)
   const Y = o.yaml ?? yamlLib()
   const map = o.map ?? normalizeMap({})
@@ -155,12 +177,13 @@ export function adopt(o) {
 
   const report = {
     source, target, dryRun, throwaway: Boolean(o.throwaway),
+    sourceKind: variant ? 'deepsea' : 'dsh', ...(variant?.id ? { sourceVariant: variant.id } : {}),
     map: map.path ?? 'none: old plugins\' state and rows are reported as unknown (lib/adopt-map.mjs)',
     categories: {},
     sessions: { new: 0, updated: 0, unchanged: 0, kept: 0, removedInNewHome: 0, bytes: 0 },
     workspaces: { added: [], merged: [], sessionsRegistered: 0 },
     rows: { carried: [], translated: [], unchanged: [], dropped: [] },
-    bundles: { thirdParty: [], oldPlugins: {} },
+    bundles: { thirdParty: [], oldPlugins: {}, deepsea: [] },
     credentials: { keys: [], signIns: [], movedSignIns: [], leftOut: [] },
     settings: { oldSections: [] },
     translated: [],
@@ -363,14 +386,30 @@ export function adopt(o) {
 
   // --- Old plugins' state, into the DeepSea plugins' places; everything else reported.
   const handled = new Set()
+  const entries = variant ? [...DEEPSEA_ENTRIES, ...map.entries] : map.entries
   for (const name of readdirSafe(source)) {
-    const entry = map.entries.find(e => e.name === name || e.match?.test(name))
+    const entry = entries.find(e => e.name === name || e.match?.test(name))
     if (!entry) {
       report.unknown.push({ what: name, bytes: sizeOf(join(source, name)) })
       continue
     }
     if (entry.skip) { report.skipped.push({ what: name, why: entry.skip, bytes: sizeOf(join(source, name)) }); continue }
     if (entry.own) continue
+    if (entry.plugins) {
+      // A DeepSea home's plugin state, each file under its plugin's current name (plugins/<old>/… → plugins/<new>/…).
+      const links = []
+      for (const rel of walk(join(source, name), { links })) {
+        const key = currentStatePath(join(name, rel))
+        const secret = o.throwaway ? entry.secrets?.[key] : undefined
+        const srcPath = join(source, name, rel)
+        if (secret) report.skipped.push({ what: `${join(name, rel)}: access token${secret === 'servers' ? 's' : ''}`, why: 'a throwaway never gets credentials' })
+        syncFile({ srcPath, destPath: join(target, key), key, category: entry.what, content: secret ? () => withoutSecret(srcPath, secret) : undefined })
+      }
+      for (const rel of links) report.skipped.push({ what: join(name, rel), why: 'a symbolic link' })
+      const renamed = readdirSafe(join(source, name)).filter(dir => currentName(dir) !== dir).map(dir => `${name}/${dir}/ → ${name}/${currentName(dir)}/`)
+      report.translated.push(renamed.length ? `${name}/ (${renamed.join(', ')})` : `${name}/`)
+      continue
+    }
     if (entry.tree) {
       // A tree, with files at its top that have places of their own (`files`).
       const own = entry.files ?? {}
@@ -387,12 +426,7 @@ export function adopt(o) {
     let content
     if (o.throwaway && entry.secret) {
       // An access token is a credential: never into a throwaway.
-      content = () => {
-        const value = JSON.parse(readFileSync(srcPath, 'utf8'))
-        if (entry.secret === 'token') delete value.token
-        if (entry.secret === 'servers') for (const server of value.servers ?? []) delete server.token
-        return `${JSON.stringify(value, null, 2)}\n`
-      }
+      content = () => withoutSecret(srcPath, entry.secret)
       report.skipped.push({ what: `${name}: access token${entry.secret === 'servers' ? 's' : ''}`, why: 'a throwaway never gets credentials' })
     }
     syncFile({ srcPath, destPath: join(target, entry.file), key: entry.file, category: entry.what, content })
@@ -403,6 +437,9 @@ export function adopt(o) {
   // --- Backups (`<old home>-backups/`), beside the variant's home; never for a throwaway (they hold credentials).
   const oldBackups = `${source}-backups`
   const zips = readdirSafe(oldBackups).filter(n => n.endsWith('.zip'))
+  // A DeepSea variant's backups (`_backups/<v>/` beside its home) stay with it: they hold credentials, and /restore restores them there.
+  const variantBackups = variant ? join(dirname(source), '_backups', variant.id ?? basename(source)) : undefined
+  if (variantBackups && existsSync(variantBackups)) report.skipped.push({ what: variantBackups, why: "the source variant's backups stay with it", bytes: sizeOf(variantBackups) })
   if (zips.length && (o.throwaway || !o.backups)) report.skipped.push({ what: oldBackups, why: 'backups hold credentials: not into a throwaway', bytes: sizeOf(oldBackups) })
   else if (zips.length) {
     for (const zip of zips) syncFile({ srcPath: join(oldBackups, zip), destPath: join(o.backups, zip), key: join('_backups', zip), category: 'backups (old format: session-import reads them; /restore does not)' })
@@ -671,7 +708,9 @@ function adoptRows({ source, target, io, m, report, conflict, Y, plugins, throwa
   if (!existsSync(srcPath) && Object.keys(settingsInto).length === 0) return
   const parseRow = text => { try { return Y.parse(text, { customTags: [JS_TAG] })?.[0] } catch { return undefined } }
   const wanted = []
-  for (const text of existsSync(srcPath) ? splitRows(readFileSync(srcPath, 'utf8')).rows : []) {
+  for (const original of existsSync(srcPath) ? splitRows(readFileSync(srcPath, 'utf8')).rows : []) {
+    // A DeepSea home's rows name its plugins as its build did: under their current names here (lib/renames.mjs).
+    const text = renameRowLines(original)
     const value = parseRow(text)
     if (value === undefined) { report.rows.dropped.push({ row: text.split('\n').find(l => l.startsWith('-')), why: 'not readable as YAML' }); continue }
     if (Array.isArray(value.insert)) {
@@ -692,6 +731,13 @@ function adoptRows({ source, target, io, m, report, conflict, Y, plugins, throwa
     }
     const id = value.id
     if (typeof id === 'string' && missingBundles.has(id)) { report.rows.dropped.push({ row: id, why: 'its bundle is not installed' }); continue }
+    // A DeepSea plugin's own row (a DeepSea home's): carried when a plugin of this variant has it.
+    if (typeof id === 'string' && id.startsWith('deepsea-') && !map.rows[id]) {
+      const was = parseRow(original)?.id
+      if (![...plugins.values()].some(p => (p.rows ?? []).includes(id))) { report.rows.dropped.push({ row: was, why: `no DeepSea plugin of this variant has the row ${id}` }); continue }
+      wanted.push({ key: `id:${id}`, text, outcome: was !== id ? { translated: { from: was, to: id } } : { carried: `id:${id}` } })
+      continue
+    }
     if (typeof id !== 'string' || !map.rows[id]) {
       const base = typeof id === 'string' ? bundleRows.get(id) : undefined
       const missing = base && value.config && typeof value.config === 'object' ? Object.keys(base).filter(key => !(key in value.config)) : []
@@ -786,6 +832,8 @@ function adoptBundles({ source, target, report, installBundle, dryRun, plugins, 
   try { installed = JSON.parse(readFileSync(join(target, 'profiles', 'web', 'package.json'), 'utf8')).dependencies ?? {} } catch { /* no profile yet */ }
   for (const [name, spec] of Object.entries(manifest.dependencies ?? {})) {
     if (HARNESS_BUNDLE(name)) continue
+    // DeepSea's own bundles (a DeepSea home's): dsd installs the variant's plugins itself (dsd build --install).
+    if (name.startsWith('@deepsea/')) { report.bundles.deepsea.push(name); continue }
     if (map.packages[name]) {
       const plugin = map.packages[name].plugin
       report.bundles.oldPlugins[name] = !plugin ? `not in DeepSea: ${map.packages[name].note ?? 'not ported'}` : plugins.has(plugin) ? plugin : `the DeepSea plugin ${plugin} is not in this variant (not ported, or left out)`

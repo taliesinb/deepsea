@@ -1,8 +1,8 @@
 /**
- * dsd adopt <old home> (<variant> | --throwaway [run options…]) [--move-sign-ins] [--dry-run]
+ * dsd adopt <home> (<variant> | --throwaway [run options…]) [--move-sign-ins] [--dry-run]
  *
- * Brings an old DSH home (`~/.dsh`, `~/.dsh-<name>`, …) into a DeepSea
- * variant: sessions and their attachments, the workspace registry,
+ * Brings an old DSH home (`~/.dsh`, `~/.dsh-<name>`, …), or another DeepSea
+ * variant's home (`~/.deepsea/<v>`), into a DeepSea variant: sessions and their attachments, the workspace registry,
  * settings.yaml, API keys, each old plugin's state in its DeepSea place, the
  * old profile's own rows and third-party bundles (lib/adopt.mjs). Copies,
  * never moves; re-runnable (`<home>/adopted.json`); never writes the old
@@ -11,7 +11,7 @@
  * created as `dsd new` would (the old instance's colour); building and
  * installing it stays `dsd build <v> --install`. The variant must not be
  * running. `--throwaway` adopts into a fresh throwaway (`release`'s, or the
- * old home's name: `~/.dsh-lab` → `lab-<hex>`; every plugin unless
+ * old home's name: `~/.dsh-lab` → `lab-<hex>`, a variant's home: its id; every plugin unless
  * `--plugins`) and starts it as `dsd run … --throwaway` does, passing the run
  * options through (`--throwaway-app`, `--throwaway-server`, `--detach`,
  * `--simulated`, `--source`, …); it never gets credentials, backups or access
@@ -22,7 +22,8 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readlinkSync, realpathSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
-import { adopt, availablePlugins, oldColor, yamlLib } from '../lib/adopt.mjs'
+import { adopt, availablePlugins, oldColor, sourceVariant, yamlLib } from '../lib/adopt.mjs'
+import { listening, OFFSETS } from '../lib/install.mjs'
 import { loadAdoptMap } from '../lib/adopt-map.mjs'
 import { migrateHome, migrationSummary } from '../lib/migrate-home.mjs'
 import { currentName } from '../lib/renames.mjs'
@@ -35,7 +36,7 @@ import { checkNamedId, readVariant } from '../lib/variants.mjs'
 import { run } from './run.mjs'
 import { createVariant, namedStatus } from './variant.mjs'
 
-const USAGE = 'dsd adopt <old home> (<variant> | --throwaway [run options…]) [--move-sign-ins] [--dry-run]'
+const USAGE = 'dsd adopt <home> (<variant> | --throwaway [run options…]) [--move-sign-ins] [--dry-run]'
 const RUN_VALUED = ['source', 'harness', 'timeout', 'plugins', 'ttl', 'app', 'patch', 'accounts']
 const RUN_FLAGS = ['throwaway-app', 'throwaway-server', 'detach', 'visible', 'scripted', 'simulated', 'keep']
 
@@ -81,12 +82,18 @@ export async function adoptCommand(argv) {
   const moveSignIns = Boolean(args['move-sign-ins'])
   const runOptions = Object.keys(args).filter(k => RUN_VALUED.includes(k) || RUN_FLAGS.includes(k))
   const map = await loadAdoptMap()
+  // Another variant's home: copied as it is now, even while it runs (a session written meanwhile comes with the next adopt).
+  const sourceConfig = sourceVariant(source)
+  if (sourceConfig?.ports && !dryRun) {
+    const up = await listening(sourceConfig.ports + OFFSETS.relay) || await listening(sourceConfig.ports + OFFSETS.dsh)
+    if (up) note(`${sourceConfig.id ?? source} is running: its sessions are copied as they are now; what it writes meanwhile comes with the next dsd adopt`)
+  }
 
   if (args.throwaway) {
     if (variant !== undefined) usage(`${USAGE}: a variant or --throwaway, not both`)
     if (moveSignIns) usage('--move-sign-ins refuses --throwaway: a throwaway never gets credentials')
     // The throwaway's parent: the old instance's name (`~/.dsh-lab` → lab), else release.
-    const named = /^\.dsh-([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(basename(source))?.[1]
+    const named = sourceConfig?.id ?? /^\.dsh-([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(basename(source))?.[1]
     const parent = named && !/-[0-9a-f]{6}$/.test(named) ? named : 'release'
     if (dryRun) {
       // As the run would select them: every plugin but the machine-wide ones, unless --plugins names some.

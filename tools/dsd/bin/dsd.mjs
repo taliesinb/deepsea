@@ -30,7 +30,7 @@ const HELP = `dsd — DeepSea developer CLI (tools/dsd/README.md)
   dsd run <v> [--no-app]   (an installed named variant; a thin client: its app)
   dsd client <v> [<server>] [--source <ref>] [--color <hex>] [--dock]   (macOS: the app for a server elsewhere)
   dsd remove <v> [--home] [--self]
-  dsd adopt <old home> (<variant> | --throwaway [run options…]) [--move-sign-ins] [--dry-run]
+  dsd adopt <home> (<variant> | --throwaway [run options…]) [--move-sign-ins] [--dry-run]
   dsd run <variant> --throwaway | --throwaway-app | --throwaway-server [--visible] [--detach] [--scripted] [--plugins <names|all>]
           [--app <checkout|ref>] [--patch <file>,…] [--source <ref, e.g. integration/base>] [--simulated [--accounts <names>]] [--harness <ref>] [--ttl <min>] [--keep]
   dsd stop [<variant>] [--keep]

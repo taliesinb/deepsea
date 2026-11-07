@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -171,7 +171,8 @@ function snapshot(dir) {
   const visit = (rel) => {
     for (const entry of readdirSync(join(dir, rel), { withFileTypes: true })) {
       const path = join(rel, entry.name)
-      if (entry.isDirectory()) visit(path)
+      if (entry.isSymbolicLink()) out[path] = `-> ${readlinkSync(join(dir, path))}`
+      else if (entry.isDirectory()) visit(path)
       else out[path] = `${createHash('sha256').update(readFileSync(join(dir, path))).digest('hex')} ${statSync(join(dir, path)).mtimeMs}`
     }
   }
@@ -449,4 +450,138 @@ test('profile rows after the harness template: its empty `[]` goes, so the patch
   const text = read(target, 'profiles', 'web', 'cordis.patch.yml')
   assert.doesNotMatch(text, /^\[\]$/m)
   assert.ok(Array.isArray(Y.parse(text)) && Y.parse(text).length > 0)
+})
+
+/** Another DeepSea variant's home, as a build from before the plugin renames left it. */
+function variantHome(name, { client = false } = {}) {
+  const home = join(root, 'other-root', name)
+  put(join(home, 'variant.yml'), client ? `id: ${name}\nclient: true\nurl: https://node.example.ts.net/deepsea/\n` : `# DeepSea: written by dsd\nid: ${name}\nports: 3200\nplugins: all\n`)
+  if (client) return home
+  for (const id of [S1, S2]) put(join(home, 'sessions', PROJECT, id, 'session.v4.jsonl.zstd'), `log ${id}`)
+  put(join(home, 'sessions', PROJECT, S1, 'session.lock'), '')
+  put(join(home, 'storages', 'workspace.json'), JSON.stringify({
+    unit: { name: 'workspace', version: 2 },
+    global: { initialized: true, workspaceIds: [WS], pinnedSessionIds: [S1] },
+    tables: { workspaces: { [WS]: { path: '/Users/USER/projects/demo', title: 'demo', sessionIds: [S1, S2] } } }, // dsd-check: allow
+  }))
+  put(join(home, 'attachments', 'v1', 'objects', 'cd', 'cdef01'), 'an image')
+  put(join(home, 'relay', 'state.json'), '{"token":"fake-standing-token"}')
+  put(join(home, 'run', 'state.json'), '{}')
+  put(join(home, '.anonymous-user-id'), 'x')
+  put(join(home, 'cache', 'attachments', 'x'), 'cached')
+  put(join(home, 'plugins', 'tailscale', 'state.json'), JSON.stringify({ version: 1, allowedUsers: ['user@example.com'], token: 'fake-proxy-token' }))
+  put(join(home, 'plugins', 'billing', 'connections', 'anthropic-oauth-global.json'), '{"a":1}')
+  put(join(home, 'plugins', 'some-new-plugin', 'state.json'), '{}')
+  put(join(home, 'session-move-backups', 'session-x', 'session.v4.jsonl.zstd'), 'moved')
+  put(join(home, '.credentials.yaml'), [
+    'version: 1',
+    'records:',
+    '  client-connection/browser-session: { kind: grant, payload: { version: 1, secret: fake-secret } }',
+    '  llm-pi-ai/anthropic-oauth: { kind: grant, payload: { type: oauth, refresh: fake-refresh, access: fake-access, expires: 1 } }',
+    'refs:',
+    '  ZAI_API_KEY: fake-zai-key',
+    '',
+  ].join('\n'))
+  put(join(home, 'profiles', 'web', 'package.json'), JSON.stringify({
+    name: 'dsh-profile-web', private: true,
+    dependencies: { '@deepsea/server-log': 'link:/Users/USER/.deepsea/_builds/deepsea-0/plugins/server-log', '@deepsea/billing': 'link:/Users/USER/.deepsea/_builds/deepsea-0/plugins/billing' },
+    dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepsea/server-log', '@deepsea/billing'] } },
+  }))
+  put(join(home, 'profiles', 'web', 'cordis.patch.yml'), [
+    '# Your patch layer for this dsh profile.',
+    '- id: agent-default-model',
+    '  name: "@deepseek-ai/dsh-agent-default-model"',
+    '  config:',
+    '    provider: anthropic-oauth',
+    '    model: claude-opus-5-5',
+    '# my billing settings',
+    '- id: deepsea-billing',
+    '  name: "@deepsea/billing"',
+    '  config:',
+    '    showCost: true',
+    '- id: deepsea-gone',
+    '  disabled: true',
+    '',
+  ].join('\n'))
+  put(join(root, 'other-root', '_backups', name, 'b.zip'), 'zip')
+  for (const link of ['logs', 'support', 'source']) symlinkSync(join(root, 'nowhere', link), join(home, link))
+  return home
+}
+
+test('a DeepSea home as the source: its sessions and state come, its per-variant entries stay, names are current', { skip }, () => {
+  const source = variantHome('release')
+  const target = join(root, 'deepsea', 'from-release')
+  const before = snapshot(source)
+  const { report, installs } = run(source, target, { backups: join(root, 'deepsea', '_backups', 'from-release') })
+  assert.deepEqual(snapshot(source), before, 'the source home is untouched')
+  assert.equal(report.sourceKind, 'deepsea')
+  assert.equal(report.sourceVariant, 'release')
+  // DSH's state, as from any home.
+  assert.equal(report.sessions.new, 2)
+  assert.equal(read(target, 'sessions', PROJECT, S1, 'session.v4.jsonl.zstd'), `log ${S1}`)
+  assert.equal(existsSync(join(target, 'sessions', PROJECT, S1, 'session.lock')), false)
+  assert.deepEqual(JSON.parse(read(target, 'storages', 'workspace.json')).global.pinnedSessionIds, [S1])
+  assert.ok(existsSync(join(target, 'attachments', 'v1', 'objects', 'cd', 'cdef01')))
+  assert.ok(existsSync(join(target, 'session-move-backups', 'session-x', 'session.v4.jsonl.zstd')))
+  // Plugin state under the plugins' current names; a named variant keeps the proxy token.
+  assert.equal(JSON.parse(read(target, 'plugins', 'host-tailscale', 'state.json')).token, 'fake-proxy-token')
+  assert.equal(read(target, 'plugins', 'llm-billing', 'connections', 'anthropic-oauth-global.json'), '{"a":1}')
+  assert.ok(existsSync(join(target, 'plugins', 'some-new-plugin', 'state.json')))
+  for (const old of ['tailscale', 'billing']) assert.equal(existsSync(join(target, 'plugins', old)), false, old)
+  // What dsd makes per variant stays behind.
+  for (const what of ['variant.yml', 'relay', 'run', 'logs', 'support', 'source', 'cache', '.anonymous-user-id']) {
+    assert.equal(existsSync(join(target, what)), false, what)
+    assert.ok(report.skipped.some(s => s.what === what), what)
+  }
+  assert.ok(report.skipped.some(s => s.what === join(root, 'other-root', '_backups', 'release')), 'its backups stay with it')
+  assert.equal(existsSync(join(root, 'deepsea', '_backups', 'from-release')), false)
+  // Keys come, sign-ins and the browser-session secret do not.
+  const creds = Y.parse(read(target, '.credentials.yaml'))
+  assert.deepEqual(creds.refs, { ZAI_API_KEY: 'fake-zai-key' })
+  assert.equal(creds.records?.['llm-pi-ai/anthropic-oauth'], undefined)
+  assert.equal(creds.records?.['client-connection/browser-session'], undefined)
+  // DeepSea's bundles are dsd's to install; nothing installed, nothing reported as a local link.
+  assert.deepEqual(installs, [])
+  assert.deepEqual(report.bundles.deepsea, ['@deepsea/server-log', '@deepsea/billing'])
+  assert.deepEqual(report.bundles.thirdParty, [])
+  // Rows: the harness row as it is, the DeepSea row under its current name, a row no plugin has dropped.
+  const text = read(target, 'profiles', 'web', 'cordis.patch.yml')
+  assert.match(text, /# my billing settings\n- id: deepsea-llm-billing\n {2}name: "@deepsea\/llm-billing"\n {2}config:\n {4}showCost: true/)
+  assert.match(text, /- id: agent-default-model/)
+  assert.doesNotMatch(text, /deepsea-billing|deepsea-gone/)
+  assert.deepEqual(report.rows.translated, [{ from: 'deepsea-billing', to: 'deepsea-llm-billing' }])
+  assert.ok(report.rows.dropped.some(d => d.row === 'deepsea-gone'))
+  assert.deepEqual(report.conflicts, [])
+})
+
+test('a DeepSea home re-adopted: nothing twice; a session continued in both homes is a conflict', { skip }, () => {
+  const source = variantHome('again-release')
+  const target = join(root, 'deepsea', 'from-again')
+  run(source, target)
+  const first = read(target, 'profiles', 'web', 'cordis.patch.yml')
+  const again = run(source, target).report
+  assert.equal(again.sessions.new + again.sessions.updated, 0)
+  assert.deepEqual(again.conflicts, [])
+  assert.equal(read(target, 'profiles', 'web', 'cordis.patch.yml'), first)
+  assert.equal(first.match(/- id: deepsea-llm-billing/g).length, 1)
+  assert.equal(again.categories["DeepSea plugins' state"].unchanged, 3)
+  writeFileSync(join(source, 'sessions', PROJECT, S2, 'session.v4.jsonl.zstd'), 'continued in the source')
+  writeFileSync(join(target, 'sessions', PROJECT, S2, 'session.v4.jsonl.zstd'), 'continued in the target')
+  writeFileSync(join(source, 'plugins', 'billing', 'connections', 'anthropic-oauth-global.json'), '{"a":2}')
+  const third = run(source, target).report
+  assert.ok(third.conflicts.some(c => c.what.includes(S2)))
+  assert.equal(read(target, 'sessions', PROJECT, S2, 'session.v4.jsonl.zstd'), 'continued in the target')
+  assert.equal(read(target, 'plugins', 'llm-billing', 'connections', 'anthropic-oauth-global.json'), '{"a":2}')
+})
+
+test('a DeepSea home into a throwaway: no credentials or access tokens; a thin client is refused', { skip }, () => {
+  const source = variantHome('to-throwaway')
+  const target = join(root, 'deepsea', 'release-0f0f0f')
+  const { report } = run(source, target, { throwaway: true })
+  assert.equal(existsSync(join(target, '.credentials.yaml')), false)
+  const state = JSON.parse(read(target, 'plugins', 'host-tailscale', 'state.json'))
+  assert.equal(state.token, undefined)
+  assert.deepEqual(state.allowedUsers, ['user@example.com'])
+  assert.ok(report.skipped.some(s => s.what === 'plugins/tailscale/state.json: access token'))
+  assert.throws(() => run(variantHome('lab', { client: true }), join(root, 'deepsea', 'from-lab')), /thin client/)
 })

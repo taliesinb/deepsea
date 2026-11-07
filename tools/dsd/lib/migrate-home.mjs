@@ -52,6 +52,20 @@ function installedUnderOldNames(home) {
 }
 
 /**
+ * A patch text with its `id: deepsea-<old>` and `name: "@deepsea/<old>"` lines under the current
+ * names, line by line (comments and layout stay); used by `dsd adopt` for a DeepSea home's rows.
+ */
+export function renameRowLines(text) {
+  return String(text).split('\n').map((line) => {
+    for (const [pattern, prefix] of [[ID_LINE, 'deepsea-'], [NAME_LINE, '@deepsea/']]) {
+      const m = pattern.exec(line)
+      if (m && Object.hasOwn(PLUGIN_RENAMES, m[3])) return `${m[1]}${m[2]}${prefix}${PLUGIN_RENAMES[m[3]]}${m[2]}${line.slice(m[0].length)}`
+    }
+    return line
+  }).join('\n')
+}
+
+/**
  * Migrate a home to the current plugin names.
  * @param {string} home
  * @param {{ dryRun?: boolean }} [options] - dryRun: report what would change, touch nothing.

@@ -50,6 +50,28 @@ export const DSH_ENTRIES = [
   { name: '.anonymous-user-id', skip: 'per home; the new home makes its own' },
 ]
 
+/**
+ * A DeepSea home's own top-level entries (when the source is another
+ * variant's home), matched before DSH's: what dsd makes per variant stays
+ * behind; `plugins/` comes file by file under the plugins' current names
+ * (lib/renames.mjs). `secrets`: files in it holding an access token, stripped
+ * for a throwaway (`token`: the file's `token`; `servers`: each server's).
+ */
+export const DEEPSEA_ENTRIES = [
+  { name: 'variant.yml', skip: "the source variant's configuration (the target has its own)" },
+  { name: 'adopted.json', skip: "the source's record of its own adoptions" },
+  { name: 'relay', skip: "the source relay's standing token (each variant has its own)" },
+  { name: 'run', skip: "a throwaway's run state" },
+  { name: 'logs', skip: 'a link dsd makes for each variant' },
+  { name: 'support', skip: 'a link dsd makes for each variant' },
+  { name: 'source', skip: 'a link dsd makes for each variant' },
+  { name: 'settings.yaml.imported', skip: "DSH's record of an earlier settings.yaml import (its settings are in the profile patch)" },
+  {
+    name: 'plugins', plugins: true, what: "DeepSea plugins' state",
+    secrets: { 'plugins/host-tailscale/state.json': 'token', 'plugins/workspace-remote/workspaces.json': 'servers' },
+  },
+]
+
 /** The table at `path` (default: DEEPSEA_ADOPT_MAP, else the extras' adopt-map.mjs, else private/adopt-map.mjs), normalized; `{}` when there is none. */
 export async function loadAdoptMap(path = process.env.DEEPSEA_ADOPT_MAP ?? [join(extrasDir(), 'adopt-map.mjs'), join(mainCheckout(), 'private', 'adopt-map.mjs')].find(existsSync) ?? join(extrasDir(), 'adopt-map.mjs')) {
   if (!existsSync(path)) return normalizeMap({}, undefined)

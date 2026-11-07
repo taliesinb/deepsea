@@ -278,7 +278,7 @@ taken over. Build logs: `~/Library/Logs/io.github.taliesinb.deepsea/builds/`.
 | `dsd new <v> [--source <ref>] [--color <hex>] [--plugins <names\|all>] [--no-serve \| --serve-path <path>] [--ports <first>[-<last>]] [--tailscale-socket <path>] [--after <unit>[,…]]` | create a named variant: home, `variant.yml` (port block: the first free one, inside `--ports` or `DEEPSEA_PORTS` when given; Serve path, stepping aside from another account's, or `--serve-path` as given unless another target holds it; the account's own tailscaled and the units its relay needs, when given), and the home's `logs` / `support` links (LAYOUT.md §4, §7); `--source` defaults to `integration/base`. The last three are for a machine shared by several accounts (Linux section) |
 | `dsd client <v> [<server>] [--source <ref>] [--color <hex>] [--dock]` | macOS: a thin client, the DeepSea app for a server elsewhere (above): the first run names the server and creates the variant (home with `variant.yml` and `logs` only); every run builds its app from its source (`--source` moves it, default `integration/base`) and installs it in `~/Applications`, and with `--dock` a Dock tile. A new server or `--color` replaces the old. `run` opens it, `remove` uninstalls it; `build` and `stop` refuse it |
 | `dsd build <v> [--install [--dock]] [--self]` | make sure the build of its source commit exists, install its plugins into its profile as bundles, and on macOS build its app (`apps/macos`); `--install` installs the app (`~/Applications`), the server host and relay link (Application Support), the relay LaunchAgent (loaded at once; LAYOUT.md §6) and the home's `source` link, and with `--dock` a Dock tile. The server host is replaced only when its signature changes, so privacy grants survive. On Linux (below): no app; `--install` installs the relay link and the relay's systemd user unit |
-| `dsd adopt <old home> (<v> \| --throwaway [run options…]) [--move-sign-ins] [--dry-run]` | bring an old DSH home (`~/.dsh…`) into a variant: copies sessions and attachments, the workspace registry, settings.yaml, API keys, each old plugin's state in its DeepSea place, the old profile's own rows and third-party bundles; re-runnable (it brings what is new or changed, and reports a conflict for anything changed on both sides); creates `<v>` as `new` would if missing (not built: `dsd build <v> --install` stays yours); `--throwaway` adopts into a fresh throwaway and starts it (run options pass through); `--move-sign-ins` moves Plan sign-ins out of the old home; `--dry-run` touches nothing (below) |
+| `dsd adopt <home> (<v> \| --throwaway [run options…]) [--move-sign-ins] [--dry-run]` | bring an old DSH home (`~/.dsh…`), or another variant's home, into a variant: copies sessions and attachments, the workspace registry, settings.yaml, API keys, each old plugin's state in its DeepSea place, the old profile's own rows and third-party bundles; re-runnable (it brings what is new or changed, and reports a conflict for anything changed on both sides); creates `<v>` as `new` would if missing (not built: `dsd build <v> --install` stays yours); `--throwaway` adopts into a fresh throwaway and starts it (run options pass through); `--move-sign-ins` moves Plan sign-ins out of the old home; `--dry-run` touches nothing (below) |
 | `dsd remove <v> [--home] [--self]` | uninstall a named variant: its LaunchAgent or systemd unit (stopping relay and server), its own Serve path, Dock tile, app, preferences and `~/Library` (Linux: XDG data and state) leftovers; the home stays unless `--home` |
 | `dsd run <v> [--throwaway \| --throwaway-app \| --throwaway-server] [--visible] [--detach] [--scripted] [--plugins <names\|all>] [--patch <file>,…] [--app <checkout \| ref>] [--source <ref>] [--harness <ref>] [--ttl <min>] [--keep]` | start it, building first if needed (a throwaway always gets plugins/dev-test-driver and plugins/host-server-log); prints id, home, URL, login URL (with token), pids, log, app path, automation socket, and with `--throwaway` the relay's pid, port, URL and log. `--source <ref>` runs a build of that commit of this repository (plugins, harness pin, app; a named plugin, or under `all` any plugin, that build lacks comes from this checkout, so a topic not integrated yet runs beside the integration); `--harness` names a harness commit directly; `--simulated [--accounts <names>]` points every model provider at the provider simulator with fresh test accounts (default `standard`: one account per provider route, keys and signed-in Plans; a later account replaces an earlier one of the same route, so `standard,openrouter-low` swaps in a nearly spent OpenRouter key; `none` for none; tools/provider-sim/README.md) |
 | `dsd stop [<ref>] [--keep]` | stop it: a named variant's relay job is unloaded or its unit stopped (relay and server stop; the LaunchAgent or unit stays and starts again at login or with `dsd run`); a throwaway's home, logs and macOS leftovers are removed unless `--keep` |
@@ -402,6 +402,31 @@ a model the throwaway cannot reach (a local server) need a simulated route
 first: `dsd drive invoke session selectModel '{"request": {"sessionId": "…",
 "provider": "anthropic-oauth", "model": "claude-opus-5-5"}}'`.
 `--move-sign-ins` refuses `--throwaway`.
+
+### A DeepSea home as the source
+
+`<old home>` may also be another variant's home (it has a `variant.yml`;
+a thin client's is refused), in this `DEEPSEA_ROOT` or another one: to try
+a new build on the sessions of the variant in use, adopt its home into a
+variant of its own. Everything above applies, and:
+
+- what dsd makes per variant stays behind: `variant.yml`, `adopted.json`,
+  `relay/` (the standing token), `run/`, the `logs`, `support` and `source`
+  links, `settings.yaml.imported`; so do its backups (`_backups/<v>/`
+  beside its home);
+- `plugins/` comes file by file under the plugins' current names
+  (`plugins/<old>/…` → `plugins/<new>/…`, below, Renamed plugins); a
+  throwaway gets the host-tailscale and workspace-remote files without
+  their access tokens;
+- its `@deepsea/*` bundles are listed under `bundles.deepsea` and not
+  installed (`dsd build <v> --install` installs the variant's plugins);
+- its profile rows `deepsea-<name>` come under the current names, when a
+  plugin of the variant has the row (else dropped and reported);
+- a running source is copied as it is (dsd says so): a session written
+  meanwhile comes with the next adopt.
+
+Sign-ins stay where they are unless `--move-sign-ins`: sign in again in the
+new variant, which gets a grant of its own.
 
 ## Generated presets
 
