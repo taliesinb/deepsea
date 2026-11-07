@@ -37,7 +37,7 @@ import { DsdError, isoLocal, note, onlyFlags, parseArgs, printJson, sleep, usage
 import { checkNamedId, displayName, listVariants, readVariant, writeVariant } from '../lib/variants.mjs'
 
 /** Plugins only throwaways get: a named variant loads them only when named in its list. */
-const TEST_ONLY = new Set(['dev-test-driver', 'llm-scripted'])
+const TEST_ONLY = new Set(['dev-test-driver'])
 
 function namedConfig(id) {
   checkNamedId(id)
@@ -122,7 +122,7 @@ export async function createVariant(id, { source = 'integration/base', color, pl
 
 /**
  * The plugins a named variant loads, from its build: its list, or all of them (machine-wide ones too:
- * the rule that leaves those out is for throwaways) except the test-only ones. host-server-log comes first.
+ * the rule that leaves those out is for throwaways) except the test-only one (dev-test-driver). host-server-log comes first.
  */
 function variantPlugins(config, dir) {
   const value = config.plugins ?? 'all'

@@ -8,8 +8,8 @@ every time.
 
 It registers the route `scripted` with the model `script` (shown as
 "Script"). `dsd run <variant> --throwaway-server --scripted` loads it and
-makes it the throwaway's default model; it is never part of a named
-variant.
+makes it the throwaway's default model. A named variant with `plugins:
+all` loads it too, as one more model to pick, never its default.
 
 ```jsonl
 {"cmd": "think", "text": "Plan: list the files."}

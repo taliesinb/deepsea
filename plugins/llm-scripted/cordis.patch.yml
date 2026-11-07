@@ -1,6 +1,7 @@
 # Bundle patch, used when the package is installed into a profile.
-# Registers the `scripted` route (model `script`). For throwaway and test
-# variants; `dsd run … --scripted` loads it and makes it the default model.
+# Registers the `scripted` route (model `script`). `dsd run … --scripted`
+# loads it and makes it a throwaway's default model; a named variant has it
+# as one more model to pick.
 - insert:
     - id: deepsea-llm-scripted
       name: "@deepsea/llm-scripted"

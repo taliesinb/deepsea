@@ -123,8 +123,9 @@ build: 2cb0966d55                # written by build --install: the commit instal
 ```
 
 `plugins: all` on a named variant means every plugin of its build,
-machine-wide ones included, except the test-only `dev-test-driver` and
-`llm-scripted`; `host-server-log` is always first. A plugin renamed since
+machine-wide ones included, `llm-scripted` too (its `scripted` model is
+there to pick, never the default), except the test-only `dev-test-driver`;
+`host-server-log` is always first. A plugin renamed since
 the list was written answers to its old name (below, Renamed plugins).
 
 **Thin clients** (`dsd client`, macOS) are named variants with no server
