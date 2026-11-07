@@ -88,6 +88,8 @@ column holds wire names, which keep a renamed plugin's former name):
 | Contract | Provided by | Used by |
 |---|---|---|
 | service `deepseaBilling` (session snapshots) | `llm-billing` | (tests) |
+| service `deepseaWait` (the registry of running waits, which the card's Skip and Abort reach) | `tool-wait` (package root) | `tool-wait/tools` |
+| service `deepseaBrowser` (the browser sessions and what the tools need from them) | `tool-browser` (package root) | `tool-browser/tools` |
 | environment `DEEPSEA_RELAY` (the URL of the relay that started this server; absent without one) | the relay (`apps/relay`) | `command-reboot`, `host-backup`, `host-tailscale` |
 | service `deepseaSessionOwners` (which login drives which session) | `host-tailscale` | `llm-billing` |
 | service `deepseaRemoteWorkspaces` (remote session rows) | `workspace-remote` (browser half) | `ui-numbered-switching` |
