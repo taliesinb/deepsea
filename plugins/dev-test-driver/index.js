@@ -206,8 +206,15 @@ export function apply(ctx) {
     invoke: async (args) => {
       const gateway = ctx.get('typertGateway')
       if (gateway === undefined) throw new HttpError(503, 'no-gateway', 'typertGateway is not mounted')
-      const value = await gateway.invoke({ namespace: need(args, 'namespace'), method: need(args, 'method'), args: args.args ?? {} })
-      return value === undefined ? null : plain(value)
+      // dsh-v0.2.2: every invocation names the Peer it speaks for. The driver speaks for the
+      // owner, as this machine's browser does, through a Peer of its own for this one call.
+      const peer = ctx.get('connection')?.createPeer?.({ principal: { kind: 'owner' } })
+      try {
+        const value = await gateway.invoke({ namespace: need(args, 'namespace'), method: need(args, 'method'), args: args.args ?? {}, ...(peer ? { peer } : {}) })
+        return value === undefined ? null : plain(value)
+      } finally {
+        await peer?.dispose()
+      }
     },
   }
 
