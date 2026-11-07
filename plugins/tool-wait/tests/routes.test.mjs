@@ -11,7 +11,7 @@ const control = (ctx, body, type = 'application/json') => ctx.routes.get(CONTROL
 /** A wait started in the root's registry, as the tools row starts one. */
 const wait = (ctx, seconds, callId, reason) => createWaitTool(ctx.get(SERVICE), { maxSeconds: 3600 }).execute(reason === undefined ? { seconds } : { seconds, reason }, exec(callId))
 
-test('apply provides deepseaWait and registers both routes under /api/deepsea-wait; no tool, no prompt section', () => {
+test('apply provides deepseaWait and registers the two routes under /api/deepsea-wait; no tool, no prompt section', () => {
   const ctx = fakeCtx()
   apply(ctx, Config({ maxSeconds: 10 }))
   assert.equal(name, 'deepsea-tool-wait')

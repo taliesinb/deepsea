@@ -1,7 +1,7 @@
 # Bundle patch, used when the package is installed into a profile. Two rows:
 # - deepsea-tool-wait (global): the pending waits (service deepseaWait), the
-#   status and control routes and the progress-bar row (browser half,
-#   lib/client.js);
+#   announced job_output waits, the routes, the progress-bar row and the
+#   job_output countdown (browser half, lib/client.js);
 # - deepsea-tool-wait-tools: the `wait` tool and its system-prompt hint. dsd
 #   moves it into the agent presets that have @deepseek-ai/dsh-tool-jobs
 #   (package.json deepsea.presets) and disables it here.

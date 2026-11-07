@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Wait controls",
-    "description": "The wait tool's progress bar, with Skip and Abort."
+    "description": "The wait tool's progress bar, with Skip and Abort; a countdown with Skip in the job_output row while an agent waits on a background job."
   },
   "card": {
     "title": "Wait",
@@ -9,6 +9,7 @@
     "abort": "Abort",
     "progress": "{elapsed} / {total}",
     "progress.aria": "Wait progress",
+    "job.progress.aria": "Job wait progress",
     "outcome.skipped": "skipped",
     "outcome.aborted": "aborted by user",
     "outcome.interrupted": "interrupted",

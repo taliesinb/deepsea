@@ -32,6 +32,38 @@ localized in English and Chinese (`10分37秒 / 40分钟`, 跳过, 中止): the 
 section of [locale/en.json](locale/en.json) and [locale/zh.json](locale/zh.json),
 whose keys must match (the tests check); other languages fall back to English.
 
+## Job waits
+
+When an agent waits on a background job with upstream's `job_output`
+(`wait: true`), that call's row counts the wait down at the right of its head
+line while the call runs:
+
+```
+≡ Read job output · bash-12be04c588ec4795            ▕██░░░░▏ 1m20s / 2m30s [Skip]
+```
+
+- The row itself stays upstream's, waiting or not (title, summary, disclosure,
+  output); the countdown is this package's entry for `job_output` in the
+  row's `tool.call.status` cell, which the harness renders beside the row
+  from dispatch until the result.
+- The total is the wait's real deadline, after tool-jobs' default (30 s) and
+  cap (10 min). Nothing shows for a plain read (no `wait: true`), nor for a
+  wait the harness did not announce (the job had already settled, or another
+  agent's job): those return at once.
+- **Skip** ends the wait now, without touching the job: the call returns as on
+  timeout, the output so far with the job still running, and the status line
+  says why: `[status: running, wait skipped by the user]`. A later
+  `job_output` collects the job as usual. There is no Abort (the turn's Stop
+  button already ends the call).
+- Same compact times and locales as the wait row; under 640px (a phone) the
+  bar is dropped and the time carries the progress.
+
+This needs the harness topic `job-wait-release` (package.json `deepsea.requires`),
+which announces each `job_output` wait on the Cordis event
+`tool-jobs/wait-started` with its deadline and a `release`, and declares the
+`tool.call.status` slot. Without it the countdown never appears; nothing else
+changes.
+
 ## Two rows
 
 The package inserts two rows (plugins/AGENTS.md → Presets, "Two rows, one
@@ -40,7 +72,7 @@ package"):
 | Row | Module | Title | Where | Holds |
 |---|---|---|---|---|
 | `deepsea-tool-wait-tools` | `@deepsea/tool-wait/tools` ([tools.js](tools.js)) | Wait tool | the agent presets that have upstream's `@deepseek-ai/dsh-tool-jobs`; disabled globally | the `wait` tool, the prompt hint, the config |
-| `deepsea-tool-wait` | `@deepsea/tool-wait` ([index.js](index.js)) | Wait controls | global | the pending waits (service `deepseaWait`), the two routes, the browser half |
+| `deepsea-tool-wait` | `@deepsea/tool-wait` ([index.js](index.js)) | Wait controls | global | the pending waits (service `deepseaWait`), the announced job waits, the two routes, the browser half |
 
 The tools row joins the presets through `"deepsea": { "presets": { "joinWith":
 ["@deepseek-ai/dsh-tool-jobs"], "module": "@deepsea/tool-wait/tools" } }`:
@@ -84,17 +116,23 @@ tool.
   [wait.mjs](wait.mjs)): the root's `createWaitRegistry()`, provided as
   `deepseaWait`, holds one entry per pending call (`callId → { sessionIds,
   startedAt, deadline, timer, settle }`); the tool body (tools row) starts the
-  entry there and awaits its promise. Two Fetch routes on the root, behind
-  DSH's own authentication:
+  entry there and awaits its promise. The root also keeps each announced
+  `job_output` wait ([job-wait.mjs](job-wait.mjs): `tool-jobs/wait-started`,
+  keyed by call id, dropped when its `ended` resolves). Two Fetch routes on
+  the root, behind DSH's own authentication:
   - `GET /api/deepsea-wait/status?callId=…&sessionId=…` → `{ pending,
     startedAt, deadline, requestedMs, reason, now }`. `now` is the server
     clock, so the browser draws the bar against the clock that owns the
-    deadline.
+    deadline. For a job wait: `{ pending, job: true, jobId, startedAt,
+    deadline, requestedMs, now }`, with the same session check (`403`); `404`
+    when the call has no running wait.
   - `POST /api/deepsea-wait/control` with a JSON body `{ action: 'skip' |
     'abort', callId, sessionId }` → `{ ok }`; `404` once settled, `403` when
     the session does not own the call (`sessionId` must be the agent's
     `session.id` or `agent.id`), `415` without `content-type:
-    application/json`, so a cross-site form cannot reach it.
+    application/json`, so a cross-site form cannot reach it. A `callId` that
+    names a job wait instead takes `skip` only (`abort` → `400`), with the
+    same session check, and calls its `release('wait skipped by the user')`.
 
   Unloading the root row fails every pending wait (`WAIT_UNLOADED`), so no
   call hangs; so does unloading a tools row for the waits it started without
@@ -114,7 +152,12 @@ tool.
   its content by default) through the row's `contentClassName`. The copy is
   the locale namespace `deepsea-tool-wait`, registered from the locale files'
   `card` sections (`inject: ['slots', 'locale']`); the duration forms are
-  [src/client/format.ts](src/client/format.ts).
+  [src/client/format.ts](src/client/format.ts). The job-wait countdown is a
+  keyed `tool.call.status` entry for `job_output` (classes
+  `deepsea-wait-status`, `data-deepsea-wait-call`): for a call with `wait:
+  true` it asks the status route until the server knows the wait (from 250 ms,
+  doubling, at most every 5 s), then stops asking, ticks every 100 ms against
+  the server clock and POSTs Skip; the cell goes when the result lands.
 
 Two harness details the design depends on:
 
@@ -148,11 +191,14 @@ validates, and nothing reads it): move it to `deepsea-tool-wait-tools`.
 
 ```sh
 pnpm install          # also builds lib/client.js (prepare)
-pnpm test             # the registry, the tool, both rows (routes, service, fallback), the row's durations and dictionaries (node:test)
+pnpm test             # the registry, the tool, both rows (routes, service, fallback), job waits, the row's durations and dictionaries (node:test)
 pnpm typecheck        # browser half against the harness's declarations
 pnpm watch            # rebuild lib/client.js on save (hot-swaps a GUI serving it)
 ```
 
 In a server: `dsd run release --throwaway-app --scripted --plugins tool-wait`
 (tools/dsd/README.md); a script line `{"cmd":"tool","name":"wait","args":{"seconds":30}}`
-draws the bar, and `dsd drive click --text Skip` presses a button.
+draws the bar, and `dsd drive click --text Skip` presses a button. For a job
+wait, run the throwaway with a harness that has `job-wait-release`
+(`--harness <ref>`), start `{"cmd":"tool","name":"bash","args":{"command":"sleep 120; echo done","run_in_background":true}}`,
+then script `job_output` with that job id and `"wait": true`.

@@ -6,8 +6,15 @@ export function fakeCtx(services = new Map()) {
   const tools = new Map()
   const sections = []
   const disposers = []
+  const listeners = new Map()
   const ctx = {
     routes, tools, sections, services,
+    on(event, listener) {
+      const list = listeners.get(event) ?? []
+      listeners.set(event, [...list, listener])
+      disposers.push(() => listeners.set(event, (listeners.get(event) ?? []).filter(l => l !== listener)))
+    },
+    emit(event, ...args) { for (const listener of listeners.get(event) ?? []) listener(...args) },
     logger: { info() {}, warn() {} },
     effect(fn) { const dispose = fn(); if (typeof dispose === 'function') disposers.push(dispose) },
     provide(name, value) {

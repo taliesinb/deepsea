@@ -26,6 +26,18 @@
  *
  * Claiming a key suppresses the generic card for EVERY shape of that tool, so
  * the row covers running / ok / every error / missing meta.
+ *
+ * Job waits (`job_output` with `wait: true`) keep upstream's row, and the
+ * keyed `tool.call.status` entry for `job_output` adds the countdown at the
+ * right of its head line while the call runs:
+ *
+ *   [≡] Read job output · bash-12be…                 ▕██░░▏ 1m20s / 2m30s [Skip]
+ *
+ * It asks GET ./api/deepsea-wait/status for the wait the harness announced
+ * (its real deadline, after tool-jobs' default and cap) and shows nothing
+ * until the server knows the wait: a plain read, or a wait on a job that has
+ * already settled, draws no countdown. Skip POSTs the same control route; the
+ * call returns as on timeout and the job keeps running.
  */
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only imports (erased at build time): SlotMap merges for
@@ -60,11 +72,14 @@ const DICTIONARIES: { en: Record<WaitKey, string>, zh: Record<WaitKey, string> }
 
 type T = TranslateNS<typeof NS>
 type Props = PropsRuntime<'tool.call.toolview'> & PropsLocale<typeof NS>
+type StatusProps = PropsRuntime<'tool.call.status'> & PropsLocale<typeof NS>
 type Block = Props['block']
 
 /** Mirrors index.js (wire names kept from the plugin's old name, wait). Document-relative (`./api/...`): behind a path-mounting proxy `/api` would escape the mount. */
 const STATUS_PATH = './api/deepsea-wait/status'
 const CONTROL_PATH = './api/deepsea-wait/control'
+/** First and longest delay between asks while the server does not know a job wait yet (its announcement can trail the tool/call event). */
+const JOB_STATUS_RETRY_MS = [250, 5000] as const
 /** Error code of the user's Abort verdict (wait.mjs USER_ABORTED_WAIT). */
 const USER_ABORTED_WAIT = 'USER_ABORTED_WAIT'
 
@@ -176,6 +191,9 @@ const STYLESHEET = `
 .${CLS}-button:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover, color-mix(in srgb, currentColor 8%, transparent)); color: var(--dsw-alias-label-primary); }
 .${CLS}-button[data-deepsea-wait-danger]:hover:not(:disabled) { color: var(--dsw-alias-state-error-primary, #e5484d); border-color: var(--dsw-alias-state-error-primary, #e5484d); }
 .${CLS}-button:disabled { opacity: 0.5; cursor: default; }
+.${CLS}-status { display: flex; align-items: center; gap: 8px; height: calc(24px + var(--dsh-content-font-delta, 0px)); white-space: nowrap; font-size: var(--dsh-content-font-size-secondary, 13px); color: var(--dsw-alias-label-secondary); }
+.${CLS}-status .${CLS}-track { flex: none; width: 80px; }
+@media (max-width: 640px) { .${CLS}-status .${CLS}-track { display: none; } }
 `
 
 // Typed like the shipped ToolRow / DisclosureRow title: the secondary content
@@ -313,6 +331,66 @@ export function WaitRow({ callId, block, sessionId, t }: Props) {
   )
 }
 
+// ---------------------------------------------------------------- job waits
+
+/**
+ * The countdown and Skip of a running `job_output` wait, in the call's
+ * `tool.call.status` cell. Nothing for a plain read, and nothing until the
+ * server knows the wait (the root row's status route answers for job waits).
+ */
+export function JobWaitStatus({ callId, args, sessionId, t }: StatusProps) {
+  const waiting = args.value('wait') === true
+  const session = String(sessionId)
+  const [anchor, setAnchor] = useState<{ startedAt: number, deadline: number, offset: number } | undefined>(undefined)
+  const [busy, setBusy] = useState(false)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    if (!waiting) return () => { mounted.current = false }
+    let cancelled = false
+    let timer: number | undefined
+    const ask = async (delay: number): Promise<void> => {
+      const status = await fetchStatus(callId, session)
+      if (cancelled) return
+      if (status !== undefined) {
+        setAnchor({ startedAt: status.startedAt, deadline: status.deadline, offset: status.now - Date.now() })
+        return
+      }
+      timer = window.setTimeout(() => { void ask(Math.min(delay * 2, JOB_STATUS_RETRY_MS[1])) }, delay)
+    }
+    void ask(JOB_STATUS_RETRY_MS[0])
+    return () => { cancelled = true; window.clearTimeout(timer); mounted.current = false }
+  }, [waiting, callId, session])
+  useTicker(anchor !== undefined)
+  if (anchor === undefined) return null
+
+  const requestedMs = Math.max(0, anchor.deadline - anchor.startedAt)
+  const elapsedMs = Math.min(requestedMs, Math.max(0, Date.now() + anchor.offset - anchor.startedAt))
+  // Hold at 99 % until the result event lands, as the wait row does.
+  const fraction = requestedMs > 0 ? Math.min(0.99, elapsedMs / requestedMs) : 0
+  const total = requestedMs / 1000
+  const totalText = formatDuration(total, t)
+  const widest = [total, total - 1].map(at => t('progress', { elapsed: formatElapsed(at, t), total: totalText })).reduce((a, b) => b.length > a.length ? b : a)
+  const skip = () => {
+    if (busy) return
+    setBusy(true)
+    // The cell stays until the tool/result event ends the call; a failed POST re-enables Skip.
+    void control('skip', callId, session).then((ok) => { if (mounted.current && !ok) setBusy(false) })
+  }
+  return (
+    <span className={`${CLS}-status`} data-deepsea-wait-outcome="running" data-deepsea-wait-call={callId}>
+      <span className={`${CLS}-track`} role="progressbar" aria-label={t('job.progress.aria')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)}>
+        <span className={`${CLS}-fill`} style={{ width: `${fraction * 100}%` }} />
+      </span>
+      <span className={`${CLS}-time`}>
+        <span className={`${CLS}-time-widest`} aria-hidden="true">{widest}</span>
+        <span>{t('progress', { elapsed: formatElapsed(elapsedMs / 1000, t), total: totalText })}</span>
+      </span>
+      <button type="button" className={`${CLS}-button`} disabled={busy} onClick={skip}>{t('skip')}</button>
+    </span>
+  )
+}
+
 // ---------------------------------------------------------------- plugin
 
 export const name = 'deepsea-tool-wait'
@@ -332,4 +410,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, DICTIONARIES), 'tool-wait: dictionaries')
   ctx.slots.inject('tool.call.toolview', () =>
     ctx.slots.register({ name: 'tool.call.toolview', key: 'wait', locale: NS }, WaitRow))
+  // job_output keeps upstream's row; the countdown is its status cell (harness topic job-wait-release).
+  ctx.slots.inject('tool.call.status', () =>
+    ctx.slots.register({ name: 'tool.call.status', key: 'job_output', locale: NS }, JobWaitStatus))
 }
