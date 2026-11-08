@@ -176,7 +176,9 @@ linked to its directory. The server loads each through its own bundle
 patch (`cordis.patch.yml`, so every plugin needs one), and the Plugins panel
 lists it as an installed bundle, with its card and switches. dsd owns the
 profile's `@deepsea/*` packages; anything else installed there stays. A
-plugin never installed or built is installed and built first. `all` leaves
+plugin never installed or built is installed and built first; one that
+installed its own copy of a native package the harness also ships is
+warned about (both would load into the server; plugins/AGENTS.md). `all` leaves
 machine-wide plugins (plugins/AGENTS.md) out; naming one includes it. A
 name not found in the source build or this checkout is looked up in the
 **extras**, the private repository of plugins not published with this one
@@ -335,7 +337,8 @@ Rules:
   than `lib/client.js`.
 - dsd warns when run inside a different checkout than its own.
 - `stop`, `build --install` and `run` refuse the variant hosting the calling
-  agent unless `--self`; every operation on a named variant is logged, and a
+  agent unless `--self` (rebuilding that variant from inside it:
+  recipes/rebuild-own-variant.md); every operation on a named variant is logged, and a
   second agent's conflicting operation waits for or refuses the first.
 - `topics rebase` and `topics integrate` take a lock, and refuse to rewrite
   a topic whose worktree has uncommitted work.

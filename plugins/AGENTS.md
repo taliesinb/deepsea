@@ -24,6 +24,15 @@ The harness topics a plugin needs are declared in its package.json,
 Dependencies on the harness are `link:` devDependencies through the
 `harness` link (`link:../../harness/packages/...`), for types and tests only.
 
+A native dependency the harness already ships (an addon or shared library:
+`sharp` and its libvips, `@vscode/ripgrep`) is never a copy of the plugin's
+own: it is a `link:` to the harness package that owns it
+(`"sharp": "link:../../harness/packages/attachment/attachment-local/node_modules/sharp"`),
+so the server loads one copy and the plugin follows the harness's version.
+Two copies of one library in a process are undefined behaviour (on macOS,
+`objc` reports every class as implemented twice). dsd warns about a
+plugin's own copy when it installs the plugin into a profile.
+
 ## Names
 
 Every name a plugin puts into a namespace it shares with the harness or

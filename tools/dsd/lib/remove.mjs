@@ -17,9 +17,9 @@ import { isRunning, parseThrowaway, readState } from './variants.mjs'
 const real = path => { try { return realpathSync(path) } catch { return path } }
 
 /** Refuse to act on the home the calling process runs in. */
-export function refuseOwnHome(id) {
+export function refuseOwnHome(id, hint) {
   const own = process.env.DSH_HOME
-  if (own && real(own) === real(homeOf(id))) throw new DsdError(`${id} is the variant this process runs in; dsd will not stop it`)
+  if (own && real(own) === real(homeOf(id))) throw new DsdError(`${id} is the variant this process runs in; dsd will not stop it${hint ? ` (${hint})` : ''}`)
 }
 
 /** The server's entry, as its command line shows it; with `--port <n>`, a server's signature. */

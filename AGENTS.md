@@ -173,4 +173,7 @@ Verify against the checkout; this file summarizes, the code is the truth.
 After any non-trivial completed task, write or update a recipe in
 `recipes/`: one topic per file, exact commands and configuration, the reasons
 behind non-obvious choices, and what failed and why. Index it here.
-(The recipe set is being decided; none exist yet.)
+
+| Recipe | For |
+|---|---|
+| [rebuild-own-variant.md](recipes/rebuild-own-variant.md) | rebuilding and installing the variant your own session runs in (`build --install --self`, detached) |

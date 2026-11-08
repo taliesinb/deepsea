@@ -165,7 +165,7 @@ export async function build(argv) {
   if (args.dock && !DARWIN) usage('--dock is for macOS')
   const config = namedConfig(id)
   if (config.client) usage(`${id} is a thin client: dsd client ${id} rebuilds its app`)
-  if (args.install && !args.self) refuseOwnHome(id)
+  if (args.install && !args.self) refuseOwnHome(id, 'to rebuild it from inside: recipes/rebuild-own-variant.md')
   const home = homeOf(id)
   const commit = resolveSourceCommit(config.source)
   const dir = await ensureSourceBuild(commit)

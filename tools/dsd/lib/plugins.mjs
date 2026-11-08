@@ -6,7 +6,7 @@
  * the Plugins panel lists it.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { extrasDir, REPO } from './paths.mjs'
 import { GENERATED_DIR, writePresetLayer } from './presets.mjs'
@@ -97,6 +97,63 @@ export function preparePlugin(plugin) {
   }
 }
 
+/** Files a process loads as code: Node addons and shared libraries. */
+const LOADABLE = /\.(?:node|dylib|dll)$|\.so(?:\.\d+)*$/
+
+/** Whether a package directory ships loadable native code (a few levels down, not in its own node_modules). */
+function shipsNative(dir, depth = 3) {
+  let entries
+  try { entries = readdirSync(dir, { withFileTypes: true }) } catch { return false }
+  return entries.some(entry => entry.isDirectory()
+    ? depth > 0 && entry.name !== 'node_modules' && shipsNative(join(dir, entry.name), depth - 1)
+    : LOADABLE.test(entry.name))
+}
+
+/**
+ * The packages a pnpm store (`node_modules/.pnpm`) holds: `{ name, version, dir }`
+ * each, the package's own directory in its entry (the other names there are
+ * links to its dependencies). `prefix` keeps only entries starting with it.
+ */
+function storePackages(store, prefix = '') {
+  if (!existsSync(store)) return []
+  const out = []
+  for (const entry of readdirSync(store)) {
+    if (!entry.startsWith(prefix) || entry === 'node_modules' || entry === 'lock.yaml') continue
+    const modules = join(store, entry, 'node_modules')
+    let names
+    try { names = readdirSync(modules) } catch { continue }
+    const candidates = names.flatMap(n => n.startsWith('@') ? (() => { try { return readdirSync(join(modules, n)).map(s => `${n}/${s}`) } catch { return [] } })() : [n])
+    for (const name of candidates) {
+      const dir = join(modules, name)
+      if (!lstatSync(dir).isDirectory()) continue
+      try {
+        const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+        out.push({ name: pkg.name ?? name, version: pkg.version, dir })
+      } catch { /* not a package */ }
+    }
+  }
+  return out
+}
+
+/**
+ * Native packages a plugin installed copies of its own of while the harness
+ * ships the same package too: each copy would load into the one server
+ * process (on macOS, two libvips copies make objc report every class twice;
+ * undefined behaviour). A plugin should take such a dependency from the
+ * harness, as a `link:` into the harness package that owns it
+ * (plugins/AGENTS.md). Same version or not: two paths are two copies.
+ * @returns {{ name: string, plugin: string, harness: string[] }[]}
+ */
+export function duplicateNatives(pluginDir, harnessBuild) {
+  const harnessStore = join(harnessBuild, 'node_modules', '.pnpm')
+  const hits = []
+  for (const own of storePackages(join(pluginDir, 'node_modules', '.pnpm'))) {
+    if (!shipsNative(own.dir)) continue
+    const theirs = storePackages(harnessStore, `${own.name.replace('/', '+')}@`).filter(p => p.name === own.name)
+    if (theirs.length) hits.push({ name: own.name, plugin: own.version, harness: [...new Set(theirs.map(p => p.version))].sort() })
+  }
+  return hits.sort((a, b) => a.name.localeCompare(b.name))
+}
 /** Where a variant's web profile lives: the harness's profile directory. */
 export const profileDirOf = home => join(home, 'profiles', 'web')
 
@@ -156,6 +213,9 @@ profile.initProfile(${JSON.stringify(dir)}, templates.web.bundles)`],
     const link = join(dir, 'node_modules', plugin.pkg.name)
     rmSync(link, { recursive: true, force: true })
     symlinkSync(plugin.dir, link)
+    for (const { name, plugin: own, harness } of duplicateNatives(plugin.dir, harnessBuild)) {
+      note(`plugins/${plugin.name} installed its own ${name} ${own}, a native package the harness ships too (${harness.join(', ')}): both copies would load into the server; link the harness's (plugins/AGENTS.md)`)
+    }
   }
   // The generated preset layer, composed from the bundles just written (it is out of the manifest now).
   const presets = writePresetLayer({ plugins, profileDir: dir, home, harnessBuild, patches })

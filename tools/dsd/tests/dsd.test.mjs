@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readdirSync, readlinkSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readlinkSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -622,4 +622,29 @@ test('a throwaway takes none of the calling instance\'s DSH_* or relay variables
     PATH: '/usr/bin', HOME: '/Users/USER', DEEPSEA_ROOT: '/tmp/root', DEEPSEA_PORTS: '4000-4100', DSH_HOME: '/tmp/home', DSH_PROVIDER_SIMULATOR: 'http://sim',
   })
   assert.deepEqual(throwawayEnv({}, { PATH: '/bin', DSH_X: '1' }), { PATH: '/bin' })
+})
+
+test('duplicateNatives: a plugin\'s own copy of a native package the harness also ships', async () => {
+  const { duplicateNatives } = await import('../lib/plugins.mjs')
+  const dir = join(root, 'natives')
+  // A pnpm store entry: the package's own directory, plus links to its dependencies.
+  const put = (owner, entry, name, version, files) => {
+    const pkg = join(dir, owner, 'node_modules', '.pnpm', entry, 'node_modules', name)
+    mkdirSync(join(pkg, 'lib'), { recursive: true })
+    writeFileSync(join(pkg, 'package.json'), JSON.stringify({ name, version }))
+    for (const file of files) writeFileSync(join(pkg, 'lib', file), '')
+  }
+  put('harness', '@img+libvips-x@1.3.4', '@img/libvips-x', '1.3.4', ['libvips-cpp.8.18.7.dylib'])
+  put('harness', 'addon@2.0.0', 'addon', '2.0.0', ['addon.node'])
+  put('harness', 'plain@1.0.0', 'plain', '1.0.0', ['index.js'])
+  put('plugin', '@img+libvips-x@1.3.2', '@img/libvips-x', '1.3.2', ['libvips-cpp.8.18.3.dylib'])
+  put('plugin', 'addon@2.0.0_peer@1.0.0', 'addon', '2.0.0', ['addon.node'])
+  put('plugin', 'plain@1.1.0', 'plain', '1.1.0', ['index.js'])
+  put('plugin', 'own-native@1.0.0', 'own-native', '1.0.0', ['x.so.1'])
+  symlinkSync(join(dir, 'plugin', 'node_modules', '.pnpm', 'plain@1.1.0', 'node_modules', 'plain'), join(dir, 'plugin', 'node_modules', '.pnpm', 'addon@2.0.0_peer@1.0.0', 'node_modules', 'plain'))
+  assert.deepEqual(duplicateNatives(join(dir, 'plugin'), join(dir, 'harness')), [
+    { name: '@img/libvips-x', plugin: '1.3.2', harness: ['1.3.4'] },
+    { name: 'addon', plugin: '2.0.0', harness: ['2.0.0'] },
+  ])
+  assert.deepEqual(duplicateNatives(join(dir, 'harness'), join(dir, 'nowhere')), [])
 })
