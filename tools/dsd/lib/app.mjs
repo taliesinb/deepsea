@@ -19,7 +19,7 @@ import { appRequest } from './appsocket.mjs'
 import { COMPONENTS, componentSource } from './components.mjs'
 import { buildsDir, homeOf, variantName } from './paths.mjs'
 import { alive, runningAs } from './processes.mjs'
-import { DsdError, note, sleep } from './util.mjs'
+import { DsdError, note, sleep, throwawayEnv } from './util.mjs'
 import { displayName } from './variants.mjs'
 
 /** The default app source when this checkout has none. */
@@ -81,7 +81,7 @@ export function launchApp(id, { executable, url, visible }) {
   if (socket.length > SOCKET_PATH_MAX) throw new DsdError(`the automation socket path is too long for macOS (${socket.length} > ${SOCKET_PATH_MAX} bytes): ${socket}; use a shorter DEEPSEA_ROOT`)
   // Downloads stay inside the throwaway, so a test never writes into ~/Downloads.
   const args = [...(url ? ['--url', url] : []), '--ephemeral', '--automation', socket, '--downloads', join(homeOf(id), 'downloads'), ...(visible ? [] : ['--hidden'])]
-  const child = spawn(executable, args, { detached: true, stdio: 'ignore' })
+  const child = spawn(executable, args, { detached: true, stdio: 'ignore', env: throwawayEnv() })
   return { child, socket, signature: [executable, '--automation'] }
 }
 

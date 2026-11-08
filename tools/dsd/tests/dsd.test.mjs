@@ -10,7 +10,7 @@ process.env.DEEPSEA_LOG_ROOT = join(root, 'logs')
 test.after(() => rmSync(root, { recursive: true, force: true }))
 
 const { checkNamedId, displayName, parseThrowaway, resolveRef, writeState, writeVariant } = await import('../lib/variants.mjs')
-const { formatFlatYaml, parseArgs, parseFlatYaml } = await import('../lib/util.mjs')
+const { formatFlatYaml, parseArgs, parseFlatYaml, throwawayEnv } = await import('../lib/util.mjs')
 const { parseLock } = await import('../lib/harness.mjs')
 const { openRunLog, prune } = await import('../lib/logs.mjs')
 const { homeOf, logDirOf, variantName } = await import('../lib/paths.mjs')
@@ -610,4 +610,16 @@ test('gc: an installed variant\'s build and the harness build it links are in us
   assert.ok(users.has(deepsea), 'the installed variant\'s source build')
   assert.ok(users.has(harness), 'the harness build a kept deepsea build links')
   assert.ok(!users.has(oldHarness), 'a collected deepsea build no longer holds its harness build')
+})
+
+test('a throwaway takes none of the calling instance\'s DSH_* or relay variables, but keeps dsd\'s own settings', () => {
+  const caller = {
+    PATH: '/usr/bin', HOME: '/Users/USER', DEEPSEA_ROOT: '/tmp/root', DEEPSEA_PORTS: '4000-4100',
+    DSH_HOME: '/Users/USER/.deepsea/release', DSH_PROFILE: 'web', DSH_PROFILE_DIR: '/x', DSH_SESSION_ID: 's', DSH_SHELL: '1',
+    DSH_WEB_URL: 'http://127.0.0.1:3200/', DSH_LAUNCH_TOKEN: 't', DEEPSEA_RELAY: 'http://127.0.0.1:3203/', DEEPSEA_VARIANT: 'release',
+  }
+  assert.deepEqual(throwawayEnv({ DSH_HOME: '/tmp/home', DSH_PROVIDER_SIMULATOR: 'http://sim' }, caller), {
+    PATH: '/usr/bin', HOME: '/Users/USER', DEEPSEA_ROOT: '/tmp/root', DEEPSEA_PORTS: '4000-4100', DSH_HOME: '/tmp/home', DSH_PROVIDER_SIMULATOR: 'http://sim',
+  })
+  assert.deepEqual(throwawayEnv({}, { PATH: '/bin', DSH_X: '1' }), { PATH: '/bin' })
 })

@@ -133,3 +133,20 @@ export function note(message) {
 }
 
 export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+/**
+ * The environment for a throwaway's relay, server and app: the caller's,
+ * without what describes the caller's own DeepSea or DSH instance (every
+ * `DSH_*` variable, and `DEEPSEA_RELAY` and `DEEPSEA_VARIANT`, which a relay
+ * sets for its server), then `extra`. A throwaway started from an agent's
+ * shell inside a variant would otherwise take that variant's home, profile,
+ * session or relay for its own. dsd's own settings (`DEEPSEA_ROOT`,
+ * `DEEPSEA_PORTS`, …) stay.
+ * @param {Record<string, string>} [extra] - variables to set on top
+ * @param {NodeJS.ProcessEnv} [env] - the environment to start from
+ */
+export function throwawayEnv(extra = {}, env = process.env) {
+  const clean = Object.fromEntries(Object.entries(env)
+    .filter(([key]) => !key.startsWith('DSH_') && key !== 'DEEPSEA_RELAY' && key !== 'DEEPSEA_VARIANT'))
+  return { ...clean, ...extra }
+}

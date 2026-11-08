@@ -47,7 +47,7 @@ import { migrateHome, migrationSummary } from '../lib/migrate-home.mjs'
 import { homeOf, logDirOf, REPO, variantName } from '../lib/paths.mjs'
 import { alive, freePort, listenerPids } from '../lib/processes.mjs'
 import { removeVariant, SERVER_ENTRY } from '../lib/remove.mjs'
-import { DsdError, isoLocal, note, onlyFlags, parseArgs, printJson, sleep, usage } from '../lib/util.mjs'
+import { DsdError, isoLocal, note, onlyFlags, parseArgs, printJson, sleep, throwawayEnv, usage } from '../lib/util.mjs'
 import { checkNamedId, currentOwner, displayName, listVariants, parseThrowaway, writeState, writeVariant } from '../lib/variants.mjs'
 
 /**
@@ -327,9 +327,7 @@ export async function run(argv, hooks = {}) {
     mkdirSync(join(logDirOf(id), 'relay'), { recursive: true, mode: 0o700 })
     const consoleFd = openSync(relay.consoleLog, 'a', 0o600)
     // The relay sets DSH_HOME (and DSH_LAUNCH_TOKEN, DEEPSEA_VARIANT, DEEPSEA_RELAY) for the server it starts.
-    const env = { ...process.env, ...simEnv }
-    delete env.DSH_HOME
-    child = spawn(process.execPath, relayArgs, { cwd: build, env, detached: true, stdio: ['ignore', consoleFd, consoleFd] })
+    child = spawn(process.execPath, relayArgs, { cwd: build, env: throwawayEnv(simEnv), detached: true, stdio: ['ignore', consoleFd, consoleFd] })
     closeSync(consoleFd)
     facts = {
       pid: child.pid, signature: [relaySource.entry, `--listen 127.0.0.1:${relay.port}`], port, log: join(logDirOf(id), 'server', 'latest.log'),
@@ -347,7 +345,7 @@ export async function run(argv, hooks = {}) {
     }
   } else {
     const log = openRunLog(join(logDirOf(id), 'server'), { tag: 'pending' })
-    child = spawn(process.execPath, serverArgs, { cwd: build, env: { ...process.env, ...simEnv, DSH_HOME: home }, detached: true, stdio: ['ignore', log.fd, log.fd] })
+    child = spawn(process.execPath, serverArgs, { cwd: build, env: throwawayEnv({ ...simEnv, DSH_HOME: home }), detached: true, stdio: ['ignore', log.fd, log.fd] })
     log.identify(`${variantName(id)} server pid ${child.pid} dsh web --port ${port} harness ${commit.slice(0, 10)}${pluginNote}`)
     log.rename(child.pid)
     log.close()

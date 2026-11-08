@@ -314,6 +314,12 @@ that turns telemetry and the first-run API-key dialog off and puts the
 default workspace inside the home, `settings.yaml`
 acknowledging the first-run notice, and the `logs` and `source` links (LAYOUT.md §4).
 
+A throwaway's relay, server and app start with the caller's environment
+minus every `DSH_*` variable and `DEEPSEA_RELAY` and `DEEPSEA_VARIANT`, so
+one started from an agent's shell inside a variant never takes that
+variant's home, profile, session or relay for its own; dsd's own settings
+(`DEEPSEA_ROOT`, `DEEPSEA_PORTS`, …) still apply.
+
 Rules:
 
 - `run` refuses a variant that is running in any form (server port, relay
