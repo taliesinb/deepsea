@@ -2,32 +2,51 @@
   "name": "@deepsea/llm-scripted",
   "version": "0.1.0",
   "private": true,
-  "description": "DeepSea plugin: a deterministic model whose replies are scripted by the prompt (JSONL commands: say, think, tool, expect, sleep, usage, error, end, title, save; values from earlier tool results), for testing.",
+  "description": "DeepSea plugin: a deterministic model whose replies are scripted by the prompt (JSONL commands: say, think, tool, expect, sleep, usage, error, end, title, save; values from earlier tool results), for testing; a script prompt shows in its bubble as JSON.",
   "license": "MIT",
   "type": "module",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
+    "./client": "./lib/client.js",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "index.js",
     "adapter.mjs",
+    "lib/client.js",
+    "lib/client.js.map",
     "cordis.patch.yml",
     "locale/*.json"
   ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
     }
   },
   "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check index.js && node --test tests/*.test.mjs"
+    "check": "node --check index.js && node --test tests/*.test.mjs",
+    "prepare": "node build.mjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh-llm": "link:../../harness/packages/llm/llm",
     "@deepsea/script": "link:../../packages/script"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-client-ui-conversation": "link:../../harness/packages/client/ui-conversation",
+    "@deepseek-ai/dsh-client-ui-primitives": "link:../../harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
   }
 }

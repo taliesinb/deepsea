@@ -212,6 +212,23 @@ Requests that are not the conversation's own turn get fixed answers: the
 session titler gets "scripted session" (or the script's `title`), and
 compaction gets "Summary: a scripted session."
 
+## Script prompts in the transcript
+
+The plugin's browser half draws a prompt that is a script as JSON: in its
+message bubble, one line per row, in the code font with JSON colours, and a
+row too long for the bubble cut with an ellipsis instead of wrapping (the
+bubble keeps its usual size). In one-line previews (queued messages) the
+script stays on one line. Only the drawing changes: the message text, its
+copy action and what the model gets are the prompt as typed.
+
+A prompt counts when every non-blank line matches `{"<name>": …}` (a
+pattern that rules out prose cheaply) and then parses as a JSON object, so
+`{like this}` stays plain text, and so does a script with a JSON typo in
+any line. This is a user-text rule (`ctx.uiConversation.userText`) that
+claims the whole prompt, whatever model the session uses; secret masking
+(`ui-secret-mask`), which works through the same rules, does not apply
+inside a script prompt.
+
 ## The provider simulator
 
 The provider simulator (tools/provider-sim) plays the same scripts with the
@@ -234,4 +251,7 @@ holds the grammar (`grammar.mjs`), value expressions (`values.mjs`) and the
 interpreter (`run.mjs`); `adapter.mjs` is the `LlmAdapter`; `index.js`
 registers it (config: `route`, default `scripted`) and listens to
 `tools/execute` and `tools/result` for the scripts' own calls (ids
-`scripted-…`).
+`scripted-…`). The browser half is `src/client/` (built into
+`lib/client.js` by `build.mjs` at install; `pnpm build`, `pnpm typecheck`):
+`script-text.ts` decides what a script is, `script-rule.ts` is the rule,
+`index.tsx` draws it.
