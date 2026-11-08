@@ -61,7 +61,7 @@ test('openai API key: responses whole and streamed, reasoning, function calls, u
     assert.equal(balance(), 10_000_000 - 20_000 - (300_000 * 10 + 1000 * 45) / 2)
 
     // A streamed turn: reasoning summary and a function call, then its output and the reply.
-    const turn = script({ cmd: 'think', text: 'checking' }, { cmd: 'tool', id: 'call_1', name: 'echo', args: { text: 'hi' } }, { cmd: 'expect', tool: 'call_1', equals: 'hi' }, { cmd: 'say', text: 'done' })
+    const turn = script({ cmd: 'think', text: 'checking' }, { cmd: 'tool', id: 'call_1', name: 'echo', args: { text: 'hi' } }, { cmd: 'expect', value: 'tools.call_1.text', equals: 'hi' }, { cmd: 'say', text: 'done' })
     const first = await (await responses(key, { input: user(turn), stream: true, include: ['reasoning.encrypted_content'], reasoning: { effort: 'low', summary: 'auto' } })).text()
     assert.match(first, /^event: response\.created\n/)
     const sent = events(first)

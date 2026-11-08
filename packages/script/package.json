@@ -11,6 +11,9 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "index.mjs"
+    "index.mjs",
+    "grammar.mjs",
+    "values.mjs",
+    "run.mjs"
   ]
 }

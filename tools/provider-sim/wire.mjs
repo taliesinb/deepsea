@@ -13,7 +13,10 @@
  * streamed (server-sent events) or whole.
  */
 import { createHash } from 'node:crypto'
-import { chunk, ERROR_KINDS, FINISHED_REPLY, isScript, parseScript, plainReply, segments } from '../../packages/script/index.mjs'
+import {
+  checkExpectation, chunk, ERROR_KINDS, FINISHED_REPLY, isScript, newContext, parseScript, plainReply, recordTool, resume,
+  ScriptExpectationError, ScriptValueError,
+} from '../../packages/script/index.mjs'
 
 /** Rough token count of a text: four characters per token, at least one for non-empty text. */
 export const tokens = text => text ? Math.max(1, Math.ceil(String(text).length / 4)) : 0
@@ -44,8 +47,9 @@ export function normalize(format, messages) {
 }
 
 /**
- * The prompt and how far its turn has got.
- * @returns {{ prompt: string, position: number, lastResults: object[] }}
+ * The prompt and how far its turn has got: the responses since it (one per
+ * assistant message), each with the tool results that answered it.
+ * @returns {{ prompt: string, position: number, responses: { results: object[] }[] }}
  */
 export function promptOf(conversation) {
   let index = -1
@@ -65,11 +69,13 @@ export function promptOf(conversation) {
     const next = m.texts.find(looksLikePrompt)
     if (next !== undefined && (previous?.role === 'user' || m.toolResults.length > 0)) { index = i; prompt = next }
   }
-  if (index === -1) return { prompt: '', position: 0, lastResults: [] }
-  const after = conversation.slice(index + 1)
-  const results = []
-  for (let i = after.length - 1; i >= 0 && after[i].role !== 'assistant'; i--) results.unshift(...after[i].toolResults)
-  return { prompt, position: after.filter(m => m.role === 'assistant').length, lastResults: results }
+  if (index === -1) return { prompt: '', position: 0, responses: [] }
+  const responses = []
+  for (const m of conversation.slice(index + 1)) {
+    if (m.role === 'assistant') responses.push({ results: [] })
+    else responses.at(-1)?.results.push(...m.toolResults)
+  }
+  return { prompt, position: responses.length, responses }
 }
 
 /** Whether a text is a prompt the simulator acts on: a script, or `say …` / `help`. */
@@ -114,35 +120,70 @@ export function respond(conversation, system = '') {
   if (texts.some(t => t.includes(COMPACTION_REQUEST))) return { steps: [{ cmd: 'say', text: COMPACTION_SUMMARY }] }
   const first = conversation.find(m => m.role === 'user')?.texts[0] ?? ''
   if (first.startsWith(TITLE_REQUEST)) return { steps: [{ cmd: 'say', text: scriptTitle(first) ?? DEFAULT_TITLE }] }
-  const { prompt, position, lastResults } = promptOf(conversation)
+  const { prompt, position, responses } = promptOf(conversation)
   if (!isScript(prompt)) return { steps: position === 0 ? [{ cmd: 'say', text: plainReply(prompt) }] : [{ cmd: 'say', text: FINISHED_REPLY }] }
   const { commands, errors } = parseScript(prompt)
   if (errors.length > 0) return { invalid: `The script is invalid:\n${errors.join('\n')}` }
-  const parts = segments(commands)
-  if (position >= parts.length) return { steps: [{ cmd: 'say', text: FINISHED_REPLY }] }
   const hash = createHash('sha256').update(prompt).digest('hex').slice(0, 12)
-  const steps = parts[position]
-  for (const step of steps) {
-    if (step.cmd === 'expect') {
-      const result = step.tool === undefined ? lastResults.at(-1) : lastResults.find(r => r.id === step.tool)
-      const problem = result === undefined ? 'no tool result to check'
-        : step.equals !== undefined && result.text !== step.equals ? `expected ${JSON.stringify(step.equals)}, got ${JSON.stringify(result.text)}`
-          : step.contains !== undefined && !result.text.includes(step.contains) ? `expected text containing ${JSON.stringify(step.contains)}, got ${JSON.stringify(result.text)}`
-            : step.isError !== undefined && result.isError !== undefined && result.isError !== step.isError ? `expected isError ${step.isError}`
-              : undefined
-      if (problem) return { failure: { status: 400, kind: 'invalid-request', message: `line ${step.line}: ${problem}` } }
+  // The script's earlier responses are replayed into a fresh context; the simulator sees only the text of
+  // tool results, so `result` is null. Globals do not carry over from earlier scripts.
+  const context = newContext()
+  const steps = []
+  try {
+    const run = resume(commands, context, position, (n, calls) => recordResults(context, calls, responses[n]?.results ?? []))
+    if (run === undefined) return { steps: [{ cmd: 'say', text: FINISHED_REPLY }] }
+    for (;;) {
+      const { value: action, done } = run.next()
+      if (done || action.op === 'suspend') break
+      const step = action.evaluate()
+      if (step.cmd === 'expect') checkExpectation(step, context)
+      else if (step.cmd === 'error') {
+        const key = `${hash}:${action.key}`
+        const count = (failures.get(key) ?? 0) + 1
+        failures.set(key, count)
+        if (step.times === undefined || count <= step.times) {
+          const kind = ERROR_KINDS[step.kind]
+          return { failure: { status: step.status ?? kind.status ?? 500, kind: step.kind, message: step.message ?? `simulated ${step.kind}`, retryAfter: step.retryAfter } }
+        }
+      } else steps.push(step.cmd === 'tool' ? { ...step, id: wireId(action) } : step)
     }
-    if (step.cmd === 'error') {
-      const key = `${hash}:${step.line}`
-      const count = (failures.get(key) ?? 0) + 1
-      failures.set(key, count)
-      if (step.times === undefined || count <= step.times) {
-        const kind = ERROR_KINDS[step.kind]
-        return { failure: { status: step.status ?? kind.status ?? 500, kind: step.kind, message: step.message ?? `simulated ${step.kind}`, retryAfter: step.retryAfter } }
-      }
-    }
+  } catch (error) {
+    if (error instanceof ScriptValueError || error instanceof ScriptExpectationError) return { failure: { status: 400, kind: 'invalid-request', message: error.message } }
+    throw error
   }
+  // A response with nothing to show (only saves or checks after the last tool calls) says the script is done.
+  if (!steps.some(s => s.cmd === 'say' || s.cmd === 'think' || s.cmd === 'tool')) steps.unshift({ cmd: 'say', text: FINISHED_REPLY })
   return { steps, hash }
+}
+
+/** A scripted tool call's id on the wire: its run key when the script named it (`id`, with loop indices), else the wire's own. */
+const wireId = action => action.command.id === undefined ? undefined : action.key
+
+/**
+ * Record a response's tool calls with the results that answered them: by
+ * id, then (results without a usable id, as Gemini before 3 sends them) by
+ * tool name in order, then in order.
+ */
+function recordResults(context, calls, results) {
+  const pool = [...results]
+  const matched = new Map()
+  const take = (call, i) => { if (i >= 0) matched.set(call, pool.splice(i, 1)[0]) }
+  for (const call of calls) if (wireId(call) !== undefined) take(call, pool.findIndex(r => r.id === wireId(call)))
+  for (const call of calls) {
+    if (matched.has(call)) continue
+    const name = call.replayed?.name ?? call.command.name
+    const byName = pool.findIndex(r => r.name === name)
+    take(call, byName >= 0 ? byName : pool.findIndex(r => r.name === undefined))
+  }
+  for (const call of calls) {
+    const result = matched.get(call)
+    if (result === undefined) continue
+    const ok = result.isError !== true
+    recordTool(context, {
+      name: call.replayed?.name ?? call.command.name, args: call.replayed?.args ?? {}, result: null, text: result.text, duration: null,
+      error: ok ? null : { message: result.text }, ok,
+    }, call.command.id)
+  }
 }
 
 /** The blocks a response's steps produce, its usage override and finish. */

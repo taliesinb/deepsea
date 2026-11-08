@@ -91,7 +91,7 @@ test('gemini key: models, whole and streamed answers with usage at catalog price
 test('gemini tool calls: functionResponse results, expect by id with and without Gemini 3 call ids, and Gemini 3\'s thought signatures', async () => {
   const { base, close } = await start()
   try {
-    const script = '{"cmd":"tool","name":"read","id":"t1","args":{"path":"a.txt"}}\n{"cmd":"expect","tool":"t1","contains":"hello"}\n{"cmd":"say","text":"done"}'
+    const script = '{"cmd":"tool","name":"read","id":"t1","args":{"path":"a.txt"}}\n{"cmd":"expect","value":"tools.t1.text","contains":"hello"}\n{"cmd":"say","text":"done"}'
     const sse = async (model, contents) => {
       const response = await call(base, model, 'streamGenerateContent', { contents, generationConfig: { thinkingConfig: { includeThoughts: true } } }, { query: '?alt=sse' })
       return { status: response.status, text: await response.text() }
@@ -107,7 +107,7 @@ test('gemini tool calls: functionResponse results, expect by id with and without
       const answered = result => [user(script), { role: 'model', parts: [part] }, { role: 'user', parts: [{ functionResponse: { name: 'read', response: { output: result }, ...(id ? { id } : {}) } }] }]
       assert.deepEqual(partsOf(events((await sse(model, answered('hello world'))).text)).map(p => p.text), ['done'], model)
       const wrong = await sse(model, answered('nothing'))
-      assert.deepEqual([wrong.status, JSON.parse(wrong.text).error.message], [400, 'line 2: expected text containing "hello", got "nothing"'], model)
+      assert.deepEqual([wrong.status, JSON.parse(wrong.text).error.message], [400, 'line 2: expected tools.t1.text to contain "hello"; got "nothing"'], model)
     }
     // Gemini 3 refuses a current-turn function call without its signature; Gemini 2.5 does not check.
     const unsigned = [user(script), { role: 'model', parts: [{ functionCall: { id: 't1', name: 'read', args: {} } }] }, { role: 'user', parts: [{ functionResponse: { id: 't1', name: 'read', response: { output: 'hello' } } }] }]

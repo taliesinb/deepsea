@@ -22,9 +22,9 @@
  * by name and order.
  */
 import { randomBytes } from 'node:crypto'
-import { chunk, isScript, parseScript, segments } from '../../packages/script/index.mjs'
+import { chunk } from '../../packages/script/index.mjs'
 import { costMicros } from './common.mjs'
-import { promptOf, respond, tokens, usageOf } from './wire.mjs'
+import { respond, tokens, usageOf } from './wire.mjs'
 
 /** A Gemini model id's major version (`gemini-3.1-pro-preview` → 3), as pi-ai reads it; undefined for other names. */
 export function geminiMajor(id) {
@@ -58,26 +58,6 @@ export function geminiConversation(contents) {
     }))
     return { role: 'user', texts, toolCalls: 0, toolResults }
   })
-}
-
-/**
- * Give results without a usable id (models before Gemini 3 send none) the id
- * of the script's tool call they answer: the same name, in order. `expect`
- * finds a result by that id.
- */
-export function attachScriptIds(conversation) {
-  const { prompt, position, lastResults } = promptOf(conversation)
-  if (position === 0 || lastResults.length === 0 || !isScript(prompt)) return
-  const { commands, errors } = parseScript(prompt)
-  if (errors.length > 0) return
-  const calls = (segments(commands)[position - 1] ?? []).filter(s => s.cmd === 'tool' && s.id !== undefined)
-  const known = new Set(calls.map(c => c.id))
-  const used = new Set(lastResults.filter(r => known.has(r.id)).map(r => r.id))
-  for (const result of lastResults) {
-    if (known.has(result.id)) continue
-    const call = calls.find(c => c.name === result.name && !used.has(c.id))
-    if (call) { result.id = call.id; used.add(call.id) }
-  }
 }
 
 /**
@@ -220,8 +200,8 @@ export function geminiMessage(r) {
  */
 export async function geminiGenerate(ctx, { req, res, body, model, stream, sse, account, provider, catalogProvider, catalog, charge, fail }) {
   const contents = body.contents
+  // Results without a usable id (models before Gemini 3 send none) are matched to the script's calls by name (wire.mjs).
   const conversation = geminiConversation(contents)
-  attachScriptIds(conversation)
   const system = systemText(body.systemInstruction ?? body.system_instruction)
   const plan = respond(conversation, system)
   if (plan.invalid) return fail(400, 'invalid-request', plan.invalid)

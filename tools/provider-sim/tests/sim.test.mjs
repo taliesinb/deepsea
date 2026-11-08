@@ -35,22 +35,22 @@ test('the prompt is the message that starts the turn; context after it and tool 
     { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 't', arguments: '{}' } }] },
     { role: 'tool', tool_call_id: 'c1', content: 'result one' },
   ])
-  assert.deepEqual(promptOf(openai), { prompt: '{"cmd":"say","text":"x"}', position: 1, lastResults: [{ id: 'c1', text: 'result one' }] })
+  assert.deepEqual(promptOf(openai), { prompt: '{"cmd":"say","text":"x"}', position: 1, responses: [{ results: [{ id: 'c1', text: 'result one' }] }] })
   const anthropic = normalize('anthropic', [
     { role: 'user', content: [{ type: 'text', text: 'say hi' }, { type: 'text', text: 'context' }] },
   ])
-  assert.deepEqual(promptOf(anthropic), { prompt: 'say hi', position: 0, lastResults: [] })
+  assert.deepEqual(promptOf(anthropic), { prompt: 'say hi', position: 0, responses: [] })
   assert.equal(costMicros({ input: 1, output: 2 }, { input: 1000, output: 500, cacheRead: 0, cacheWrite: 0 }), 2000)
   // After a failed turn: the next prompt follows the failed one, or shares the tool results' message.
   const failed = '{"cmd":"error","kind":"server"}'
-  assert.deepEqual(promptOf(normalize('openai', [{ role: 'user', content: failed }, { role: 'user', content: 'say again' }])), { prompt: 'say again', position: 0, lastResults: [] })
+  assert.deepEqual(promptOf(normalize('openai', [{ role: 'user', content: failed }, { role: 'user', content: 'say again' }])), { prompt: 'say again', position: 0, responses: [] })
   assert.equal(promptOf(normalize('openai', [{ role: 'user', content: failed }, { role: 'user', content: 'runtime context' }])).prompt, failed)
   const merged = normalize('anthropic', [
     { role: 'user', content: '{"cmd":"tool","name":"t"}' },
     { role: 'assistant', content: [{ type: 'tool_use', id: 'u1', name: 't', input: {} }] },
     { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'u1', content: 'interrupted' }, { type: 'text', text: '{"cmd":"say","text":"new"}' }] },
   ])
-  assert.deepEqual(promptOf(merged), { prompt: '{"cmd":"say","text":"new"}', position: 0, lastResults: [] })
+  assert.deepEqual(promptOf(merged), { prompt: '{"cmd":"say","text":"new"}', position: 0, responses: [] })
 })
 
 test('the titler and compaction get the scripted model\'s answers, never a replay of the script', async () => {
@@ -90,7 +90,7 @@ test('openrouter: an account per key, scripted streams in both formats, cost loo
     history[2].content[0].content = 'gamma'
     const failed = await post(`${base}/openrouter.ai/api/v1/messages`, { model: 'vendor/model', messages: history }, 'sk-or-test')
     assert.equal(failed.status, 400)
-    assert.match((await failed.json()).error.message, /expected text containing "alpha"/)
+    assert.match((await failed.json()).error.message, /line 2: expected tools.last.text to contain "alpha"; got "gamma"/)
     // Spend the account's credit; the next request is refused.
     await post(`${base}/_sim/account`, { provider: 'openrouter', credential: 'sk-or-test', state: { usageMicros: 10_000_000 } })
     const broke = await post(`${base}/openrouter.ai/api/v1/chat/completions`, { model: 'vendor/model', messages: [{ role: 'user', content: 'say hi' }] }, 'sk-or-test')
@@ -118,4 +118,32 @@ test('deepseek: Anthropic messages for its own adapter, plain prompts, balance, 
     const unknown = await post(`${base}/api.example-llm.com/v1/chat`, {}, 'k')
     assert.equal(unknown.status, 501)
   } finally { await close() }
+})
+
+test('loops, batches and values play as the scripted model plays them, from the text of tool results', async () => {
+  const { respond } = await import('../wire.mjs')
+  const script = [
+    { cmd: 'batch', cmds: [{ cmd: 'loop', values: { type: 'range', stop: 2 }, body: { cmd: 'tool', name: 'echo', id: 'e', args: { n: { $value$: 'loop.this.index' } } } }] },
+    { cmd: 'loop', values: { type: 'literal', value: ['a', 'b'] }, body: { cmd: 'tool', name: 'echo', args: { n: { $value$: 'loop.this.value' } } } },
+    { cmd: 'expect', value: 'tools.e.text', equals: 'one' },
+    { cmd: 'say', text: { $value$: 'tools.last.text' } },
+  ].map(l => JSON.stringify(l)).join('\n')
+  const conversation = [{ role: 'user', content: script }]
+  const play = () => respond(normalize('openai', conversation))
+  const callsOf = steps => steps.filter(s => s.cmd === 'tool').map(s => [s.id, s.args.n])
+  const answer = (steps, texts) => {
+    const calls = steps.filter(s => s.cmd === 'tool').map((s, i) => ({ id: s.id ?? `r${conversation.length}-${i}`, type: 'function', function: { name: s.name, arguments: JSON.stringify(s.args) } }))
+    conversation.push({ role: 'assistant', content: null, tool_calls: calls })
+    calls.forEach((c, i) => conversation.push({ role: 'tool', tool_call_id: c.id, content: texts[i] }))
+  }
+  let plan = play()
+  assert.deepEqual(callsOf(plan.steps), [['e-0', 0], ['e-1', 1]])
+  answer(plan.steps, ['zero', 'one'])
+  plan = play()
+  assert.deepEqual(callsOf(plan.steps), [[undefined, 'a']])
+  answer(plan.steps, ['A'])
+  plan = play()
+  assert.deepEqual(callsOf(plan.steps), [[undefined, 'b']])
+  answer(plan.steps, ['B'])
+  assert.deepEqual(play().steps, [{ cmd: 'say', line: 4, ref: '4', text: 'B' }])
 })

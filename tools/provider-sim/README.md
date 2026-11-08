@@ -80,8 +80,12 @@ Both wire formats stream (server-sent events) or answer whole, with text,
 reasoning, tool calls and usage. A script plays across a turn as with the
 scripted model: one response per request, counted by the assistant messages
 since the prompt (the user message that starts the turn; context the harness
-adds after it is ignored). `expect` checks the tool results the request
-carries; `error` answers the HTTP status of its kind (with `Retry-After`), and
+adds after it is ignored), with the same interpreter: batches, loops,
+values and `expect` work as there, from the text of the tool results the
+request carries (no structured `result`, no `globals` from earlier
+scripts; plugins/llm-scripted/README.md → The provider simulator). A
+result without a usable id (Gemini before 3) is matched to its call by tool
+name. `error` answers the HTTP status of its kind (with `Retry-After`), and
 with `times` only for its first attempts. The harness's own side requests
 are answered as the scripted model answers them, never by replaying the
 session's script (which would play, and charge, its turn again): the session
