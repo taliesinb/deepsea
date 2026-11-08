@@ -73,7 +73,9 @@ export class ScriptedAdapter extends LlmAdapter {
     const position = after.filter(m => m.role === 'assistant').length
     const parts = segments(commands)
     if (position >= parts.length) { yield* this.reply(options, FINISHED_REPLY); return }
-    const hash = createHash('sha256').update(text).digest('hex').slice(0, 12)
+    // The prompt's own message id goes into the hash, so the same script sent again (a later turn) gets
+    // tool-call ids of its own: the client keys a call's row by its id, and a repeated id hides the later row.
+    const hash = createHash('sha256').update(`${messages[userIndex]?.id ?? ''}\n${text}`).digest('hex').slice(0, 12)
     yield* this.play(parts[position], { options, after, hash, position })
   }
 

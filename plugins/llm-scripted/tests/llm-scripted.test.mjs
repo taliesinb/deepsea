@@ -166,3 +166,11 @@ test('the script is the latest typed message, not context the harness adds after
   const chunks = await collect({ messages: [typed, injected('runtime-context'), injected('time-context')] })
   assert.deepEqual(blocks(chunks), [{ type: 'text', text: 'from the script' }])
 })
+
+test('the same script sent again gets tool-call ids of its own (the client keys a row by its id)', async () => {
+  const text = script([{ cmd: 'tool', name: 'bash', args: { command: 'true' } }])
+  const ids = async messageId => blocks(await collect({ messages: [{ ...user(text), id: messageId }] })).find(b => b.type === 'tool-call').id
+  const [first, again, same] = [await ids('m-1'), await ids('m-2'), await ids('m-1')]
+  assert.notEqual(first, again)
+  assert.equal(first, same, 'stable for one prompt, so expect lines and retries agree')
+})
