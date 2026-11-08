@@ -60,23 +60,23 @@ export class ScriptedAdapter extends LlmAdapter {
     this.titles = new Map()
     /** `<script hash>:<action key>` → how many times an `error` with `times` has fired. */
     this.errorCounts = new Map()
-    /** Scripted tool call id → `{ started }`, then `{ result, error, ok, duration }` once it finished. */
+    /** Tool call id → `{ started }`, then `{ result, error, ok, duration }` once it finished (any model's calls). */
     this.calls = new Map()
   }
 
-  /** Whether a tool execution is one a script asked for (not a nested call). */
-  static isScripted(exec) {
-    return exec.parent === undefined && typeof exec.callId === 'string' && exec.callId.startsWith('scripted-')
+  /** Whether a tool execution is a call a model made (not a call nested inside another tool). */
+  static isModelCall(exec) {
+    return exec.parent === undefined && typeof exec.callId === 'string'
   }
 
-  /** A scripted tool call starts running (the `tools/execute` event). */
+  /** A model's tool call starts running (the `tools/execute` event). */
   callStarted(exec) {
-    if (ScriptedAdapter.isScripted(exec)) this.keep(exec.callId, { started: performance.now() })
+    if (ScriptedAdapter.isModelCall(exec)) this.keep(exec.callId, { started: performance.now() })
   }
 
-  /** A scripted tool call finished (the `tools/result` event): keep its structured value, error and duration. */
+  /** A model's tool call finished (the `tools/result` event): keep its structured value, error and duration. */
   callFinished(exec, result) {
-    if (!ScriptedAdapter.isScripted(exec)) return
+    if (!ScriptedAdapter.isModelCall(exec)) return
     const started = this.calls.get(exec.callId)?.started
     this.keep(exec.callId, {
       result: result.isError ? null : result.value ?? null,
@@ -120,37 +120,58 @@ export class ScriptedAdapter extends LlmAdapter {
     if (title && options.sessionId) this.titles.set(options.sessionId, title.text)
 
     // The context is rebuilt from the transcript on every request, so a retry sees what the first attempt saw:
-    // the globals the earlier scripts saved, then this script's earlier responses replayed.
+    // the conversation before this script (its globals and finished tool calls), then this script's earlier
+    // responses replayed.
     const after = messages.slice(userIndex + 1)
     const position = after.filter(m => m.role === 'assistant').length
     const hash = scriptHash(messages[userIndex], text)
-    const context = newContext(this.globalsBefore(messages, userIndex))
+    const { globals, session } = this.conversationBefore(messages, userIndex)
+    const context = newContext(globals, session)
     let run
     try { run = resume(commands, context, position, this.recorder(context, after, hash)) } catch (error) { throw scriptError(error) }
     if (run === undefined) { yield* this.reply(options, FINISHED_REPLY); return }
     yield* this.play(run, { options, hash, position, context })
   }
 
-  /** The globals the scripts before the one at `userIndex` saved, each replayed through the responses it got. */
-  globalsBefore(messages, userIndex) {
+  /**
+   * The conversation before the prompt at `userIndex`, turn by turn in order:
+   * the globals its scripts saved and its finished tool calls (`session.tools`).
+   * A turn the scripted model answered with a script is replayed through the
+   * responses it got, so its saves and its calls interleave as they ran; any
+   * other turn (another model's, a plain prompt) adds its tool calls in order.
+   */
+  conversationBefore(messages, userIndex) {
     const globals = {}
+    const session = { tools: {} }
     const prompts = messages.flatMap((m, i) => i < userIndex && isPrompt(m) ? [i] : [])
     prompts.forEach((start, n) => {
-      const text = textOf(messages[start])
-      if (!isScript(text)) return
-      const { commands, errors } = parseScript(text)
-      if (errors.length > 0) return
       const after = messages.slice(start + 1, prompts[n + 1] ?? userIndex)
-      const context = newContext(globals)
-      // A script that failed on a value stopped there; what it saved before that stands.
+      const text = textOf(messages[start])
+      const otherModel = after.some(m => m.role === 'assistant' && m.source?.model !== undefined && m.source.model !== MODEL_ID)
+      const { commands, errors } = isScript(text) && !otherModel ? parseScript(text) : { commands: [], errors: ['not a script'] }
+      if (errors.length > 0) { this.recordTurn(session, after); return }
+      const context = newContext(globals, session)
+      // A script that failed on a value stopped there; what it saved and called before that stands.
       try { resume(commands, context, after.filter(m => m.role === 'assistant').length, this.recorder(context, after, scriptHash(messages[start], text))) } catch (error) {
         if (!(error instanceof ScriptValueError)) throw error
       }
     })
-    return globals
+    return { globals, session }
   }
 
-  /** Records response `n`'s tool calls, with the results that came back, into `context.tools`. */
+  /** Add every finished tool call of one turn to `session.tools`, in order. */
+  recordTurn(session, after) {
+    for (const message of after) {
+      if (message.role !== 'assistant') continue
+      for (const block of message.content ?? []) {
+        if (block.type !== 'tool-call') continue
+        const result = after.find(m => m.role === 'tool' && m.toolCallId === block.id)
+        if (result !== undefined) recordTool(session, this.descriptor(block, result))
+      }
+    }
+  }
+
+  /** Records response `n`'s tool calls, with the results that came back, into `context.tools` and `context.session.tools`. */
   recorder(context, after, hash) {
     const responses = after.filter(m => m.role === 'assistant')
     return (n, calls) => {
@@ -159,7 +180,10 @@ export class ScriptedAdapter extends LlmAdapter {
         const id = callId(hash, n, call.key)
         const block = blocks.find(b => b.id === id)
         const result = after.find(m => m.role === 'tool' && m.toolCallId === id)
-        if (block !== undefined && result !== undefined) recordTool(context, this.descriptor(block, result), call.command.id)
+        if (block === undefined || result === undefined) continue
+        const descriptor = this.descriptor(block, result)
+        recordTool(context, descriptor, call.command.id)
+        recordTool(context.session, descriptor, call.command.id)
       }
     }
   }

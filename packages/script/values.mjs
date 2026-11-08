@@ -3,7 +3,7 @@
  * is replaced by what <VALUE> evaluates to, a `"$splat$": <VALUE>` key merges
  * an object into the object holding it, and a `{"$splat$": <VALUE>}` list
  * entry splices an array into the list. Values are read from the JSON
- * context `{ tools, locals, globals, loop }` by dotted paths; the `save` command
+ * context `{ tools, locals, globals, loop, session }` by dotted paths; the `save` command
  * writes `locals` and `globals`. Pure: no dependencies.
  *
  * <VALUE> is one of:
@@ -192,8 +192,12 @@ export function evaluate(node, context, where = '') {
   return out
 }
 
-/** A fresh, empty JSON context; `globals`, when given, is shared (it outlives the script). */
-export const newContext = (globals = {}) => ({ tools: {}, locals: {}, globals, loop: {} })
+/**
+ * A fresh, empty JSON context. `globals` and `session`, when given, are shared
+ * (they outlive the script): `session.tools` holds every finished tool call of
+ * the conversation, as `tools` holds this script's.
+ */
+export const newContext = (globals = {}, session = { tools: {} }) => ({ tools: {}, locals: {}, globals, loop: {}, session })
 
 /** Check a `save` command's `locals` / `globals` maps: names without dots, each value a <VALUE>. */
 export function checkSave(fields) {

@@ -45,7 +45,7 @@ their own.
 |---|---|---|
 | `say` | `text`; `chunks` (≥ 1), `chunkDelay` (seconds) | a text block, streamed in `chunks` pieces `chunkDelay` apart |
 | `think` | as `say` | a reasoning block |
-| `print` | `value` (default `"tools.last"`); `prefix`, `maxChars` (default 4000), `chunks`, `chunkDelay` | a text block showing a value, to see what a script is working with (Values, below) |
+| `print` | `value` (default `"session.tools.last"`); `prefix`, `maxChars` (default 4000), `chunks`, `chunkDelay` | a text block showing a value, to see what a script is working with (Values, below) |
 | `tool` | `name`; `args` (object, default `{}`), `id`; `chunks` (≥ 1), `chunkDelay` (seconds) | a tool call, its arguments streamed in `chunks` pieces `chunkDelay` apart (a long `write` as a model streams it). It ends the response: the harness runs it and asks again, and the script continues after it |
 | `batch` | `cmds` (a list of commands) | runs `cmds` in one response: their tool calls go out together, and the script continues once all their results are in |
 | `expect` | `value` (default `"tools.last.text"`); `equals` (any JSON), `contains` (text), `matches` (a regular expression) | checks a value against the context (Values, below); a mismatch fails the request (`SCRIPT_EXPECTATION`) with what was expected and what is there |
@@ -133,7 +133,7 @@ gives. What a value loads is data: it is not evaluated again. V is one of:
 | `{"type": "literal", "value": …}` | the value as written, not evaluated |
 | `{"type": "range", "start": 0, "stop": n, "step": 1}` | `[start, start + step, …]` up to `stop`, excluded, as Python's `range` (`start` and `step` optional; each a whole number or a V giving one; at most 10,000 numbers) |
 
-**The JSON context** is `{"tools", "locals", "globals", "loop"}`:
+**The JSON context** is `{"tools", "locals", "globals", "loop", "session"}`:
 
 - `tools`: each finished tool call of this script, under `last`, its tool
   name (`bash`, `job_output`) and its `id` if it has one (an `id` wins over
@@ -149,6 +149,17 @@ gives. What a value loads is data: it is not evaluated again. V is one of:
   `{"cmd": "save", "globals": {"sleep_id": "tools.last.result.jobId"}}`,
   then `{"$value$": "globals.sleep_id"}` there.
 - `loop`: the iterations of the loops the command is in (Loops, below).
+- `session.tools`: every finished tool call of the conversation so far,
+  this script's and earlier turns', other models' included, recorded as
+  `tools` records this script's (the latest call wins `last` and its
+  name; a script call's `id` too). Let another model start a background
+  job, then switch to Script: `session.tools.bash.result.jobId`. It grows
+  in conversation order as the script runs, so a replayed response sees
+  exactly what the live one saw.
+
+`tools` stays the script's own: a value that names `tools.bash` fails
+until this script has called `bash`, instead of quietly reading an earlier
+script's call. Reach back on purpose with `session.tools`.
 
 **`save`** evaluates each value (a V, as above), all against the context
 as it was, then writes them: `{"cmd": "save", "locals": {"a": "locals.b",
@@ -163,13 +174,14 @@ given must hold. It goes anywhere: `{"cmd": "expect", "value":
 "tools.wait.ok", "equals": true}`, `{"cmd": "expect", "value":
 "loop.this.index", "equals": 2}`. A value that is not there fails it too.
 
-**`print`** shows a V (`value`, default `"tools.last"`: the last tool
-call's whole record) as a text block: a string as it is in a plain fenced
+**`print`** shows a V (`value`, default `"session.tools.last"`: the
+conversation's last finished tool call, whole) as a text block: a string as it is in a plain fenced
 block (a tool's output keeps its lines), anything else as JSON indented
 by 2 in a `json` block, the fence longer than any run of backticks inside.
 `prefix` goes on the line above; past `maxChars` characters the value is
 cut and the count of the rest follows the block. A bare `{"cmd":
-"print"}` after a tool call shows what came back.
+"print"}` shows what the last tool call returned, in this script or an
+earlier turn.
 
 **Failures.** A path that is not there, a splat of the wrong kind or a
 field that is wrong once evaluated fails the request with an API error
@@ -178,13 +190,15 @@ context has instead, e.g. `line 2: args.job_id: "tools.bash.result.jobId":
 no "bash" in tools (it has "last", "job_output")`.
 
 **Where the context comes from.** It is rebuilt from the conversation on
-every request (How a script runs, above): the scripts before this one are
-replayed for their `globals`, then this script's earlier responses. The
-structured result, error and duration of each call come from the harness's
+every request (How a script runs, above): the turns before this one, in
+order (scripts replayed for their `globals` and calls, other turns' calls
+recorded), then this script's earlier responses. The structured result,
+error and duration of each call (any model's) come from the harness's
 `tools/result` event and are kept in memory (the last 1000 calls): after a
 server restart, earlier calls have `result: null` and `duration: null`,
-and their `text`, `args` and `ok` from the conversation. Globals before a
-compaction are gone with the scripts that saved them.
+and their `text`, `args` and `ok` from the conversation. Globals and
+`session.tools` from before a compaction are gone with the turns that made
+them.
 
 ## Loops
 
@@ -233,8 +247,9 @@ inside a script prompt.
 
 The provider simulator (tools/provider-sim) plays the same scripts with the
 same interpreter, in each provider's wire protocol. It sees only the text
-of tool results, so there `result` is `null` and `duration` is `null`, and
-`globals` do not carry over from earlier scripts.
+of tool results, so there `result` is `null` and `duration` is `null`,
+`globals` do not carry over from earlier scripts, and `session.tools` holds
+only the current script's calls.
 
 ## Not yet
 
@@ -250,8 +265,8 @@ pnpm install && pnpm test
 holds the grammar (`grammar.mjs`), value expressions (`values.mjs`) and the
 interpreter (`run.mjs`); `adapter.mjs` is the `LlmAdapter`; `index.js`
 registers it (config: `route`, default `scripted`) and listens to
-`tools/execute` and `tools/result` for the scripts' own calls (ids
-`scripted-…`). The browser half is `src/client/` (built into
+`tools/execute` and `tools/result` for every call a model makes (not calls
+nested inside a tool). The browser half is `src/client/` (built into
 `lib/client.js` by `build.mjs` at install; `pnpm build`, `pnpm typecheck`):
 `script-text.ts` decides what a script is, `script-rule.ts` is the rule,
 `index.tsx` draws it.

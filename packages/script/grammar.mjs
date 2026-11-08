@@ -22,8 +22,8 @@ export const ERROR_KINDS = {
 /** What `expect` checks when it names no `value`: the text the model saw from the last tool call. */
 export const DEFAULT_EXPECT_VALUE = 'tools.last.text'
 
-/** What `print` shows when it names no `value`: the last tool call, whole. */
-export const DEFAULT_PRINT_VALUE = 'tools.last'
+/** What `print` shows when it names no `value`: the conversation's last finished tool call, whole. */
+export const DEFAULT_PRINT_VALUE = 'session.tools.last'
 
 /** How many characters of a value `print` shows unless its `maxChars` says otherwise. */
 export const DEFAULT_PRINT_CHARS = 4000
@@ -79,7 +79,7 @@ const VALUE_FIELDS = { expect: ['value'], loop: ['values'], print: ['value'] }
 const PURPOSE = {
   say: 'a text block, streamed in `chunks` pieces `chunkDelay` s apart',
   think: 'a reasoning block, as `say`',
-  print: 'a text block showing a value (default `tools.last`) in a fenced block: a string as it is, anything else as indented JSON; `prefix` above it, at most `maxChars` (default 4000) characters',
+  print: 'a text block showing a value (default `session.tools.last`) in a fenced block: a string as it is, anything else as indented JSON; `prefix` above it, at most `maxChars` (default 4000) characters',
   tool: 'a tool call, its arguments streamed in `chunks` pieces `chunkDelay` s apart; it ends the response, and the script continues once its result is in',
   batch: 'runs `cmds` in one response: their tool calls go out together, and the script continues once all their results are in',
   expect: 'checks a value (default `tools.last.text`): `equals` (any JSON), `contains` (text), `matches` (a regular expression)',
@@ -112,7 +112,7 @@ export function helpText() {
     '',
     `Error kinds: ${Object.keys(ERROR_KINDS).map(k => `\`${k}\``).join(', ')}.`,
     '',
-    'Values: `{"$value$": V}` anywhere in a command is replaced by V, evaluated against `{tools, locals, globals, loop}` just before the command runs; `"$splat$": V` merges an object V into its object (in a list, `{"$splat$": V}` splices a list V). V is a path (`"tools.bash.result.jobId"`) or `{"type": …}`: `load` `path`, `toString` `value`, `stringSub` `str` `lhs` `rhs`, `literal` `value`, `range` `start?` `stop` `step?`. Each finished tool call is `tools.last`, `tools.<name>` and `tools.<id>`: `{name, args, result, text, duration, error, ok}`.',
+    'Values: `{"$value$": V}` anywhere in a command is replaced by V, evaluated against `{tools, locals, globals, loop, session}` just before the command runs; `"$splat$": V` merges an object V into its object (in a list, `{"$splat$": V}` splices a list V). V is a path (`"tools.bash.result.jobId"`) or `{"type": …}`: `load` `path`, `toString` `value`, `stringSub` `str` `lhs` `rhs`, `literal` `value`, `range` `start?` `stop` `step?`. Each finished tool call of this script is `tools.last`, `tools.<name>` and `tools.<id>`: `{name, args, result, text, duration, error, ok}`; `session.tools` holds every finished call of the conversation the same way, other models\' included.',
   ].join('\n')
 }
 

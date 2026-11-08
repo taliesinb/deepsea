@@ -16,7 +16,7 @@ plain prompt prints the command table.
 | `checkExpectation(command, context)` | an evaluated `expect` checked; throws `ScriptExpectationError` |
 | `formatPrint(value, { prefix, maxChars })` | the Markdown a `print` shows (the interpreter turns a `print` into a `say` of it) |
 | `checkCommand(command)`, `evaluateCommand(command, context)` | a command's fields checked against its schema; a command with its values evaluated and checked again |
-| `evaluate`, `evaluateValue`, `load`, `applySave`, `recordTool`, `newContext`, `ScriptValueError` | value expressions and the JSON context `{tools, locals, globals, loop}` |
+| `evaluate`, `evaluateValue`, `load`, `applySave`, `recordTool`, `newContext`, `ScriptValueError` | value expressions and the JSON context `{tools, locals, globals, loop, session}` |
 | `chunk(text, n)` | a text cut into `n` streamed pieces |
 | `plainReply(text)` | the reply to a plain prompt: `say <text>`, `help`, else the standing reply |
 | `helpText()` | the Markdown command table `help` prints |

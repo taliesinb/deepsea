@@ -126,8 +126,10 @@ export function respond(conversation, system = '') {
   if (errors.length > 0) return { invalid: `The script is invalid:\n${errors.join('\n')}` }
   const hash = createHash('sha256').update(prompt).digest('hex').slice(0, 12)
   // The script's earlier responses are replayed into a fresh context; the simulator sees only the text of
-  // tool results, so `result` is null. Globals do not carry over from earlier scripts.
+  // tool results, so `result` is null. Globals do not carry over from earlier scripts, and the conversation's
+  // calls (`session.tools`) are this script's own.
   const context = newContext()
+  context.session.tools = context.tools
   const steps = []
   try {
     const run = resume(commands, context, position, (n, calls) => recordResults(context, calls, responses[n]?.results ?? []))

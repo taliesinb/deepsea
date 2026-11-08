@@ -16,7 +16,7 @@ export const Config = { '~standard': { version: 1, vendor: 'deepsea-llm-scripted
 export function apply(ctx, config = { route: 'scripted' }) {
   const adapter = new ScriptedAdapter()
   ctx.llm.registerAdapter([config.route ?? 'scripted'], adapter)
-  // The structured results and durations of the scripts' own tool calls, for `tools.<…>` values (README).
+  // The structured results and durations of models' tool calls, for `tools.<…>` and `session.tools.<…>` values (README).
   ctx.on('tools/execute', (exec, next) => { adapter.callStarted(exec); return next() })
   ctx.on('tools/result', (exec, result) => { adapter.callFinished(exec, result) })
 }

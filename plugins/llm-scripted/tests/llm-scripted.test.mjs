@@ -457,3 +457,55 @@ test('print shows the last tool call by default, any value with a prefix, and fa
   assert.equal(parseScript(script([{ cmd: 'print', value: '' }])).errors[0], 'line 1: value: a path cannot be empty')
   await assert.rejects(collect({ messages: [user(script([{ cmd: 'print', value: 'locals.nope' }]))] }), e => e.code === 'SCRIPT_VALUE' && e.message === 'line 1: value: "locals.nope": no "nope" in locals (it is empty)')
 })
+
+// ---- session.tools: every finished tool call of the conversation ------------------------------
+
+/** A turn answered by another model: its prompt, one tool call and its result. */
+function otherModelTurn(adapter, id, name, args, text, value) {
+  adapter.callStarted({ callId: id, name, arguments: args })
+  adapter.callFinished({ callId: id, name, arguments: args }, { isError: false, value, content: [] })
+  return [
+    user('run it'),
+    { role: 'assistant', source: { kind: 'model', provider: 'deepseek', model: 'deepseek-chat' }, content: [{ type: 'tool-call', id, name, arguments: JSON.stringify(args) }] },
+    toolResult(id, text),
+    { role: 'assistant', source: { kind: 'model', provider: 'deepseek', model: 'deepseek-chat' }, content: [{ type: 'text', text: 'ok' }] },
+  ]
+}
+
+test('a lone print shows the conversation\'s last tool call; tools stays the script\'s own', async () => {
+  const adapter = new ScriptedAdapter()
+  const first = await playScript(adapter, [{ ...user(script([{ cmd: 'tool', name: 'bash', args: { command: 'ls' }, id: 'ls' }])), id: 'm-1' }], () => ({ value: { files: ['a'] }, text: 'a\n' }))
+  const history = [...first.messages, { ...user(script([{ cmd: 'print' }, { cmd: 'say', text: { $value$: 'session.tools.ls.text' } }])), id: 'm-2' }]
+  const [printed, said] = texts(blocks(await collect({ messages: history }, adapter)))
+  assert.match(printed, /^```json\n\{\n {2}"name": "bash",\n {2}"args": \{\n {4}"command": "ls"\n {2}\},\n {2}"result": \{\n {4}"files": \[/)
+  assert.equal(said, 'a\n')
+  // `tools` and the expect default still mean this script's calls only.
+  await assert.rejects(collect({ messages: [...first.messages, user(script([{ cmd: 'say', text: { $value$: 'tools.last.text' } }]))] }, adapter),
+    e => e.code === 'SCRIPT_VALUE' && /no "last" in tools \(it is empty\)/.test(e.message))
+  await assert.rejects(collect({ messages: [...first.messages, user(script([{ cmd: 'expect', contains: 'a' }]))] }, adapter), e => e.code === 'SCRIPT_EXPECTATION')
+  // With nothing called yet in the conversation, a lone print says so.
+  await assert.rejects(collect({ messages: [user(script([{ cmd: 'print' }]))] }), e => e.code === 'SCRIPT_VALUE' && /"session.tools.last": no "last" in session.tools \(it is empty\)/.test(e.message))
+})
+
+test('session.tools holds other models\' calls too, in conversation order, structured results included', async () => {
+  const adapter = new ScriptedAdapter()
+  const scripted = await playScript(adapter, [{ ...user(script([{ cmd: 'tool', name: 'bash', args: { command: 'one' } }])), id: 'm-1' }], () => ({ value: { n: 1 }, text: 'one' }))
+  const other = otherModelTurn(adapter, 'call_9', 'bash', { command: 'sleep 9 &', run_in_background: true }, 'started background job bash-9', { kind: 'background', jobId: 'bash-9' })
+  const history = [...scripted.messages, ...other, user(script([
+    { cmd: 'say', text: { $value$: 'session.tools.last.result.jobId' } },
+    { cmd: 'say', text: { $value$: { type: 'toString', value: 'session.tools.bash.args' } } },
+  ]))]
+  assert.deepEqual(texts(blocks(await collect({ messages: history }, adapter))), ['bash-9', '{"command":"sleep 9 &","run_in_background":true}'])
+})
+
+test('session.tools grows as the script runs, so a replayed response sees what the live one saw', async () => {
+  const text = script([
+    { cmd: 'tool', name: 'bash', args: { command: 'one' } },
+    { cmd: 'save', locals: { first: 'session.tools.last.args.command' } },
+    { cmd: 'tool', name: 'bash', args: { command: 'two' } },
+    { cmd: 'say', text: { $value$: { type: 'stringSub', str: 'first=F last=L', lhs: 'F', rhs: 'locals.first' } } },
+    { cmd: 'say', text: { $value$: 'session.tools.last.args.command' } },
+  ])
+  const { replies } = await playScript(new ScriptedAdapter(), [user(text)], (name, args) => ({ value: args, text: args.command }))
+  assert.deepEqual(texts(replies.at(-1)), ['first=one last=L', 'two'])
+})
