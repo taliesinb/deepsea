@@ -31,6 +31,11 @@
 //   snapshot {window: true, chrome?}        the page, or with `chrome` the whole window (a visible app only)
 //   window-info                             frame, screen, key/active, content size, view mode, appearance
 //   log {lines?}                            the last lines of this run's log
+//   panels                                  the floating panels pages opened (Panels.swift): id, url, title,
+//                                           frame, visible, level, floating, allSpaces, key, loading
+//   panel-eval {id, js}                     `eval` in that panel's page
+//   panel-snapshot {id}                     that panel's page as a PNG (files as `snapshot {window: true}`)
+//   panel-close {id}                        close it as its close button would (the pages hear `by: 'user'`)
 //   opened {clear?}                         URLs the app opened, or would have, outside itself (a
 //                                           hidden test build never opens them: links, sign-in
 //                                           pages, Preview)
@@ -234,6 +239,33 @@ final class Automation {
         case "snapshot": snapshot(app, request, done)
         case "window-info": done(.success(windowInfo(app)))
         case "log": done(.success(logTail(app, request)))
+        case "panels": done(.success(["panels": app.panelList()]))
+        case "panel-eval", "panel-snapshot", "panel-close":
+            guard let id = request["id"] as? String, let panel = app.panels[id] else {
+                done(.failure(Failure(code: "not-found", message: "no panel \"\(request["id"] as? String ?? "")\"")))
+                return
+            }
+            if op == "panel-close" {
+                // As the person's close button: the pages hear `closed` by the user.
+                panel.window.performClose(nil)
+                done(.success(["closed": app.panels[id] == nil]))
+            } else if op == "panel-eval" {
+                guard let js = request["js"] as? String else { done(.failure(Failure(code: "bad-request", message: "\"js\" (a function body) is required"))); return }
+                evaluateJSON(app, body: js, in: panel.webView) { result in
+                    switch result {
+                    case .success(let text): done(.success(RawJSON(text: text)))
+                    case .failure(let failure): done(.failure(failure))
+                    }
+                }
+            } else {
+                panel.webView.takeSnapshot(with: nil) { image, _ in
+                    guard let image, let tiff = image.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]),
+                          let saved = app.storeWindowSnapshot(png, open: false, kind: "panel") else {
+                        done(.failure(Failure(code: "capture", message: "panel capture failed"))); return
+                    }
+                    done(.success(saved))
+                }
+            }
         case "opened":
             let urls = app.externalOpens
             if request["clear"] as? Bool == true { app.externalOpens.removeAll() }
@@ -299,9 +331,9 @@ final class Automation {
     }
 
     /// Run a function body in the page; its value comes back as JSON text.
-    func evaluateJSON(_ app: AppDelegate, body: String, arguments: [String: Any] = [:], completion: @escaping (Result<String, Failure>) -> Void) {
+    func evaluateJSON(_ app: AppDelegate, body: String, arguments: [String: Any] = [:], in view: WKWebView? = nil, completion: @escaping (Result<String, Failure>) -> Void) {
         let wrapped = "const __deepsea_value = await (async () => {\n\(body)\n})();\nconst __deepsea_json = JSON.stringify(__deepsea_value === undefined ? null : __deepsea_value);\nreturn __deepsea_json === undefined ? 'null' : __deepsea_json"
-        app.webView.callAsyncJavaScript(wrapped, arguments: arguments, in: nil, in: .page) { result in
+        (view ?? app.webView).callAsyncJavaScript(wrapped, arguments: arguments, in: nil, in: .page) { result in
             switch result {
             case .success(let value): completion(.success(value as? String ?? "null"))
             case .failure(let error):

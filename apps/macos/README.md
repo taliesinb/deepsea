@@ -12,6 +12,7 @@ position, preferences and logs.
 | `Sources/main.swift` | the app: entry points and the offline page, link handling, the integrated title bar, View ▸ Desktop / Mobile and Window Material, Settings… (⌘,), menus, downloads, the run log |
 | `Sources/Automation.swift` | the automation channel of test builds (below) |
 | `Sources/Snapshots.swift` | window and element snapshots |
+| `Sources/Panels.swift` | floating panels a page asks for (`__DEEPSEA_APP__.showPanel`, below) |
 | `Sources/PortForward.swift` | loopback links of a remote server and sign-in callbacks, forwarded to this Mac |
 | `Sources/Paths.swift` | the variant's log directory and snapshot store |
 | `Resources/desktop-branding.js` | the page-side identity: wordmark, whale colour, window title |
@@ -117,6 +118,41 @@ Forwarded Ports.
   store), so a server reached on loopback admits them by its session cookie,
   and one on the tailnet by Tailscale identity.
 
+## Floating panels
+
+A page can show one page of its server in a small window of its own, for
+something the person must see even when DeepSea is not in front, is
+minimised, or shows another session (@deepsea/tool-system-permissions shows
+its waiting card this way):
+
+```js
+__DEEPSEA_APP__.showPanel({ id: 'my-plugin:42', url: './api/my-plugin/panel?x=42', width: 520, height: 200, title: 'Title' })
+__DEEPSEA_APP__.closePanel('my-plugin:42')
+addEventListener('deepsea-app-panel', e => e.detail) // { id, state: 'opened' | 'closed', by: 'page' | 'user' }
+```
+
+- **The window.** A non-activating `NSPanel` at the floating level, on every
+  Space and beside full-screen apps, at the top right of the main window's
+  screen. It appears without taking focus (ordered front, never made key);
+  a click in it works without bringing the app forward. Width and height are
+  clamped to 260–900 × 120–900 points; the person may resize or close it.
+- **The page.** The URL is resolved against the asking page and must be on
+  the app's server (its scope); anything else is refused and logged. The
+  panel shares the main web view's data store (cookies, storage) and user
+  scripts, so the server admits it like the main page and it has
+  `__DEEPSEA_APP__` too (a panel's page closes itself with `closePanel`).
+  Links out of scope open in the default browser, as everywhere.
+- **One per id, app-wide.** Showing an id again brings that panel forward
+  (loading the new URL if it differs), whichever window asked; so several
+  windows of the app never stack copies.
+- **Events.** Every page of the app (main window, popups, panels) gets
+  `deepsea-app-panel` when a panel opens or closes, with who closed it: the
+  page (`closePanel`) or the person (the close button).
+- A page in a plain browser has no `showPanel`; a plugin then shows nothing
+  extra. A hidden test build's panels are invisible and click-through like
+  its window; the automation channel lists and drives them (`panels`,
+  `panel-eval`, `panel-snapshot`, `panel-close`).
+
 ## Test builds
 
 `dsd run <v> --throwaway-app` builds a throwaway's app into
@@ -147,7 +183,8 @@ One JSON object per line on the socket, each answered by one line:
 `dsd drive` and `dsd script` are its clients (tools/dsd/README.md). The
 operations are listed in the header of `Sources/Automation.swift`: `hello`,
 `load`, `reload`, `wait-page`, `eval`, `resize`, `view`, `appearance`,
-`click`, `type`, `describe`, `snapshot`, `window-info`, `log`, `opened`, `quit`.
+`click`, `type`, `describe`, `snapshot`, `window-info`, `log`, `opened`,
+`panels`, `panel-eval`, `panel-snapshot`, `panel-close`, `quit`.
 
 - **Input is real.** `click` and `type` post AppKit mouse and key events to
   the web view, so the page sees the full `pointerdown` … `click` sequence

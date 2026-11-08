@@ -15,7 +15,7 @@
 //     start so the shell treats the page as the operator's machine
 //     (`ctx.connection.isLoopback`: Settings persist on the host);
 //   - carries its identity into the page: `globalThis.__DEEPSEA_APP__ =
-//     { name, glyphColor, view, openExternal }` and a `<style>` that renames the
+//     { name, glyphColor, view, openExternal, showPanel, closePanel }` and a `<style>` that renames the
 //     sidebar wordmark ("DSH Local Build" → the app name) and colours the whale
 //     like the app icon (Resources/desktop-branding.js), and titles the window
 //     with the app name;
@@ -39,6 +39,9 @@
 //     `-webkit-app-region`, so a document-start script reports mousedowns on the
 //     client's drag regions and the app drags the window; the page's theme
 //     choice sets the window appearance;
+//   - floating panels a page asks for (`__DEEPSEA_APP__.showPanel`, Panels.swift): a small
+//     window of one page of its server, above other windows and on every Space, that does not
+//     take focus when it appears;
 //   - View ▸ Save / Copy Window Snapshot and Element Snapshot (Snapshots.swift;
 //     files in the variant's log directory, Paths.swift);
 //   - standard menus (⌘R reload, zoom, full screen, Open in Browser and Copy Address, which
@@ -254,6 +257,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var pageLoaded = false
     var retryTimer: Timer?
     var connecting = false
+    /// Floating panels the pages asked for (`__DEEPSEA_APP__.showPanel`, Panels.swift), by id.
+    var panels: [String: PagePanel] = [:]
 
     var remoteURL: URL { URL(string: config.url)! }
     var fallbackBase: URL? { config.fallbackUrl.flatMap(URL.init(string:)) }
@@ -418,6 +423,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         // answers only the main frame and frames of this app's own origin (never a dev server's).
         controller.addUserScript(WKUserScript(
             source: Self.openExternalScript,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false))
+        controller.addUserScript(WKUserScript(
+            source: Self.panelScript,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false))
         // Page diagnostics → the run log (Paths.swift): uncaught errors,
@@ -1080,6 +1089,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard message.name == "deepseaApp" else { return }
         if (message.body as? String) == "retry" { connect(); return }
         guard let body = message.body as? [String: Any] else { return }
+        if handlePanelMessage(body, message) { return }
         if body["type"] as? String == "console" {
             appendLog("[\(body["level"] as? String ?? "log")] \(body["text"] as? String ?? "")")
             return
@@ -1282,6 +1292,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     /// an inline plot image at full size). Each is its own WKWebView sharing this app's data store
     /// (cookies), so the request is admitted like the main page. Kept alive here; removed on close.
     private var popups: [NSWindow] = []
+    /// The popups' pages (Panels.swift tells every page about panels).
+    var popupViews: [WKWebView] { popups.compactMap { $0.contentView as? WKWebView } }
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         guard let url = navigationAction.request.url else { return nil }

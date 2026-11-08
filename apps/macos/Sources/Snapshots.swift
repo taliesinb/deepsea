@@ -331,12 +331,12 @@ extension AppDelegate {
     /// Store a window PNG in images/, link snapshots/window-<ts>-<pid>.png to it and point latest-window.png
     /// there. Returns `{ file, image: { sha256, path, link, bytes }, pixelWidth, pixelHeight }`, or nil.
     @discardableResult
-    func storeWindowSnapshot(_ png: Data, open: Bool) -> [String: Any]? {
+    func storeWindowSnapshot(_ png: Data, open: Bool, kind: String = "window") -> [String: Any]? {
         let dir = AppPaths.snapshotsDirectory
-        let url = AppPaths.unique(in: dir, stem: "window-\(AppPaths.stamp(Date()))-\(getpid())", ext: "png")
+        let url = AppPaths.unique(in: dir, stem: "\(kind)-\(AppPaths.stamp(Date()))-\(getpid())", ext: "png")
         var images: [String: Any] = [:]
         guard saveImage(png, linkAt: url, key: "window", into: &images) else { return nil }
-        AppPaths.pointLatest(link: dir.appendingPathComponent("latest-window.png"), to: url)
+        AppPaths.pointLatest(link: dir.appendingPathComponent("latest-\(kind).png"), to: url)
         appendLog("snapshot: \(url.path) -> \((images["window"] as? [String: Any])?["path"] ?? "?")")
         if open { openInPreview([url]) }
         let rep = NSBitmapImageRep(data: png)
