@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "System permission tool",
+    "description": "Gives the agent seek_system_permission: it makes sure macOS privacy permissions are granted before screenshots, UI automation and the like."
+  }
+}

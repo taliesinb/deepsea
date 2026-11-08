@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "title": "System permission controls",
+    "description": "The seek_system_permission card: each macOS permission with a tick, a question mark with Grant and Deny, or a cross."
+  },
+  "card": {
+    "title": "System permissions",
+    "summary": "{granted}/{total}",
+    "grant": "Grant",
+    "deny": "Deny",
+    "grant.aria": "Grant {name}",
+    "deny.aria": "Deny {name}",
+    "state.checking": "checking",
+    "state.granted": "granted",
+    "state.grantedAfter": "granted after {duration}",
+    "state.pending": "not granted",
+    "state.switchedOff": "switched off",
+    "state.stale": "stale entry",
+    "state.notRunning": "app not running",
+    "state.granting": "waiting",
+    "state.grantingStale": "stale entry: remove it",
+    "state.denied": "denied",
+    "state.restricted": "restricted",
+    "state.notInstalled": "not installed",
+    "state.cancelled": "cancelled",
+    "state.notApplicable": "not applicable",
+    "perm.screen-recording": "Screen Recording",
+    "perm.accessibility": "Accessibility",
+    "perm.microphone": "Microphone",
+    "perm.camera": "Camera",
+    "perm.input-monitoring": "Input Monitoring",
+    "perm.full-disk-access": "Full Disk Access",
+    "perm.automation": "Automation: {app}",
+    "duration.s": "{s}s",
+    "duration.m": "{m}m",
+    "duration.ms": "{m}m{s}s",
+    "duration.h": "{h}h",
+    "duration.hm": "{h}h{m}m",
+    "duration.hms": "{h}h{m}m{s}s",
+    "workspace.default": "Default workspace"
+  }
+}

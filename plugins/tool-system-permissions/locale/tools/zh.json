@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "系统权限工具",
+    "description": "为智能体提供 seek_system_permission：在截屏、界面自动化等操作之前确认已获得 macOS 隐私权限。"
+  }
+}
