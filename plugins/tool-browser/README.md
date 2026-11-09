@@ -404,7 +404,9 @@ offset are stable for three samples (not rAF, which hung the loop in a covered
 window), captured, measured again (retaken once if it moved more than 2 px)
 and cropped with sharp at device-pixel precision (scale = image width ÷ CSS
 viewport, exact for fractional ratios). Not `sips`: its `--cropOffset 0 0`
-is treated as unset and crops the centre. Chrome element captures use the
+is treated as unset and crops the centre. sharp is the harness's own (a
+`link:` into `packages/attachment/attachment-local`), not a copy of the
+plugin's: a second sharp brings a second libvips into the server process. Chrome element captures use the
 server's own `uid` screenshots.
 
 chrome-devtools-mcp's `take_screenshot` has two success shapes: an image

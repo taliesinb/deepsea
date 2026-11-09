@@ -75,7 +75,7 @@
     "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery",
     "@modelcontextprotocol/sdk": "1.29.0",
     "chrome-devtools-mcp": "1.9.0",
-    "sharp": "0.35.3"
+    "sharp": "link:../../harness/packages/attachment/attachment-local/node_modules/sharp"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
