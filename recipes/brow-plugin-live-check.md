@@ -23,13 +23,19 @@ scripted prompts. The exact commands are in
   `pnpm test`). Delete `$TMPDIR/deepsea-tool-brow-screenshot-*`
   afterwards.
 - **Restart and notices**: stop the daemon and start it with
-  `"idleMinutes": 1`; the server log shows the reconnect within a second, the
-  next call starts with `NOTE: the brow daemon restarted …`, and about a
-  minute later `dsd drive events last` shows the injected `[browser] Closed
-  idle browser window(s) …` notice.
-- **Known daemon bug (2026-11-09)**: `brow stop` then `start` in
-  quick succession can leave the new daemon without its socket file (the old
-  one removes the path at the end of its shutdown). `stop` then reports "not
-  running" while a daemon still runs; find it with `lsof -p <pid>` (its log is
-  in the temporary home) and send it SIGTERM. Check with `pgrep -fl <home>`
-  that nothing is left.
+  `"idleMinutes": 1`; the server log shows the reconnect within a second (the
+  trace: `session-open … "via":"session.resume"`), the next call starts with
+  `NOTE: the brow daemon restarted …`, and about a minute later `dsd drive
+  events last` shows the injected `[browser] Closed idle browser window(s) …`
+  notice. `stop` then `start` at once is safe since the daemon removes its
+  socket only while it is still its own.
+- **A cancel**: `prompt … --no-wait` a slow `browser_eval` (an awaited 25 s
+  timeout), then `dsd drive cancel last`: the tool result is `ABORTED` (a
+  stopped row, not a failure) and the trace has `"cancelled":true`.
+- **A failure**: a click on text that is not there fails with the daemon's
+  text, the window in front (`[chrome:0:0] browser_act: … FAILED: …`) and its
+  `Hint:`; a `browser_script` run whose `expect` fails is a successful call
+  whose report says `FAILED`.
+- **Done**: `pnpm dsd stop <id>`, the daemon's `stop`, `rm -rf` the home and
+  the screenshot files, and `pgrep -fl <home>` shows nothing. Never touch the
+  default home's daemon (the installed app's).

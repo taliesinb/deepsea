@@ -2,7 +2,7 @@
 
 Browsers for agents from **brow**: a per-user daemon, separate
 from DeepSea, that gives every chat (and every subagent) its own **Chrome for
-Testing** and **Safari Technology Preview** windows through eight `browser_*`
+Testing** and **Safari Technology Preview** windows through nine `browser_*`
 tools. This plugin drives no browser itself. It is a thin client of the
 daemon's Unix socket (JSON-RPC): it registers the tools the daemon lists,
 maps each agent to a daemon session, shows screenshots inline, passes the
@@ -262,6 +262,61 @@ logs a warning when it sees `deepseaBrowserUnified` or `deepseaBrowser`.
 Two tools rows in one preset would register the same tool names twice, which
 the harness refuses.
 
+## Rolling out
+
+To a named variant `<v>` (its `~/.deepsea/<v>/variant.yml`), in place of the
+in-process `tool-browser`:
+
+**Before.** The daemon must be reachable for the person: Brow.app
+installed (its LaunchAgent serves the default home's socket; the plugin
+starts it when nothing answers), or `brow` on the server's PATH.
+`brow status` (or `node <checkout>/bin/brow.mjs status`)
+answers. Browser settings are the daemon's (`<daemon home>/config.json`), not
+the variant's.
+
+**(a) Enable, one browser plugin only.**
+
+1. The variant's source must have the plugin: `source: integration/base`
+   after this topic is integrated (`pnpm -s dsd topics integrate --dry-run`,
+   then without `--dry-run`, in the main checkout).
+2. In `variant.yml`, in `plugins:`, replace `tool-browser` with
+   `tool-brow`. A variant with `plugins: all` takes it from its build
+   (machine-wide plugins are left out only for throwaways); `tool-browser`
+   is not integrated, so only one browser plugin is there to take.
+3. `pnpm -s dsd build <v>` (no install: check its `plugins` list), then
+   `pnpm -s dsd build <v> --install`, which reloads the relay and so restarts
+   the server (for the variant your own session runs in, follow
+   recipes/rebuild-own-variant.md, step 4). The generated presets put
+   `deepsea-tool-brow-tools` into standard, ptc and cordis (dsd
+   writes them at each install).
+
+**(b) Verify.**
+
+- `pnpm -s dsd logs <v> server | grep tool-brow`: `connected to
+  brow <version> (pid N) on …/io.github.taliesinb.brow/run/daemon.sock`, and
+  no `(another browser plugin) is also loaded` warning (then two are loaded:
+  back to step 2).
+- The Plugins panel lists the bundle `@deepsea/tool-brow` ("Brow", and
+  "Brow tools" in the presets); the old plugin is gone.
+- In a chat: ask for `browser_open` of a page, then `browser_screenshot`. The
+  result starts `Opened chrome:<n>:<w>`, the rows read "Chrome screenshot",
+  and `brow status` lists a session labelled with the chat's
+  title. With the DeepSea app and Safari: the window parks beside the app
+  (the daemon's `safari.hiddenWindows: park`; Brow Window Helper moves
+  it).
+- Optional: a profile patch row `- id: deepsea-tool-brow` with
+  `config: { trace: true }` writes the plugin's trace under the variant's
+  logs (`plugins/tool-brow/`).
+
+**(c) Roll back.** `tool-browser` is not in `integration/base`: point
+`source:` at a commit that has it (an integration from before this topic),
+put the old name back in `plugins:` (`tool-brow` → `tool-browser`) and
+`pnpm -s dsd build <v> --install` again. The plugin keeps no state in the
+variant; its daemon sessions end 10 s after the server
+goes away (their windows close), and the daemon itself, shared by the Mac,
+keeps running. The Plugins panel's Uninstall also takes the plugin out, but
+only until the next `dsd build`.
+
 ## Limits
 
 - No tools until the daemon has answered once since the server started.
@@ -274,35 +329,19 @@ the harness refuses.
 
 ## What the daemon could add for this client
 
-Found while writing it (protocol 1):
+Of the first list (parking state in `hello`, window events, `session.resume`,
+`tools.changed`, structured errors, a `stop` that removed a newer daemon's
+socket) everything is in the daemon now; this plugin uses all of it but the
+window events. Still missing:
 
-- **Parking state up front.** `hello` / `daemon.status` do not say whether
-  the daemon parks (`safari.hiddenWindows`); with parking off `app.poll`
-  answers `{}` at once, so a client must learn it from `app.report`'s
-  `{ ok: false }` and guard against a spinning poll. A `parking: boolean` in
-  `hello`, and `app.poll` refusing (or waiting) when parking is off, would
-  remove that.
-- **Window lifecycle notifications** (`session.windows { session, opened,
-  closed }`), so the client could show or drop windows without parsing
-  result text, and tell an agent precisely which windows a restart lost.
-- **`session.open` per key on reconnect** works, but a daemon-side
-  `session.resume { keys }` for many sessions at once would save round trips
-  after a restart.
-- **A `tools.changed` notification** instead of comparing `tools.list` on
-  every connection.
-- **Structured errors over the socket.** `tools.call` has a `structured`
-  mode internally (`error.hint`, `handle`, `aborted`) that the protocol does
-  not expose; a client could then mark cancellations as aborts rather than
-  failures.
-- **Stop replaced the new daemon's socket.** `brow stop` returns
-  once the socket file is gone, which Node's `server.close()` does early;
-  the stopping daemon later `rmSync`s the socket path at the end of its
-  shutdown. A `stop` immediately followed by `start` (as `restart` does) can
-  thus leave the new daemon running without a socket file (seen live:
-  connected clients keep working, new ones cannot connect). The daemon should
-  remove the path only if it is still its own (compare the inode), and
-  `stop` should wait for the pid to exit.
-
+- **A run's outcome in `browser_script` results.** A failed, errored or
+  timed-out run is a successful call whose report text says so; the row
+  reads the headline (`[run:17] … · FAILED after 9.8 s · … · chrome`) for
+  its state and browser. A structured `run { run, status, browsers }` on the
+  result, as `error` is on failures, would make that exact.
+- **The window a result used, when it succeeded.** Rows find it in the
+  text's `[handle]` tag; a `handle` field on every result (not only on
+  `error`) would do without the text.
 ## Development
 
 ```sh
@@ -318,10 +357,13 @@ protocol mismatch, autostart through `tests/fixtures/fake-brow.mjs`
 and its failures; the order LaunchAgent → app → command with a fake process
 runner, and when it is skipped), the link (single dial, quick reconnects, hooks), the tools
 as listed (names and schemas unchanged, argument validation, a changed list
-registered again), sessions (key, title, cwd, update, re-open after a lapsed
-lease or a restart, the restart note), images (inline for a vision model, a
-file otherwise), notices, disposal and unload, cancellation, the app-window
-routes, and the built browser half under a fake module loader.
+registered again, `tools.changed`), sessions (key, title, cwd, update, re-open
+after a lapsed lease, `session.resume` after a restart or a dropped
+connection, a resume entry that failed, the restart note), structured errors,
+images (inline for a vision model, a file otherwise), notices, disposal and
+unload, cancellation, the app-window routes (parking on, and off from
+`hello`), and the built browser half under a fake module loader (the rows,
+`browser_script`'s included). The fake daemon speaks today's protocol only.
 
 Live, with a real daemon in a temporary home (headless Chrome; the first
 call downloads Chrome for Testing into that home, about 190 MB):
@@ -346,15 +388,22 @@ pnpm dsd drive -v <id> prompt last - <<'EOF'
 {"cmd":"tool","name":"browser_read","args":{"format":"markdown"},"id":"read"}
 {"cmd":"expect","value":"tools.read.text","contains":"Hello"}
 {"cmd":"tool","name":"browser_screenshot","args":{},"id":"shot"}
+{"cmd":"tool","name":"browser_act","args":{"steps":[{"action":"click","target":{"text":"No such button"}}]},"id":"fail"}
+{"cmd":"tool","name":"browser_script","args":{"action":"start","source":"await navigate('data:text/html,<p>script page</p>')\nconst r = await read()\nexpect(r.content).toContain('script page')\nreturn { title: r.title }"},"id":"script"}
 {"cmd":"say","text":"done"}
 EOF
+# a cancel: a slow call, then cancel the turn; the tool result is ABORTED
+printf '%s\n' '{"cmd":"tool","name":"browser_eval","args":{"expression":"await new Promise(r => setTimeout(r, 25000)); return 1"},"id":"slow"}' \
+  | pnpm dsd drive -v <id> prompt last --no-wait -
+pnpm dsd drive -v <id> cancel last
 pnpm dsd stop <id>
 BROW_HOME=$H node <brow checkout>/bin/brow.mjs stop; rm -rf "$H"
 ```
 
 The scripted model declares no image input, so screenshots take the file
 path there. Restarting the daemon between prompts (`stop`, then `start` with
-`"idleMinutes": 1` in its config) shows the reconnect, the restart note and,
-a minute later, the idle notice in the session's events. The app-window
+`"idleMinutes": 1` in its config) shows the reconnect (the trace's
+`session-open` with `via: "session.resume"`), the restart note on the next
+result and, a minute later, the idle notice in the session's events. The app-window
 routes can be tried with curl after logging in with the throwaway's token
 URL (a report answers `{"ok":true}`, a poll waits 20 s).
