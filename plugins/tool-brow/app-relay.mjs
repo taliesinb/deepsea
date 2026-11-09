@@ -10,13 +10,15 @@
  *   POST ./api/deepsea-tool-brow/app-window          → app.report { report }
  *   GET  ./api/deepsea-tool-brow/app-command?pid=N   → app.poll { pid } (≤ 20 s)
  *
- * The browser half reads 404 as "no parking here": it stops sending reports
- * and asks again once a minute. So 404 is the answer when the daemon says
- * parking is off (`app.report` → `{ ok: false }`). The latest report of each
- * app is kept and replayed whenever the plugin (re)connects, so a daemon
- * started later (by the first tool call) still learns where the app is.
- * The relay never starts a daemon: without one, reports are kept and polls
- * wait out their time with nothing to do.
+ * Whether the daemon parks is in its `hello` (`parking: { enabled, reason }`),
+ * fixed for that daemon's life. With parking off the relay stops: nothing goes
+ * to the daemon, and both routes answer 404 at once, which the browser half
+ * reads as "no parking here" (it stops sending reports and asks again once a
+ * minute, so a daemon restarted with parking on is found). The latest report
+ * of each app is kept and replayed whenever the plugin (re)connects to a
+ * daemon that parks, so a daemon started later (by the first tool call) still
+ * learns where the app is. The relay never starts a daemon: without one,
+ * reports are kept and polls wait out their time with nothing to do.
  */
 
 import { ERRORS } from './daemon-client.mjs'
@@ -33,28 +35,23 @@ const MAX_REPORTS = 8
  * @param {ReturnType<typeof import('./link.mjs').createLink>} options.link
  * @param {(event: object) => void} [options.trace]
  * @param {number} [options.idlePollMs] - how long a poll waits when no daemon is connected (default 20 s, the daemon's own poll time).
- * @param {number} [options.minPollMs] - a poll answered sooner is held this long (default 1 s), so no page can spin.
- * @param {number} [options.recheckMs] - with parking off, ask the daemon again after this long (default 30 s).
+ * @param {number} [options.minPollMs] - a poll answered sooner is held this long (default 1 s): an empty answer comes at
+ *   once when a newer poll of the same app took over, and the page's loop must not spin.
  */
-export function createAppRelay({ link, trace = () => {}, idlePollMs = 20_000, minPollMs = 1000, recheckMs = 30_000 }) {
+export function createAppRelay({ link, trace = () => {}, idlePollMs = 20_000, minPollMs = 1000 }) {
   /** pid → the app's latest report. */
   const reports = new Map()
-  /** The daemon's answer to the last relayed report: true (parking on), false (off), undefined (unknown). */
+  /** The connected daemon's `hello.parking` ({ enabled, reason }), or undefined before the first connection. */
   let parking
-  let checkedAt = 0
 
-  async function relay(client, report) {
-    const result = await client.request('app.report', { report })
-    const before = parking
-    parking = result?.ok === true
-    checkedAt = Date.now()
-    if (before !== parking) trace({ event: 'app-parking', parking, reason: result?.reason })
-    return result
-  }
+  const parkingOf = (client) => client.hello.parking
+  const off = (client) => ({ status: 404, body: { error: `the brow daemon does not park windows: ${parkingOf(client).reason}`, parking: false } })
 
   link.onConnected(async (client) => {
-    parking = undefined
-    for (const report of reports.values()) await relay(client, report).catch(() => {})
+    parking = parkingOf(client)
+    trace({ event: 'app-parking', parking: parking.enabled, reason: parking.reason })
+    if (!parking.enabled) return
+    for (const report of reports.values()) await client.request('app.report', { report }).catch(() => {})
   })
 
   /**
@@ -68,9 +65,10 @@ export function createAppRelay({ link, trace = () => {}, idlePollMs = 20_000, mi
     while (reports.size > MAX_REPORTS) reports.delete(reports.keys().next().value)
     const client = link.current()
     if (client === undefined) return { status: 202, body: { ok: true, relayed: false } }
+    if (!parkingOf(client).enabled) return off(client)
     try {
-      const result = await relay(client, body)
-      return result?.ok === true ? { status: 200, body: { ok: true } } : { status: 404, body: { error: `the brow daemon does not park windows: ${result?.reason ?? 'parking is off'}` } }
+      await client.request('app.report', { report: body })
+      return { status: 200, body: { ok: true } }
     } catch (error) {
       if (error?.code === ERRORS.INVALID_PARAMS) {
         reports.delete(body.pid)
@@ -93,10 +91,7 @@ export function createAppRelay({ link, trace = () => {}, idlePollMs = 20_000, mi
       await sleep(idlePollMs, signal)
       return { status: 200, body: {} }
     }
-    if (parking !== true && reports.has(pid) && (parking === undefined || Date.now() - checkedAt >= recheckMs)) {
-      await relay(client, reports.get(pid)).catch(() => {})
-    }
-    if (parking === false) return { status: 404, body: { error: 'the brow daemon does not park windows (safari.hiddenWindows is not park)' } }
+    if (!parkingOf(client).enabled) return off(client)
     let result
     try {
       result = await client.request('app.poll', { pid }, { signal })
@@ -104,8 +99,6 @@ export function createAppRelay({ link, trace = () => {}, idlePollMs = 20_000, mi
       result = {}
     }
     if (result?.command !== undefined) return { status: 200, body: { command: result.command } }
-    // An empty answer that came at once (a newer poll of the same app took over, or the daemon has nothing
-    // to poll): hold it, so the page's loop cannot spin.
     const left = minPollMs - (Date.now() - started)
     if (left > 0) await sleep(left, signal)
     return { status: 200, body: {} }

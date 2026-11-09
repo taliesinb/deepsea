@@ -19,8 +19,8 @@
  * SESSIONS. Each agent (a chat's, or a subagent's) is one daemon session:
  * `session.open { key: agent id, label: the chat title, cwd: the session's
  * working directory, lease: connection }`, opened at the agent's first tool
- * call, re-opened after a reconnect (all at once: `session.resume`, or one
- * `session.open` each on an older daemon), updated when the title or directory
+ * call, re-opened after a reconnect (all at once: `session.resume`),
+ * updated when the title or directory
  * changes, closed on `agent/disposed` and at unload. With a `connection`
  * lease the daemon also ends the session (closing its windows) some seconds
  * after this server's connection goes away.
@@ -210,24 +210,17 @@ export function apply(ctx, config, seams = {}) {
   }
 
   /**
-   * Re-open many sessions on a new connection in one request (`session.resume`, a daemon restart with
-   * several chats); a daemon without it (-32601) gets one `session.open` per session.
+   * Re-open many sessions on a new connection in one request (`session.resume`: a daemon restart with
+   * several chats). An entry that fails is left unbound, so its next call opens it with `session.open`.
    */
   function resume(entries, client) {
-    const specs = entries.map(entry => specOf(entry, client))
-    const batch = client.request('session.resume', { sessions: specs })
+    const batch = client.request('session.resume', { sessions: entries.map(entry => specOf(entry, client)) })
     entries.forEach((entry, i) => {
-      track(entry, client, batch.then(
-        (answer) => {
-          const result = answer?.sessions?.[i]
-          if (result?.session !== entry.key || result.error !== undefined) throw new Error(`session.resume of "${entry.key}" failed: ${String(result?.error ?? 'no answer for it')}`)
-          return opened(entry, client, result, 'session.resume')
-        },
-        (error) => {
-          if (error?.code !== ERRORS.METHOD_NOT_FOUND) throw error
-          return client.request('session.open', specs[i]).then(result => opened(entry, client, result, 'session.open'))
-        },
-      ))
+      track(entry, client, batch.then((answer) => {
+        const result = answer.sessions[i]
+        if (result.error !== undefined) throw new Error(`session.resume of "${entry.key}" failed: ${result.error}`)
+        return opened(entry, client, result, 'session.resume')
+      }))
     })
     return Promise.allSettled(entries.map(entry => entry.opening))
   }
@@ -363,9 +356,9 @@ export function apply(ctx, config, seams = {}) {
       else if (block?.type === 'image' && typeof block.data === 'string') images.push(block)
     }
     if (result?.isError) {
-      const failure = result.error !== null && typeof result.error === 'object' ? result.error : undefined
-      trace({ event: 'call', key: entry.key, tool: toolName, error: true, aborted: failure?.aborted === true, handle: failure?.handle })
-      if (failure?.aborted === true) {
+      const failure = result.error
+      trace({ event: 'call', key: entry.key, tool: toolName, error: true, aborted: failure.aborted === true, handle: failure.handle })
+      if (failure.aborted === true) {
         throw new Error(`${note}${toolName} was cancelled by the brow daemon (this chat's browser session ended, or the daemon is stopping): ${failureText(texts.join('\n'), failure, toolName)}. Retry if it is still needed.`)
       }
       throw new Error(note + failureText(texts.join('\n'), failure, toolName))
@@ -393,15 +386,14 @@ export function apply(ctx, config, seams = {}) {
    * included), with the window it used in front (`[chrome:0:1] `, from the structured `error.handle`) when the
    * text does not name it, as successful results do; the structured `message` and `hint` when there is no text.
    * @param {string} text
-   * @param {{ message?: string, hint?: string, handle?: string } | undefined} failure - the result's `error`.
+   * @param {{ message: string, hint?: string, handle?: string }} failure - the result's `error`.
    * @param {string} toolName
    */
   function failureText(text, failure, toolName) {
     const body = text !== '' ? text
-      : typeof failure?.message === 'string' && failure.message !== '' ? `${failure.message}${typeof failure.hint === 'string' ? `\nHint: ${failure.hint}` : ''}`
+      : failure.message !== '' ? `${failure.message}${failure.hint !== undefined ? `\nHint: ${failure.hint}` : ''}`
         : `${toolName} failed`
-    const handle = typeof failure?.handle === 'string' ? failure.handle : undefined
-    return handle !== undefined && !body.includes(`[${handle}]`) ? `[${handle}] ${body}` : body
+    return failure.handle !== undefined && !body.includes(`[${failure.handle}]`) ? `[${failure.handle}] ${body}` : body
   }
 
   /** finalizeContent: the admitted images in front of the text (only for a successful result). */

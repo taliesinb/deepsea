@@ -224,13 +224,6 @@ test('structured errors: the window in front, the hint kept; a call the daemon c
   } finally { await t.cleanup() }
 })
 
-test('an older daemon without structured errors: the text alone is the error', async () => {
-  const t = await setup({ daemon: { legacy: true, onCall: () => ({ content: [{ type: 'text', text: 'browser_eval: boom\nHint: h' }], isError: true, error: { message: 'x', handle: 'chrome:0:9' } }) } })
-  try {
-    await assert.rejects(t.tool('browser_eval').execute({ expression: 'x' }, execOf(fakeAgent('e2'))), { message: 'browser_eval: boom\nHint: h' })
-  } finally { await t.cleanup() }
-})
-
 test('daemon restart: reconnect, the sessions in use resumed in one request, a note on the next result', async () => {
   const titles = new Map()
   const t = await setup({ services: { sessionTitle: { get: (session) => titles.get(session.id) } } })
@@ -270,20 +263,17 @@ test('reconnect to the same daemon: resumed sessions keep their windows, no note
   } finally { await t.cleanup() }
 })
 
-test('daemon restart with an older daemon (no session.resume): one session.open per session', async () => {
+test('a session the resume could not re-open is opened by its next call', async () => {
   const t = await setup()
   try {
     const agent = fakeAgent('o1')
     await t.tool('browser_open').execute({}, execOf(agent))
-    await t.tool('browser_open').execute({}, execOf(fakeAgent('o2')))
     await t.daemon.close()
-    const older = await startFakeDaemon({ socket: t.temp.socket, pid: 5454, legacy: true })
-    t.daemon = older
-    await until(() => older.of('session.open').length === 2, 3000, 'the sessions re-opened one by one')
-    assert.deepEqual(older.of('session.open').map(p => p.key), ['o1', 'o2'])
-    assert.equal(older.of('session.resume').length, 1, 'tried once')
+    const second = await startFakeDaemon({ socket: t.temp.socket, pid: 5454, resumeError: 'boom' })
+    t.daemon = second
+    await until(() => second.of('session.resume').length === 1, 3000, 'the resume')
     assert.match(await t.tool('browser_read').execute({ url: 'https://example.com' }, execOf(agent)), /^NOTE: the brow daemon restarted \(pid 4242 → 5454\)/)
-    assert.equal(older.of('session.open').length, 2)
+    assert.deepEqual(second.of('session.open').map(p => p.key), ['o1'])
   } finally { await t.cleanup() }
 })
 
@@ -384,12 +374,21 @@ test('app window: reports relayed as app.report, commands from app.poll', async 
   } finally { await t.cleanup() }
 })
 
-test('app window: parking off in the daemon → 404, so the page stops reporting', async () => {
+test('app window: parking off in hello → the relay stops: 404 at once, nothing sent to the daemon', async () => {
   const r = routes()
-  const t = await setup({ services: { connection: r.connection }, daemon: { parking: false } })
+  const t = await setup({ services: { connection: r.connection }, daemon: { parking: false, pollMs: 5000 } })
   try {
-    assert.equal((await post(r.table, REPORT)).status, 404)
+    const reported = await post(r.table, REPORT)
+    assert.deepEqual([reported.status, await reported.json()], [404, { error: 'the brow daemon does not park windows: safari.hiddenWindows: minimize', parking: false }])
+    const started = Date.now()
     assert.equal((await get(r.table, 'pid=4410')).status, 404)
+    assert.ok(Date.now() - started < 1000, 'answered at once, not after the daemon\'s poll time')
+    assert.deepEqual([t.daemon.of('app.report').length, t.daemon.of('app.poll').length], [0, 0])
+    // A reconnect to the same daemon replays nothing either.
+    for (const conn of t.daemon.connections) conn.sock.destroy()
+    await until(() => t.daemon.of('hello').length === 2, 3000, 'the reconnect')
+    await new Promise(resolve => setTimeout(resolve, 50))
+    assert.equal(t.daemon.of('app.report').length, 0)
   } finally { await t.cleanup() }
 })
 
@@ -413,7 +412,7 @@ test('app window: without a daemon, reports are kept and replayed when one conne
 
 test('app window: an immediately empty poll is held, so the page cannot spin', async () => {
   const { createAppRelay } = await import('../app-relay.mjs')
-  const fakeClient = { request: async () => ({}) }
+  const fakeClient = { hello: { parking: { enabled: true, reason: 'safari.hiddenWindows: park' } }, request: async () => ({}) }
   const relay = createAppRelay({ link: { current: () => fakeClient, onConnected() {} }, minPollMs: 120 })
   const started = Date.now()
   assert.deepEqual(await relay.poll(4410), { status: 200, body: {} })

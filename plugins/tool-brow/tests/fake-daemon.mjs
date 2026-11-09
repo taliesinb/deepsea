@@ -2,7 +2,7 @@
 // per line, $/cancel) and the methods this plugin uses, with sessions and leases kept simply and every
 // request recorded. Tool calls are answered by `onCall(params, { signal })`. It speaks today's protocol 1
 // (hello's mode / parking / app, session.resume, structured errors, app.poll waiting when parking is off,
-// window.watch and window.event); `legacy: true` is a daemon from before those additions.
+// window.watch and window.event).
 import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -39,10 +39,9 @@ export function tempSocket() {
  * @param {boolean} [options.parking]
  * @param {number} [options.pollMs]
  * @param {() => void} [options.onShutdown]
- * @param {boolean} [options.legacy] - a daemon from before the additions: no hello.parking, no session.resume
- *   (-32601), no structured `error`, no window.watch, and app.poll answering `{}` at once with parking off.
+ * @param {string} [options.resumeError] - every session.resume entry fails with this error.
  */
-export async function startFakeDaemon({ socket, pid = 4242, tools = TOOLS, onCall, parking = true, pollMs = 200, onShutdown, legacy = false } = {}) {
+export async function startFakeDaemon({ socket, pid = 4242, tools = TOOLS, onCall, parking = true, pollMs = 200, onShutdown, resumeError } = {}) {
   /** Every request: { method, params }. */
   const requests = []
   /** Cancelled request ids. */
@@ -110,19 +109,18 @@ export async function startFakeDaemon({ socket, pid = 4242, tools = TOOLS, onCal
     conn.sessions.add(key)
     return { session: key, resumed, windows: [...session.windows] }
   }
-  const unknown = (method) => Object.assign(new Error(`unknown method "${method}"`), { code: -32601 })
 
   async function handle(method, params, conn, signal) {
     requests.push({ method, params })
     switch (method) {
-      case 'hello': return { server: 'brow', version: '0.1.0', protocol: 1, stamp: 'fake', pid, home: '/fake', ...(legacy ? {} : { mode: 'isolated', parking: { enabled: parking, reason: parkingReason }, app: null }) }
+      case 'hello': return { server: 'brow', version: '0.1.0', protocol: 1, stamp: 'fake', pid, home: '/fake', mode: 'isolated', parking: { enabled: parking, reason: parkingReason }, app: null }
       case 'session.open': return openSession(params, conn)
       case 'session.resume': {
-        if (legacy) throw unknown(method)
         if (!Array.isArray(params.sessions)) throw invalid('session.resume needs { sessions: [key | { key, label?, cwd?, lease?, notices? }] }')
         return { sessions: params.sessions.map((entry) => {
           const spec = typeof entry === 'string' ? { key: entry } : entry
           if (typeof spec?.key !== 'string' || spec.key === '') return { session: null, error: 'each entry needs a key' }
+          if (resumeError !== undefined) return { session: spec.key, error: resumeError }
           if (spec.lease !== undefined && !['connection', 'detached'].includes(spec.lease)) return { session: spec.key, error: `lease must be connection or detached, not "${spec.lease}"` }
           return openSession(spec, conn)
         }) }
@@ -140,14 +138,12 @@ export async function startFakeDaemon({ socket, pid = 4242, tools = TOOLS, onCal
         if (onCall === undefined) return { content: [{ type: 'text', text: `[chrome:0:0]\n${params.name} ok` }], isError: false }
         const result = await onCall(params, { signal })
         // As the daemon: a failure carries `error` (the text, the tool, aborted when the call was cancelled).
-        if (legacy) { const { error: _error, ...rest } = result; return rest }
         if (result?.isError && result.error === undefined) {
           return { ...result, error: { message: result.content.filter(b => b.type === 'text').map(b => b.text).join('\n'), tool: params.name, ...(signal.aborted ? { aborted: true } : {}) } }
         }
         return result
       }
       case 'window.watch': {
-        if (legacy) throw unknown(method)
         const only = Array.isArray(params.sessions) ? new Set(params.sessions) : undefined
         watchers.set(conn, only)
         return { watching: true, windows: [...sessions.values()].filter(s => only === undefined || only.has(s.key)).flatMap(s => s.windows.map(handle => ({ session: s.key, handle, browser: handle.split(':')[0] }))) }
@@ -158,7 +154,6 @@ export async function startFakeDaemon({ socket, pid = 4242, tools = TOOLS, onCal
         if (!Number.isInteger(params.report?.pid)) throw invalid('malformed window report')
         return { ok: true }
       case 'app.poll': {
-        if (!parking && legacy) return {}
         const queued = parking ? commands.get(params.pid) : undefined
         if (queued) { commands.delete(params.pid); return { command: queued } }
         await new Promise((resolve) => { const t = setTimeout(resolve, pollMs); signal.addEventListener('abort', () => { clearTimeout(t); resolve() }, { once: true }) })

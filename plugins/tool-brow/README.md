@@ -85,8 +85,7 @@ Each agent is one daemon session:
 **Restarts.** When the connection closes (the daemon stopped, restarted or
 crashed) the plugin reconnects at once, three times (0.25 s, 1 s, 3 s)
 **without** starting a daemon, re-opens the sessions in use in one request
-(`session.resume { sessions: [session.open params …] }`; a daemon without it
-answers -32601 and gets one `session.open` per session) and replays the
+(`session.resume { sessions: [session.open params …] }`) and replays the
 app's window reports; after that the next tool call reconnects, starting the
 daemon if needed. A call that arrives while the sessions are being resumed
 waits for its own. A session re-opened on a daemon that no longer had it
@@ -163,16 +162,18 @@ the daemon (`app-relay.mjs`):
 | `POST /api/deepsea-tool-brow/app-window` (JSON report) | `app.report { report }` |
 | `GET /api/deepsea-tool-brow/app-command?pid=N` (≤ 20 s) | `app.poll { pid }` |
 
+- Whether the daemon parks is in its `hello` (`parking: { enabled, reason }`,
+  fixed for the daemon's life). With parking off the relay stops: nothing is
+  sent to the daemon, and both routes answer 404 at once (`{ error, parking:
+  false }`, the reason in `error`), which the browser half reads as "no
+  parking here" (it stops reporting and asks again once a minute, so a daemon
+  restarted with parking on is found).
 - The latest report of each app is kept and replayed on every new
-  connection, so a daemon started later (by the first tool call) learns
-  where the app is without waiting for the window to move.
-- A daemon that does not park (`app.report` → `{ ok: false }`) makes both
-  routes answer 404, which the browser half reads as "no parking here" (it
-  stops reporting and asks again once a minute); with parking off the plugin
-  asks the daemon again at most every 30 s.
+  connection to a daemon that parks, so a daemon started later (by the first
+  tool call) learns where the app is without waiting for the window to move.
 - Without a daemon a report is kept (202) and a poll waits out its 20 s with
-  nothing to do; an empty poll answer that comes at once is held for 1 s, so
-  no page can spin.
+  nothing to do; an empty poll answer that comes at once (a newer poll of the
+  same app took over) is held for 1 s, so no page can spin.
 
 ## Tool rows
 
