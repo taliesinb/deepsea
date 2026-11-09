@@ -19,7 +19,8 @@
  * SESSIONS. Each agent (a chat's, or a subagent's) is one daemon session:
  * `session.open { key: agent id, label: the chat title, cwd: the session's
  * working directory, lease: connection }`, opened at the agent's first tool
- * call, re-opened after a reconnect, updated when the title or directory
+ * call, re-opened after a reconnect (all at once: `session.resume`, or one
+ * `session.open` each on an older daemon), updated when the title or directory
  * changes, closed on `agent/disposed` and at unload. With a `connection`
  * lease the daemon also ends the session (closing its windows) some seconds
  * after this server's connection goes away.
@@ -176,23 +177,59 @@ export function apply(ctx, config, seams = {}) {
 
   const cwdOf = (agent) => agent.session?.header?.cwd
 
-  function open(entry, client) {
+  /** session.open's params for an entry on `client` (its label and directory read now). */
+  function specOf(entry, client) {
     entry.client = client
     entry.label = labelOf(entry.agent)
     entry.cwd = cwdOf(entry.agent)
-    entry.opening = client.request('session.open', { key: entry.key, label: entry.label, ...(entry.cwd !== undefined ? { cwd: entry.cwd } : {}), lease: 'connection' })
-      .then((result) => {
-        if (entry.used && !result.resumed) {
-          entry.note = entry.pid !== undefined && entry.pid !== client.hello.pid
-            ? `NOTE: the brow daemon restarted (pid ${entry.pid} → ${client.hello.pid}); this chat's earlier browser windows are gone. `
-            : 'NOTE: the brow daemon had ended this chat\'s session (its lease lapsed); its earlier browser windows are gone. '
-        }
-        entry.pid = client.hello.pid
-        trace({ event: 'session-open', key: entry.key, label: entry.label, resumed: result.resumed, windows: result.windows })
-        return result
-      })
+    return { key: entry.key, label: entry.label, ...(entry.cwd !== undefined ? { cwd: entry.cwd } : {}), lease: 'connection' }
+  }
+
+  /** An opened (or resumed) session: the restart note when its windows are gone. */
+  function opened(entry, client, result, via) {
+    if (entry.used && !result.resumed) {
+      entry.note = entry.pid !== undefined && entry.pid !== client.hello.pid
+        ? `NOTE: the brow daemon restarted (pid ${entry.pid} → ${client.hello.pid}); this chat's earlier browser windows are gone. `
+        : 'NOTE: the brow daemon had ended this chat\'s session (its lease lapsed); its earlier browser windows are gone. '
+    }
+    entry.pid = client.hello.pid
+    trace({ event: 'session-open', key: entry.key, label: entry.label, resumed: result.resumed, windows: result.windows, via })
+    return result
+  }
+
+  /** `entry.opening` is the promise every call of that agent waits for; a failure lets the next call open again. */
+  function track(entry, client, opening) {
+    entry.opening = opening
     entry.opening.catch(() => { if (entry.client === client) entry.client = undefined })
     return entry.opening
+  }
+
+  function open(entry, client) {
+    const spec = specOf(entry, client)
+    return track(entry, client, client.request('session.open', spec).then(result => opened(entry, client, result, 'session.open')))
+  }
+
+  /**
+   * Re-open many sessions on a new connection in one request (`session.resume`, a daemon restart with
+   * several chats); a daemon without it (-32601) gets one `session.open` per session.
+   */
+  function resume(entries, client) {
+    const specs = entries.map(entry => specOf(entry, client))
+    const batch = client.request('session.resume', { sessions: specs })
+    entries.forEach((entry, i) => {
+      track(entry, client, batch.then(
+        (answer) => {
+          const result = answer?.sessions?.[i]
+          if (result?.session !== entry.key || result.error !== undefined) throw new Error(`session.resume of "${entry.key}" failed: ${String(result?.error ?? 'no answer for it')}`)
+          return opened(entry, client, result, 'session.resume')
+        },
+        (error) => {
+          if (error?.code !== ERRORS.METHOD_NOT_FOUND) throw error
+          return client.request('session.open', specs[i]).then(result => opened(entry, client, result, 'session.open'))
+        },
+      ))
+    })
+    return Promise.allSettled(entries.map(entry => entry.opening))
   }
 
   /** The agent's daemon session on the live connection (connecting, starting the daemon, opening as needed). */
@@ -222,11 +259,12 @@ export function apply(ctx, config, seams = {}) {
     return { entry, client }
   }
 
-  // A new connection (a restarted daemon, or the first after a drop): the sessions in use come back.
+  // A new connection (a restarted daemon, or the first after a drop): the sessions in use come back, in
+  // one request. Every entry is bound to the new connection at once, so a call arriving meanwhile waits
+  // for its session instead of opening it again.
   link.onConnected(async (client) => {
-    for (const entry of sessions.values()) {
-      if (entry.client !== client && entry.used) await open(entry, client).catch(() => {})
-    }
+    const entries = [...sessions.values()].filter(entry => entry.client !== client && entry.used)
+    if (entries.length > 0) await resume(entries, client)
   })
 
   link.on('session.notice', (params) => {

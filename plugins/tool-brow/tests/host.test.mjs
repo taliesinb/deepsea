@@ -231,20 +231,59 @@ test('an older daemon without structured errors: the text alone is the error', a
   } finally { await t.cleanup() }
 })
 
-test('daemon restart: reconnect, the sessions in use re-opened, a note on the next result', async () => {
-  const t = await setup()
+test('daemon restart: reconnect, the sessions in use resumed in one request, a note on the next result', async () => {
+  const titles = new Map()
+  const t = await setup({ services: { sessionTitle: { get: (session) => titles.get(session.id) } } })
   try {
-    const agent = fakeAgent('r1')
+    const agent = fakeAgent('r1', { cwd: '/work/r' })
+    const other = fakeAgent('r2', { cwd: '/work/s' })
+    titles.set(agent.session.id, { title: 'Restart me' })
     await t.tool('browser_open').execute({}, execOf(agent))
+    await t.tool('browser_open').execute({}, execOf(other))
+    await t.tool('browser_eval').execute({}, execOf(fakeAgent('r3'))).catch(() => {}) // refused before the daemon: no session
     await t.daemon.close()
     const second = await startFakeDaemon({ socket: t.temp.socket, pid: 5353 })
     t.daemon = second
-    await until(() => second.of('session.open').length === 1, 3000, 'the session re-opened on the new daemon')
-    assert.equal(second.of('session.open')[0].key, 'r1')
+    await until(() => second.of('session.resume').length === 1, 3000, 'the sessions resumed on the new daemon')
+    assert.deepEqual(second.of('session.resume'), [{ sessions: [
+      { key: 'r1', label: 'Restart me', cwd: '/work/r', lease: 'connection' },
+      { key: 'r2', label: 'chat r2', cwd: '/work/s', lease: 'connection' },
+    ] }])
+    assert.equal(second.of('session.open').length, 0, 'no session.open per session')
     const text = await t.tool('browser_read').execute({ url: 'https://example.com' }, execOf(agent))
     assert.match(text, /^NOTE: the brow daemon restarted \(pid 4242 → 5353\); this chat's earlier browser windows are gone\. \[chrome:0:0\]/)
     assert.doesNotMatch(await t.tool('browser_read').execute({ url: 'https://example.com' }, execOf(agent)), /NOTE/)
+    assert.match(await t.tool('browser_read').execute({ url: 'https://example.com' }, execOf(other)), /^NOTE: the brow daemon restarted/)
+    assert.equal(second.of('session.open').length, 0, 'the calls used the resumed sessions')
     assert.deepEqual([...t.preset.registered.keys()], TOOLS.map(tool => tool.name), 'same tools: registered once')
+  } finally { await t.cleanup() }
+})
+
+test('reconnect to the same daemon: resumed sessions keep their windows, no note', async () => {
+  const t = await setup()
+  try {
+    const agent = fakeAgent('q1')
+    await t.tool('browser_open').execute({}, execOf(agent))
+    for (const conn of t.daemon.connections) conn.sock.destroy() // the connection drops, the daemon stays
+    await until(() => t.daemon.of('session.resume').length === 1, 3000, 'the session resumed')
+    assert.equal(await t.tool('browser_open').execute({}, execOf(agent)), '[chrome:0:0]\nbrowser_open ok')
+  } finally { await t.cleanup() }
+})
+
+test('daemon restart with an older daemon (no session.resume): one session.open per session', async () => {
+  const t = await setup()
+  try {
+    const agent = fakeAgent('o1')
+    await t.tool('browser_open').execute({}, execOf(agent))
+    await t.tool('browser_open').execute({}, execOf(fakeAgent('o2')))
+    await t.daemon.close()
+    const older = await startFakeDaemon({ socket: t.temp.socket, pid: 5454, legacy: true })
+    t.daemon = older
+    await until(() => older.of('session.open').length === 2, 3000, 'the sessions re-opened one by one')
+    assert.deepEqual(older.of('session.open').map(p => p.key), ['o1', 'o2'])
+    assert.equal(older.of('session.resume').length, 1, 'tried once')
+    assert.match(await t.tool('browser_read').execute({ url: 'https://example.com' }, execOf(agent)), /^NOTE: the brow daemon restarted \(pid 4242 → 5454\)/)
+    assert.equal(older.of('session.open').length, 2)
   } finally { await t.cleanup() }
 })
 

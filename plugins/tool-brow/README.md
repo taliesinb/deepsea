@@ -84,9 +84,12 @@ Each agent is one daemon session:
 
 **Restarts.** When the connection closes (the daemon stopped, restarted or
 crashed) the plugin reconnects at once, three times (0.25 s, 1 s, 3 s)
-**without** starting a daemon, re-opens the sessions in use and replays the
+**without** starting a daemon, re-opens the sessions in use in one request
+(`session.resume { sessions: [session.open params …] }`; a daemon without it
+answers -32601 and gets one `session.open` per session) and replays the
 app's window reports; after that the next tool call reconnects, starting the
-daemon if needed. A session re-opened on a daemon that no longer had it
+daemon if needed. A call that arrives while the sessions are being resumed
+waits for its own. A session re-opened on a daemon that no longer had it
 (`resumed: false`) puts a note in front of that agent's next result: `NOTE:
 the brow daemon restarted (pid A → B); this chat's earlier browser
 windows are gone.` (or "had ended this chat's session (its lease lapsed)" on
