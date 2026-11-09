@@ -53,7 +53,15 @@ each call is `tools.call { session, name, arguments, images: "inline" }`, and
 the call's abort signal becomes `$/cancel` (a daemon that does not answer 5 s
 after the cancel is given up on). A result with `isError` throws its text,
 so the model sees the daemon's message (with its `Hint:`) as a failed tool
-call, as with the in-process tools. A connection that closes during a call
+call, as with the in-process tools; the result's structured `error { message,
+hint?, tool, browser?, handle?, aborted? }` adds the window the call used in
+front (`[chrome:0:3] browser_act: no element matches …`) when the text does
+not name it, so the model and the row know which window failed. A call
+cancelled by its own signal **returns** instead of throwing: the harness then
+records its own cancelled result (`ABORTED`, a stopped row, not a failure).
+A call the daemon cancelled for another reason (`error.aborted` while the
+signal is not: the session ended, the daemon is stopping) fails with "…
+was cancelled by the brow daemon (…)". A connection that closes during a call
 fails it with "the brow daemon connection closed during <tool> …; the
 call may or may not have run".
 

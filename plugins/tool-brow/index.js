@@ -283,7 +283,10 @@ export function apply(ctx, config, seams = {}) {
   /**
    * Run one daemon tool for the calling agent. Text blocks become the result value; image blocks are
    * admitted to the attachment store (or saved to a file, said in the text) and put in front of the
-   * result by `finalize`. A failed tool throws its text, as the in-process tools did.
+   * result by `finalize`. A failed tool throws its text, as the in-process tools did (`failureText`). A call
+   * cancelled by its own signal returns, so the harness records its cancelled result (`ABORTED`, a stopped
+   * row) rather than a failure; one the daemon cancelled for another reason (`error.aborted`: the session
+   * ended, the daemon is stopping) throws, saying so.
    * @param {object} exec - the harness's ToolRunContext.
    * @param {string} toolName
    * @param {object} args
@@ -297,6 +300,8 @@ export function apply(ctx, config, seams = {}) {
     try {
       result = await request()
     } catch (error) {
+      // Cancelled (a daemon that did not answer the cancel in time included): the harness replaces this value.
+      if (exec.signal?.aborted) return `${toolName} cancelled`
       if (error?.code === ERRORS.INVALID_PARAMS && /unknown session/i.test(String(error.message))) {
         // The session lapsed (the lease ended while this server was away): open it again, once.
         open(entry, client)
@@ -309,6 +314,8 @@ export function apply(ctx, config, seams = {}) {
       }
     }
     entry.used = true
+    // Cancelled by its own signal: the harness records the cancelled result and drops this value (notes kept for the next).
+    if (exec.signal?.aborted) return `${toolName} cancelled`
     const note = link.takeStartNote() + entry.note
     entry.note = ''
     const texts = []
@@ -317,8 +324,15 @@ export function apply(ctx, config, seams = {}) {
       if (block?.type === 'text' && typeof block.text === 'string') texts.push(block.text)
       else if (block?.type === 'image' && typeof block.data === 'string') images.push(block)
     }
+    if (result?.isError) {
+      const failure = result.error !== null && typeof result.error === 'object' ? result.error : undefined
+      trace({ event: 'call', key: entry.key, tool: toolName, error: true, aborted: failure?.aborted === true, handle: failure?.handle })
+      if (failure?.aborted === true) {
+        throw new Error(`${note}${toolName} was cancelled by the brow daemon (this chat's browser session ended, or the daemon is stopping): ${failureText(texts.join('\n'), failure, toolName)}. Retry if it is still needed.`)
+      }
+      throw new Error(note + failureText(texts.join('\n'), failure, toolName))
+    }
     let text = note + texts.join('\n')
-    if (result?.isError) throw new Error(text || `${toolName} failed`)
     const browser = /\[(safari|chrome):\d+:\d+\]/.exec(text)?.[1] ?? 'browser'
     const refs = []
     for (const image of images) {
@@ -334,6 +348,22 @@ export function apply(ctx, config, seams = {}) {
     if (refs.length > 0) inlineImages.set(exec, refs)
     trace({ event: 'call', key: entry.key, tool: toolName, images: images.length, inline: refs.length })
     return text
+  }
+
+  /**
+   * A failed result (`isError`) as the error the model sees: the daemon's text, unchanged (its `Hint:` line
+   * included), with the window it used in front (`[chrome:0:1] `, from the structured `error.handle`) when the
+   * text does not name it, as successful results do; the structured `message` and `hint` when there is no text.
+   * @param {string} text
+   * @param {{ message?: string, hint?: string, handle?: string } | undefined} failure - the result's `error`.
+   * @param {string} toolName
+   */
+  function failureText(text, failure, toolName) {
+    const body = text !== '' ? text
+      : typeof failure?.message === 'string' && failure.message !== '' ? `${failure.message}${typeof failure.hint === 'string' ? `\nHint: ${failure.hint}` : ''}`
+        : `${toolName} failed`
+    const handle = typeof failure?.handle === 'string' ? failure.handle : undefined
+    return handle !== undefined && !body.includes(`[${handle}]`) ? `[${handle}] ${body}` : body
   }
 
   /** finalizeContent: the admitted images in front of the text (only for a successful result). */

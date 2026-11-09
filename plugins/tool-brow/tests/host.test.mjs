@@ -190,15 +190,44 @@ test('agent/disposed closes its session; unload closes the rest', async () => {
   } finally { await t.daemon.close(); t.temp.remove() }
 })
 
-test('a call is cancelled with $/cancel when its signal aborts', async () => {
-  const t = await setup({ daemon: { onCall: (_params, { signal }) => new Promise((resolve) => signal.addEventListener('abort', () => resolve({ content: [{ type: 'text', text: 'aborted' }], isError: true }))) } })
+test('a call is cancelled with $/cancel when its signal aborts, and returns, so the harness records it as cancelled', async () => {
+  const t = await setup({ daemon: { onCall: (_params, { signal }) => new Promise((resolve) => signal.addEventListener('abort', () => resolve({ content: [{ type: 'text', text: 'browser_navigate: This operation was aborted' }], isError: true }))) } })
   try {
     const controller = new AbortController()
     const call = t.tool('browser_navigate').execute({ url: 'https://example.com' }, execOf(fakeAgent('c1'), controller.signal))
     await until(() => t.daemon.of('tools.call').length === 1, 2000, 'the call')
     controller.abort()
-    await assert.rejects(call, { message: 'aborted' })
+    // The daemon answers `isError` with `error.aborted`; with the call's own signal aborted the harness
+    // replaces any returned value by its cancelled result (ABORTED: a stopped row), so the plugin returns.
+    assert.equal(await call, 'browser_navigate cancelled')
     assert.equal(t.daemon.cancelled.length, 1)
+  } finally { await t.cleanup() }
+})
+
+test('structured errors: the window in front, the hint kept; a call the daemon cancelled itself says so', async () => {
+  let answer
+  const t = await setup({ daemon: { onCall: () => answer } })
+  try {
+    const agent = fakeAgent('e1')
+    answer = { content: [{ type: 'text', text: 'browser_act: no element matches {"text":"Go"}\nRequest: {"steps":[]}\nHint: read format "a11y"' }], isError: true, error: { message: 'browser_act: no element matches {"text":"Go"}\nRequest: {"steps":[]}', hint: 'read format "a11y"', tool: 'browser_act', browser: 'chrome', handle: 'chrome:0:3' } }
+    await assert.rejects(t.tool('browser_act').execute({ steps: [] }, execOf(agent)),
+      { message: '[chrome:0:3] browser_act: no element matches {"text":"Go"}\nRequest: {"steps":[]}\nHint: read format "a11y"' })
+    // A text that names the window already is left as it is; no text: the structured message and hint.
+    answer = { content: [{ type: 'text', text: '[chrome:0:3] browser_eval: boom' }], isError: true, error: { message: '[chrome:0:3] browser_eval: boom', tool: 'browser_eval', handle: 'chrome:0:3' } }
+    await assert.rejects(t.tool('browser_eval').execute({ expression: 'x' }, execOf(agent)), { message: '[chrome:0:3] browser_eval: boom' })
+    answer = { content: [], isError: true, error: { message: 'browser_eval: boom', hint: 'try again', tool: 'browser_eval' } }
+    await assert.rejects(t.tool('browser_eval').execute({ expression: 'x' }, execOf(agent)), { message: 'browser_eval: boom\nHint: try again' })
+    // Cancelled by the daemon (the session ended), not by this call's signal: a failure that says why.
+    answer = { content: [{ type: 'text', text: 'browser_eval: This operation was aborted' }], isError: true, error: { message: 'browser_eval: This operation was aborted', tool: 'browser_eval', aborted: true } }
+    await assert.rejects(t.tool('browser_eval').execute({ expression: 'x' }, execOf(agent)),
+      { message: /^browser_eval was cancelled by the brow daemon \(this chat's browser session ended, or the daemon is stopping\): browser_eval: This operation was aborted\. Retry/ })
+  } finally { await t.cleanup() }
+})
+
+test('an older daemon without structured errors: the text alone is the error', async () => {
+  const t = await setup({ daemon: { legacy: true, onCall: () => ({ content: [{ type: 'text', text: 'browser_eval: boom\nHint: h' }], isError: true, error: { message: 'x', handle: 'chrome:0:9' } }) } })
+  try {
+    await assert.rejects(t.tool('browser_eval').execute({ expression: 'x' }, execOf(fakeAgent('e2'))), { message: 'browser_eval: boom\nHint: h' })
   } finally { await t.cleanup() }
 })
 
@@ -223,9 +252,9 @@ test('a daemon with different tools: the tools row registers the new list', asyn
   const t = await setup()
   try {
     await t.daemon.close()
-    const fewer = TOOLS.filter(tool => tool.name !== 'browser_logs').concat([{ name: 'browser_script', description: 'Run a script.', inputSchema: { type: 'object', properties: { source: { type: 'string' } } } }])
+    const fewer = TOOLS.filter(tool => tool.name !== 'browser_logs').concat([{ name: 'browser_tabs', description: 'List tabs.', inputSchema: { type: 'object', properties: { handle: { type: 'string' } } } }])
     t.daemon = await startFakeDaemon({ socket: t.temp.socket, pid: 6000, tools: fewer })
-    await until(() => t.tool('browser_script'), 3000, 'the new tool')
+    await until(() => t.tool('browser_tabs'), 3000, 'the new tool')
     assert.equal(t.tool('browser_logs'), undefined)
     assert.ok(t.host.infos.some(m => /tools changed/.test(m)))
   } finally { await t.cleanup() }
