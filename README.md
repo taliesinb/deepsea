@@ -108,7 +108,7 @@ are present ([LAYOUT.md](LAYOUT.md) §3).
 |---|---|
 | [plugins/](plugins) | one installable package per plugin ([plugins/AGENTS.md](plugins/AGENTS.md)) |
 | [packages/](packages) | code shared by plugins and tools |
-| [apps/macos/](apps/macos) | the native app, the server host and the window helper |
+| [apps/macos/](apps/macos) | the native app and the server host |
 | [apps/relay/](apps/relay) | the relay each installed variant runs |
 | [tools/dsd/](tools/dsd) | `dsd`, the developer CLI: variants, builds, throwaways, topics |
 | [tools/provider-sim/](tools/provider-sim) | simulated model providers for tests |

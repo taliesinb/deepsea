@@ -39,8 +39,7 @@ ones macOS creates itself for that bundle id (`~/Library/Caches/`,
 finds a variant, and removing a variant removes that prefix.
 
 **Machine-wide things use the bare root** `io.github.taliesinb.deepsea`,
-which no variant uses: the window helper (`DeepSea Window Helper.app`, bundle
-id `io.github.taliesinb.deepsea`) and installer logs
+which no variant uses: the installer and build logs
 (`~/Library/Logs/io.github.taliesinb.deepsea/`). Variant ids cannot contain a
 dot, so nothing collides and no variant id is reserved.
 
@@ -166,7 +165,7 @@ Private plugins are not part of this layout yet: they arrive last, as an
 AGENTS.md          how agents work here (start here)
 LAYOUT.md          this file
 topics.txt         the harness topics and their order (this repository's topics are its branches)
-apps/macos/        native app, server host, window helper (Swift)
+apps/macos/        native app, server host (Swift)
 apps/relay/        the relay every installed variant runs (§6; Node, no dependencies)
 apps/linux/        Electron client
 plugins/<name>/    one installable package per plugin; plugins/AGENTS.md
@@ -307,8 +306,6 @@ run. A file's identity is its first line:
 ~/Library/Application Support/<variant name>/
   DeepSea[ <V>] Server.app                  server host (TCC identity of the server)
   deepsea-relay                             named node symlink the host starts
-~/Library/Application Support/io.github.taliesinb.deepsea/
-  DeepSea Window Helper.app                 machine-wide
 ~/Library/LaunchAgents/<variant name>.relay.plist
 ~/Applications/DeepSea[ <V>].app            the app (§1); a Dock tile only with `dsd build --install --dock`
 ```

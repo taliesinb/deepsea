@@ -135,25 +135,6 @@ function variantPlugins(config, dir) {
   return picked
 }
 
-/**
- * Install DeepSea Window Helper from a build that has its source (`apps/macos/WindowHelper/build.mjs`,
- * which replaces the installed copy only when it changed). A new or changed helper needs the person's
- * Accessibility grant once; a failure is a note, not a failed install.
- * @returns {{ app: string, installed: boolean } | undefined}
- */
-function installWindowHelper(dir) {
-  const script = join(dir, 'apps', 'macos', 'WindowHelper', 'build.mjs')
-  if (!existsSync(script)) return undefined
-  try {
-    const helper = JSON.parse(execFileSync(process.execPath, [script, '--install'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))
-    if (helper.installed) note(`DeepSea Window Helper installed: grant it Accessibility once with open -W -a "${helper.app}" --args request-access`)
-    return helper
-  } catch (error) {
-    note(`DeepSea Window Helper not installed: ${String(error.stderr || error.message).trim().split('\n').slice(-1)[0]}`)
-    return undefined
-  }
-}
-
 /** dsd build <v> [--install [--dock]] */
 export async function build(argv) {
   const args = parseArgs(argv)
@@ -195,9 +176,6 @@ export async function build(argv) {
   const host = DARWIN ? JSON.parse(execFileSync(process.execPath, [join(dir, 'apps', 'macos', 'build.mjs'), 'server-host',
     '--dir', supportDir, '--name', serverHostNameOf(id), '--bundle-id', `${variantName(id)}.server`,
     '--icon', join(app, 'Contents', 'Resources', 'AppIcon.icns'), '--cache', buildsDir()], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })) : undefined
-  // DeepSea Window Helper (machine-wide, LAYOUT.md §6), through which tool-browser moves windows: built from
-  // the build's own source, replaced only when it changed, so its one Accessibility grant stays.
-  const helper = DARWIN && plugins.some(p => isPlugin(p.name, 'tool-browser')) ? installWindowHelper(dir) : undefined
   const { link, node } = linkRelayNode(supportDir, harnessBuild)
   mkdirSync(join(logDirOf(id), 'relay'), { recursive: true, mode: 0o700 })
   const proxy = plugins.some(p => isPlugin(p.name, 'host-tailscale'))
@@ -213,7 +191,6 @@ export async function build(argv) {
   if (!DARWIN && lingering() === false) note('this account does not linger (loginctl enable-linger): the relay stops at the last logout and starts again at the next login')
   printJson({
     ...result, ...(migrated ? { migrated } : {}), ...(presets ? { presets } : {}), ...(app ? { app } : {}), ...(host ? { serverHost: host.bundle, serverHostChanged: host.changed } : {}),
-    ...(helper ? { windowHelper: helper.app, windowHelperChanged: helper.installed } : {}),
     relay: `http://127.0.0.1:${port.relay}/`, [DARWIN ? 'launchAgent' : 'unit']: job.file, label: job.label, ...(dock !== undefined ? { dock } : {}),
   })
 }
