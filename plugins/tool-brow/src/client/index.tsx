@@ -11,6 +11,11 @@
  *      browser_navigate     [globe] Safari navigate    safari:0:2 · Loaded https://… — "Title"
  *      browser_eval         [globe] Chrome script      chrome:0:1 · {"ok":true}
  *      browser_act          [globe] Chrome input       chrome:0:1 · 3 steps
+ *      browser_script       [globe] Chrome script run  run:17 · login.browser.js · passed in 1.2 s · 3 calls · chrome
+ *
+ *    A script run that failed, errored or timed out shows as an error row, a
+ *    cancelled one as stopped (the call itself succeeded: the report is its
+ *    result, with the failure screenshot when there is one).
  *
  *    Collapsed: the window and what was done. Expanded: the image(s) at point
  *    size (device pixels ÷ 2: the captures come from retina windows), a click
@@ -145,7 +150,30 @@ export function targetOf(toolName: string, args: Record<string, unknown>): strin
   }
   if (toolName === 'browser_navigate') return typeof args.url === 'string' && args.url !== '' ? args.url : String(args.action ?? '')
   if (toolName === 'browser_act') return Array.isArray(args.steps) ? `${args.steps.length} step${args.steps.length === 1 ? '' : 's'}` : ''
+  if (toolName === 'browser_script') {
+    const action = typeof args.action === 'string' ? args.action : ''
+    const what = typeof args.file === 'string' && args.file !== '' ? args.file
+      : typeof args.source === 'string' && args.source.trim() !== '' ? firstLine(args.source.trim(), 80)
+        : typeof args.run === 'string' ? args.run : ''
+    return [action, what].filter(part => part !== '').join(' ')
+  }
   return typeof args.expression === 'string' ? firstLine(args.expression, 80) : ''
+}
+
+/**
+ * A script run's report headline, `[run:17] login.browser.js · FAILED after 9.8 s · 9 calls · chrome`
+ * (browser_script's start / status / wait / cancel): the run, the rest, and its outcome.
+ */
+export function runHeadlineOf(text: string): { run: string, rest: string, outcome: 'passed' | 'failed' | 'cancelled' | 'running', browser?: string } | undefined {
+  const match = /\[(run:\d+)\] ([^\n]*)/.exec(text)
+  if (match === null) return undefined
+  const [, run, rest] = match as unknown as [string, string, string]
+  const parts = rest.split(' · ')
+  const outcome = parts.some(part => /^(FAILED|ERROR|TIMEOUT) after /.test(part)) ? 'failed'
+    : parts.some(part => /^CANCELLED after /.test(part)) ? 'cancelled'
+      : parts.some(part => part.startsWith('passed in ')) ? 'passed' : 'running'
+  const browsers = parts.find(part => /^(chrome|safari)(, (chrome|safari))*$/.test(part))
+  return { run, rest, outcome, ...(browsers !== undefined && !browsers.includes(',') ? { browser: browsers } : {}) }
 }
 
 /** The window handle in a result's `[safari:0:1]` tag, or a browser named by the call. */
@@ -159,6 +187,11 @@ export function handleOf(text: string, args: Record<string, unknown>): string | 
  * file fallback adds `saved to file`, which says why there is no picture.
  */
 export function summaryOf(toolName: string, text: string, target: string, args: Record<string, unknown>): string {
+  if (toolName === 'browser_script') {
+    // A run's report: its headline (`run:17 · login.browser.js · passed in 1.2 s · 3 calls · chrome`); help and log: their first line.
+    const headline = runHeadlineOf(text)
+    return headline !== undefined ? firstLine(`${headline.run} · ${headline.rest}`, 120) : firstLine(text, 100) || target
+  }
   const lines = text.split('\n')
   const tag = lines.findIndex(line => /\[(?:safari|chrome):\d+:\d+\]/.test(line))
   const detail = toolName === 'browser_screenshot' ? target : firstLine(lines[tag + 1] ?? lines[0] ?? '', 100) || target
@@ -291,7 +324,7 @@ function leading(state: RowState): ReactNode {
   }
 }
 
-const VERBS: Record<string, string> = { browser_screenshot: 'screenshot', browser_navigate: 'navigate', browser_eval: 'script', browser_act: 'input' }
+const VERBS: Record<string, string> = { browser_screenshot: 'screenshot', browser_navigate: 'navigate', browser_eval: 'script', browser_act: 'input', browser_script: 'script run' }
 
 /** "Chrome screenshot", "Safari navigate", or "Browser …" before the window is known. */
 export function titleOf(toolName: string, handle: string | undefined): string {
@@ -301,16 +334,19 @@ export function titleOf(toolName: string, handle: string | undefined): string {
 
 export function BrowserRow({ toolName, block, loadImage }: Props) {
   const [open, setOpen] = useState(false)
-  const state = stateOf(block)
+  const settled = stateOf(block)
   const args = parseArgs(block)
   const text = resultText(block)
-  const title = titleOf(toolName, handleOf(text, args))
+  // A script run that failed or was cancelled is a successful tool call: the row shows the run's outcome.
+  const run = toolName === 'browser_script' && settled === 'ok' ? runHeadlineOf(text) : undefined
+  const state: RowState = run?.outcome === 'failed' ? 'error' : run?.outcome === 'cancelled' ? 'stopped' : settled
+  const title = titleOf(toolName, run?.browser ?? handleOf(text, args))
   const refs = imageRefsOf(block)
   const target = targetOf(toolName, args)
 
   const summary = state === 'running'
     ? `${target}…`
-    : state === 'ok'
+    : settled === 'ok'
       ? summaryOf(toolName, text, target, args)
       : state === 'stopped'
         ? 'interrupted'
@@ -426,8 +462,11 @@ export function startAppCooperation(options: { debounceMs?: number, missingRoute
 
 // ---------------------------------------------------------------- plugin
 
-/** The tools whose results can carry an inline image block (the brow daemon's `screenshot` results). */
-export const IMAGE_TOOLS = ['browser_screenshot', 'browser_navigate', 'browser_eval', 'browser_act'] as const
+/**
+ * The tools whose results can carry an inline image block, so the generic card would print it as JSON:
+ * the brow daemon's `screenshot` results, and a script run's report (its failure screenshot).
+ */
+export const IMAGE_TOOLS = ['browser_screenshot', 'browser_navigate', 'browser_eval', 'browser_act', 'browser_script'] as const
 
 export const name = 'deepsea-tool-brow'
 export const inject = ['slots']

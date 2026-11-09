@@ -45,7 +45,8 @@ Without a reachable daemon there are no browser tools; the root keeps trying
 Whatever `tools.list` returns, under the daemon's names, descriptions and
 JSON Schemas, unchanged: today `browser_open`, `browser_close`,
 `browser_navigate`, `browser_eval`, `browser_read`, `browser_screenshot`,
-`browser_act`, `browser_logs` (a daemon with scripts adds `browser_script`).
+`browser_act`, `browser_logs` and `browser_script` (browser scripts the
+daemon runs: start, status, wait, cancel, log, help).
 A schema the harness does not take (`assertSupportedJsonSchema`) leaves that
 tool out with a warning. Arguments are validated here against the schema
 (`ToolArgsError`, as `defineTool` does) before anything goes to the daemon;
@@ -184,6 +185,16 @@ tool-browser-unified does: the title names the browser from the result's
 what was done, expanded the captures at point size with a lightbox, then the
 text. The daemon's result text has the same shape as the in-process plugin's,
 so the row is unchanged.
+
+It claims `browser_script` too, since a run's report can carry its failure
+screenshot (the generic card would print that block as JSON): "Chrome script
+run" (the browser from the report's headline; "Browser" when the run used
+both), collapsed the headline (`run:17 · login.browser.js · passed in 1.2 s ·
+3 calls · chrome`), running the action and the file or the source's first
+line. A run that failed, errored or timed out is an error row and a
+cancelled one a stopped row, though the call itself succeeded (the report is
+its result). `browser_open`, `browser_close`, `browser_read` and
+`browser_logs` return text only and keep the generic card.
 
 ## Why a vendored socket client
 

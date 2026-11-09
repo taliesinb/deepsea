@@ -115,7 +115,7 @@ test('apply registers one toolview per tool that can carry a screenshot, and the
     },
   }
   mod.apply(ctx)
-  assert.deepEqual(registered.map(r => r.spec.key), ['browser_screenshot', 'browser_navigate', 'browser_eval', 'browser_act'])
+  assert.deepEqual(registered.map(r => r.spec.key), ['browser_screenshot', 'browser_navigate', 'browser_eval', 'browser_act', 'browser_script'])
   for (const r of registered) assert.equal(r.component, mod.BrowserRow)
   assert.equal(typeof effects[0], 'function', 'a disposer, even with no window')
 })
@@ -154,6 +154,31 @@ test('navigate with a screenshot: the load line is the summary, the image is dra
   const evalRow = render(mod.BrowserRow, { toolName: 'browser_eval', block: { ...settledOk, call: { argsRaw: JSON.stringify({ handle: 'chrome', expression: 'return 1' }) }, content: [{ type: 'text', text: '[chrome:0:0]\n1' }] }, callId: 'c1' })
   assert.match(evalRow, /Chrome script/)
   assert.match(evalRow, />chrome:0:0 · 1</)
+})
+
+test('browser_script: the run\'s headline; a failed run is an error row with its screenshot; help and running shapes', () => {
+  const { mod } = loadBundle()
+  const report = (text, extra = []) => ({ ...settledOk, call: { argsRaw: JSON.stringify({ action: 'start', file: 'login.browser.js' }) }, content: [...extra, { type: 'text', text }] })
+  const passed = render(mod.BrowserRow, { toolName: 'browser_script', block: report('[run:17] login.browser.js · passed in 1.2 s · 3 calls · chrome\n✓ open (0.4 s)\nreturned: {"ok":true}'), callId: 'c1' })
+  assert.match(passed, /Chrome script run/)
+  assert.match(passed, />run:17 · login.browser.js · passed in 1.2 s · 3 calls · chrome</)
+  assert.match(passed, /data-state="ok"/)
+  const failedBlock = report('NOTE: the brow daemon restarted (pid 1 → 2); this chat\'s earlier browser windows are gone. [run:18] login.browser.js · FAILED after 9.8 s · 9 calls · safari\n✗ dashboard (5.1 s)\nAt failure: safari:0:4 http://localhost/ (kept open)', [{ type: 'image', attachment }])
+  const failed = render(mod.BrowserRow, { toolName: 'browser_script', block: failedBlock, callId: 'c1' })
+  assert.match(failed, /Safari script run/)
+  assert.match(failed, /data-state="error"/)
+  assert.match(failed, />run:18 · login.browser.js · FAILED after 9.8 s · 9 calls · safari</)
+  const failedOpen = renderOpen(mod.BrowserRow, { toolName: 'browser_script', block: failedBlock, callId: 'c1' })
+  assert.match(failedOpen, /<img/, 'the failure screenshot is drawn, not printed as JSON')
+  assert.match(failedOpen, /At failure: safari:0:4/)
+  const cancelled = render(mod.BrowserRow, { toolName: 'browser_script', block: report('[run:19] inline script · CANCELLED after 2.0 s · 1 call · chrome, safari'), callId: 'c1' })
+  assert.match(cancelled, /data-state="stopped"/)
+  assert.match(cancelled, /Browser script run/, 'two browsers: no single one in the title')
+  assert.match(cancelled, />run:19 · inline script · CANCELLED/)
+  const help = render(mod.BrowserRow, { toolName: 'browser_script', block: { ...settledOk, call: { argsRaw: JSON.stringify({ action: 'help' }) }, content: [{ type: 'text', text: 'Browser scripts: an async program…\nmore' }] }, callId: 'c1' })
+  assert.match(help, />Browser scripts: an async program…</)
+  const live = render(mod.BrowserRow, { toolName: 'browser_script', block: { callId: 'c1', argsRaw: JSON.stringify({ action: 'start', source: '\n  await navigate("https://example.com")\nreturn 1' }), time: 1 }, callId: 'c1' })
+  assert.match(live, />start await navigate\(&quot;https:\/\/example.com&quot;\)…</)
 })
 
 test('the file fallback: text, no image, still expandable', () => {
