@@ -186,6 +186,8 @@ export async function startFakeDaemon({ socket, pid = 4242, tools = TOOLS, onCal
     of: (method) => requests.filter(r => r.method === method).map(r => r.params),
     /** Push a notice to the connections of a session (the daemon's `push` delivery). */
     notice(key, text) { for (const conn of sessions.get(key)?.connections ?? []) conn.notify('session.notice', { session: key, text }) },
+    /** A new tool list while running, announced with `tools.changed {}` to every connection. */
+    changeTools(next) { tools = next; for (const conn of connections) conn.notify('tools.changed', {}) },
     /** Queue a command for an app's poll. */
     command(appPid, command) { commands.set(appPid, command) },
     watchers,

@@ -2,7 +2,7 @@
  * @deepsea/tool-brow/tools: the browser tools row,
  * `deepsea-tool-brow-tools` ("Brow tools").
  *
- * Registers the brow daemon's tools (the eight `browser_*` tools, as the
+ * Registers the brow daemon's tools (the nine `browser_*` tools, as the
  * daemon lists them: names, descriptions, JSON Schemas) once per mount: dsd's
  * generated presets put this row into every agent preset that has tool-web
  * (standard, ptc, cordis), and disable it globally. Everything process-wide

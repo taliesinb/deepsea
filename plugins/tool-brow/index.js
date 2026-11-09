@@ -1,7 +1,7 @@
 /**
  * @deepsea/tool-brow: per-chat browser windows for agents, served
  * by the standalone brow daemon (Safari Technology Preview and
- * Chrome for Testing behind eight `browser_*` tools). This plugin drives no
+ * Chrome for Testing behind nine `browser_*` tools). This plugin drives no
  * browser itself: it is a client of the daemon's Unix socket (JSON-RPC,
  * daemon-client.mjs).
  *
@@ -327,12 +327,16 @@ export function apply(ctx, config, seams = {}) {
     if (agent === undefined) throw new Error('this tool needs a calling agent (no exec.agent)')
     let { entry, client } = await sessionOf(agent)
     const request = () => client.request('tools.call', { session: entry.key, name: toolName, arguments: args ?? {}, images: 'inline' }, { signal: exec.signal })
+    const cancelled = (answered) => {
+      trace({ event: 'call', key: entry.key, tool: toolName, cancelled: true, answered })
+      return `${toolName} cancelled`
+    }
     let result
     try {
       result = await request()
     } catch (error) {
       // Cancelled (a daemon that did not answer the cancel in time included): the harness replaces this value.
-      if (exec.signal?.aborted) return `${toolName} cancelled`
+      if (exec.signal?.aborted) return cancelled(false)
       if (error?.code === ERRORS.INVALID_PARAMS && /unknown session/i.test(String(error.message))) {
         // The session lapsed (the lease ended while this server was away): open it again, once.
         open(entry, client)
@@ -346,7 +350,7 @@ export function apply(ctx, config, seams = {}) {
     }
     entry.used = true
     // Cancelled by its own signal: the harness records the cancelled result and drops this value (notes kept for the next).
-    if (exec.signal?.aborted) return `${toolName} cancelled`
+    if (exec.signal?.aborted) return cancelled(true)
     const note = link.takeStartNote() + entry.note
     entry.note = ''
     const texts = []
@@ -438,6 +442,11 @@ export function apply(ctx, config, seams = {}) {
     if (!first) ctx.logger.info(`tool-brow: the brow daemon's tools changed; registered again (${tools.map(t => t.name).join(', ')})`)
   }
   link.onConnected((client) => refreshTools(client))
+  // The daemon says when its list changes while it runs (`tools.changed {}`): read it again.
+  link.on('tools.changed', () => {
+    const client = link.current()
+    if (client !== undefined) refreshTools(client).catch((error) => ctx.logger.warn(`tool-brow: re-reading the tools failed: ${String(error?.message ?? error)}`))
+  })
 
   let startupTimer
   let unloading = false

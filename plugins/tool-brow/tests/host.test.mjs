@@ -289,6 +289,15 @@ test('a daemon with different tools: the tools row registers the new list', asyn
   } finally { await t.cleanup() }
 })
 
+test('tools.changed: the list is read again and registered', async () => {
+  const t = await setup()
+  try {
+    t.daemon.changeTools([...TOOLS, { name: 'browser_tabs', description: 'List tabs.', inputSchema: { type: 'object', properties: {} } }])
+    await until(() => t.tool('browser_tabs'), 3000, 'the new tool')
+    assert.equal(t.daemon.of('tools.list').length, 2)
+  } finally { await t.cleanup() }
+})
+
 test('a closed connection during a call says so', async () => {
   const t = await setup({ daemon: { onCall: () => new Promise(() => {}) } })
   try {
