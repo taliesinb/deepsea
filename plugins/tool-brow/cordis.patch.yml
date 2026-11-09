@@ -1,0 +1,15 @@
+# Bundle patch, used when the package is installed into a profile. Two rows:
+# - deepsea-tool-brow (the package root, global): the connection to
+#   the brow daemon (started when none runs), one daemon session per
+#   agent, idle notices, inline screenshots, the DeepSea app's window routes
+#   and the tool rows (browser half, lib/client.js); provides the
+#   deepseaBrow service.
+# - deepsea-tool-brow-tools (@deepsea/tool-brow/tools):
+#   the daemon's browser_* tools; dsd's generated presets move it into the
+#   agent presets that have tool-web (package.json, deepsea.presets).
+# Run only one browser plugin in a variant.
+- insert:
+    - id: deepsea-tool-brow
+      name: "@deepsea/tool-brow"
+    - id: deepsea-tool-brow-tools
+      name: "@deepsea/tool-brow/tools"

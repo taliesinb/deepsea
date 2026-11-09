@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Brow",
+    "description": "连接 brow 守护进程（它运行浏览器工具背后的 Safari Technology Preview 和 Chrome for Testing 窗口），未运行时将其启动。"
+  }
+}

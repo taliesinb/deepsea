@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Brow 工具",
+    "description": "通过 brow 守护进程为智能体提供专属的浏览器窗口（Safari 或 Chrome），用于浏览、读取网页、操作页面和截图。"
+  }
+}
