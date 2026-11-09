@@ -19,12 +19,13 @@
  */
 
 import { connect as connectDaemon } from './daemon-client.mjs'
+import { APP_NAME } from './daemon-names.mjs'
 
 const RECONNECT_DELAYS_MS = [250, 1000, 3000]
 
 /** "via its LaunchAgent (launchctl kickstart …)" and so on, for logs and notes. */
 export function describeStart({ via, how }) {
-  const what = via === 'launch-agent' ? 'via its LaunchAgent' : via === 'app' ? 'by opening Brow.app' : 'with its command'
+  const what = via === 'launch-agent' ? 'via its LaunchAgent' : via === 'app' ? `by opening ${APP_NAME}` : 'with its command'
   return `${what} (${how})`
 }
 

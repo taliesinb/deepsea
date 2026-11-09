@@ -17,6 +17,7 @@
     "index.js",
     "tools-row.js",
     "daemon-client.mjs",
+    "daemon-names.mjs",
     "link.mjs",
     "app-relay.mjs",
     "lib/client.js",

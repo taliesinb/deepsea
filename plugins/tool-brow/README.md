@@ -189,6 +189,12 @@ rather than a dependency on the `brow` package:
 - The daemon can be installed, upgraded and restarted on its own; a newer
   daemon with a new tool needs no plugin release.
 
+The daemon's own names (its command, Brow.app's bundle id, the
+LaunchAgent label, the default home's directory, the `BROW_*`
+environment variables) are all in `daemon-names.mjs`, so a renamed daemon is
+a change of that file alone; the plugin's own names (package, rows, routes,
+service, the `brow` config key) are DeepSea's, defined where they are used.
+
 What it leaves out: the code stamp (`hello.stamp` hashes the daemon's
 sources; only a client in the same checkout can compare it). Replies are read
 in chunks with a newline search over new data only, since an inline

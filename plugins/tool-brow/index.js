@@ -28,6 +28,9 @@
  * @deepsea/tool-browser-unified or @deepsea/tool-browser): they register the
  * same tool names or drive the same browsers.
  *
+ * The daemon's own names (command, app, LaunchAgent, default home, environment variables) are in
+ * daemon-names.mjs; the names below are today's.
+ *
  * Config (all optional; `subagents` is on the tools row):
  *
  *   brow:
@@ -54,6 +57,7 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { assertSupportedJsonSchema, ToolArgsError, validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
 import { createAppRelay, registerAppRelayRoutes } from './app-relay.mjs'
 import { CONNECTION_CLOSED, ERRORS, socketPathOf } from './daemon-client.mjs'
+import { APP_NAME, DAEMON_COMMAND, ENV_CONFIG, ENV_HOME, ENV_SOCKET } from './daemon-names.mjs'
 import { createLink } from './link.mjs'
 
 export const name = 'deepsea-tool-brow'
@@ -72,7 +76,7 @@ export const Config = Schema.object({
   brow: Schema.object({
     socket: Schema.string().default(''),
     home: Schema.string().default(''),
-    command: Schema.string().default('brow'),
+    command: Schema.string().default(DAEMON_COMMAND),
     autostart: Schema.boolean().default(true),
     env: Schema.dict(Schema.string()).default({}),
     startTimeoutMs: Schema.number().min(1000).default(15_000),
@@ -103,8 +107,8 @@ export function daemonEnv(config, env = process.env) {
   const own = config.brow
   return {
     ...env,
-    ...(own.home !== '' ? { BROW_HOME: own.home } : {}),
-    ...(own.socket !== '' ? { BROW_SOCKET: own.socket } : {}),
+    ...(own.home !== '' ? { [ENV_HOME]: own.home } : {}),
+    ...(own.socket !== '' ? { [ENV_SOCKET]: own.socket } : {}),
     ...own.env,
   }
 }
@@ -119,7 +123,7 @@ export function daemonEnv(config, env = process.env) {
 export function usesDefaultDaemon(config, env = process.env) {
   const own = config.brow
   const merged = { ...env, ...own.env }
-  return own.socket === '' && own.home === '' && !merged.BROW_HOME && !merged.BROW_SOCKET && !merged.BROW_CONFIG
+  return own.socket === '' && own.home === '' && !merged[ENV_HOME] && !merged[ENV_SOCKET] && !merged[ENV_CONFIG]
 }
 
 /**
@@ -197,7 +201,7 @@ export function apply(ctx, config, seams = {}) {
     try {
       client = await link.ensure({ autostart: true })
     } catch (error) {
-      throw new Error(`the brow daemon is not available: ${String(error?.message ?? error)}. ${own.autostart ? `Check that ${preferInstalled ? 'Brow.app is installed, or that ' : ''}"${own.command} start" works on this machine (brow.command)` : `Start it (${preferInstalled ? 'open Brow.app, or ' : ''}brow start), or turn on brow.autostart`}, then retry.`, { cause: error })
+      throw new Error(`the brow daemon is not available: ${String(error?.message ?? error)}. ${own.autostart ? `Check that ${preferInstalled ? `${APP_NAME} is installed, or that ` : ''}"${own.command} start" works on this machine (brow.command)` : `Start it (${preferInstalled ? `open ${APP_NAME}, or ` : ''}${own.command} start), or turn on brow.autostart`}, then retry.`, { cause: error })
     }
     let entry = sessions.get(agent.id)
     if (entry === undefined) {

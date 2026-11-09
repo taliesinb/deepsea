@@ -22,6 +22,9 @@ import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
+import { APP_BUNDLE_ID, APP_NAME, ENV_HOME, ENV_SOCKET, LAUNCH_AGENT_LABEL, XDG_NAME } from './daemon-names.mjs'
+
+export { APP_BUNDLE_ID, LAUNCH_AGENT_LABEL }
 
 /** The protocol version this client speaks (the daemon's `hello.protocol`). */
 export const PROTOCOL = 1
@@ -55,21 +58,21 @@ export const CONNECTION_CLOSED = 'connection closed'
  * @param {string} [platform]
  */
 export function daemonHome(env = process.env, platform = process.platform) {
-  if (env.BROW_HOME) return env.BROW_HOME
-  if (platform === 'darwin') return join(homedir(), 'Library', 'Application Support', 'io.github.taliesinb.brow')
+  if (env[ENV_HOME]) return env[ENV_HOME]
+  if (platform === 'darwin') return join(homedir(), 'Library', 'Application Support', APP_BUNDLE_ID)
   const state = env.XDG_STATE_HOME && isAbsolute(env.XDG_STATE_HOME) ? env.XDG_STATE_HOME : join(homedir(), '.local', 'state')
-  return join(state, 'brow')
+  return join(state, XDG_NAME)
 }
 
 /**
  * The socket to dial: the configured one, else `<home>/run/daemon.sock` of the configured home, else the
- * daemon's own default (`BROW_SOCKET`, else `<daemon home>/run/daemon.sock`).
+ * daemon's own default (its socket variable, else `<daemon home>/run/daemon.sock`; names: daemon-names.mjs).
  * @param {{ socket?: string, home?: string }} config
  */
 export function socketPathOf({ socket = '', home = '' } = {}, env = process.env, platform = process.platform) {
   if (socket !== '') return socket
   if (home !== '') return join(home, 'run', 'daemon.sock')
-  if (env.BROW_SOCKET) return env.BROW_SOCKET
+  if (env[ENV_SOCKET]) return env[ENV_SOCKET]
   return join(daemonHome(env, platform), 'run', 'daemon.sock')
 }
 
@@ -181,10 +184,6 @@ export function startCommandOf(command) {
   return { file: command, args: ['start'] }
 }
 
-/** The installed Brow.app (macOS) and the per-user LaunchAgent that runs its daemon. */
-export const APP_BUNDLE_ID = 'io.github.taliesinb.brow'
-export const LAUNCH_AGENT_LABEL = 'io.github.taliesinb.brow'
-
 /**
  * Run a program to its exit, asynchronously; output kept (last 2000 characters) for messages.
  * Never throws: `{ code, output, error }`.
@@ -251,7 +250,7 @@ export async function startDaemon({ command, env = process.env, preferInstalled 
     }
     const opened = await run('open', ['-g', '-b', APP_BUNDLE_ID])
     if (opened.code === 0) return { via: 'app', how: `open -g -b ${APP_BUNDLE_ID}`, attempts }
-    attempts.push(`Brow.app not found (open -b ${APP_BUNDLE_ID}: ${whyFailed(opened)})`)
+    attempts.push(`${APP_NAME} not found (open -b ${APP_BUNDLE_ID}: ${whyFailed(opened)})`)
   }
   const { file, args } = startCommandOf(command)
   const started = await run(file, args, { env })
