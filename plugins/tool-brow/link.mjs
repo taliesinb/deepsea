@@ -13,16 +13,25 @@
  * - `onConnected(fn)` runs on every new connection (the first included):
  *   re-open sessions, replay the app's window reports, re-read the tools.
  * - Notification listeners (`on`) survive reconnects.
+ * - How a daemon was started (LaunchAgent, app or command; daemon-client.mjs
+ *   `startDaemon`) is traced, logged, and offered once as a note for the
+ *   result of the call that started it (`takeStartNote`).
  */
 
 import { connect as connectDaemon } from './daemon-client.mjs'
 
 const RECONNECT_DELAYS_MS = [250, 1000, 3000]
 
+/** "via its LaunchAgent (launchctl kickstart …)" and so on, for logs and notes. */
+export function describeStart({ via, how }) {
+  const what = via === 'launch-agent' ? 'via its LaunchAgent' : via === 'app' ? 'by opening Brow.app' : 'with its command'
+  return `${what} (${how})`
+}
+
 /**
  * @param {object} options
  * @param {string} options.socket
- * @param {{ command: string, env?: NodeJS.ProcessEnv, timeoutMs?: number } | false} options.autostart - how to start a daemon (false: never).
+ * @param {{ command: string, env?: NodeJS.ProcessEnv, timeoutMs?: number, preferInstalled?: boolean } | false} options.autostart - how to start a daemon (false: never); daemon-client.mjs `startDaemon`.
  * @param {string} [options.name]
  * @param {string} [options.version]
  * @param {{ info(m: string): void, warn(m: string): void }} [options.logger]
@@ -40,6 +49,8 @@ export function createLink({ socket, autostart, name, version, logger = { info()
   const listeners = new Map()
   const connectedHooks = []
   let lastPid
+  /** Said once, in front of the result of the call that started the daemon. */
+  let startNote = ''
 
   function adopt(next) {
     client = next
@@ -83,9 +94,10 @@ export function createLink({ socket, autostart, name, version, logger = { info()
     if (client !== undefined && !client.closed) return Promise.resolve(client)
     // A dial without autostart in flight does not satisfy a caller that wants one: chain behind it.
     if (dialing !== undefined) return dialing.then(c => c, (error) => (start && autostart ? ensure({ autostart: true }) : Promise.reject(error)))
-    const attempt = connect({ socket, name, version, autostart: start ? autostart : false, onStarted: ({ command }) => {
-      trace({ event: 'daemon-started', command, socket })
-      logger.info(`tool-brow: started the brow daemon with "${command} start"`)
+    const attempt = connect({ socket, name, version, autostart: start ? autostart : false, onStarted: ({ via, how, attempts }) => {
+      trace({ event: 'daemon-started', via, how, attempts, socket })
+      logger.info(`tool-brow: started the brow daemon ${describeStart({ via, how })}${attempts.length > 0 ? ` (passed over: ${attempts.join('; ')})` : ''}`)
+      startNote = `Started the brow daemon ${describeStart({ via, how })}. `
     } })
     dialing = attempt
       .then((next) => {
@@ -108,6 +120,8 @@ export function createLink({ socket, autostart, name, version, logger = { info()
       listeners.set(method, [listener])
       if (client !== undefined) client.on(method, (params) => { for (const l of listeners.get(method) ?? []) l(params) })
     },
+    /** How the daemon was started, once (for the next tool result), or ''. */
+    takeStartNote() { const note = startNote; startNote = ''; return note },
     /** Run after every new connection: `(client, { restarted })`. */
     onConnected(hook) { connectedHooks.push(hook) },
     async dispose() {

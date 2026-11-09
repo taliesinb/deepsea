@@ -181,12 +181,19 @@ export function startCommandOf(command) {
   return { file: command, args: ['start'] }
 }
 
+/** The installed Brow.app (macOS) and the per-user LaunchAgent that runs its daemon. */
+export const APP_BUNDLE_ID = 'io.github.taliesinb.brow'
+export const LAUNCH_AGENT_LABEL = 'io.github.taliesinb.brow'
+
 /**
- * Run `<command> start` (which starts a detached daemon and returns) and resolve when it exits; output
- * is kept for the error message. Never throws: `{ code, output, error }`.
+ * Run a program to its exit, asynchronously; output kept (last 2000 characters) for messages.
+ * Never throws: `{ code, output, error }`.
+ * @param {string} file
+ * @param {string[]} args
+ * @param {{ env?: NodeJS.ProcessEnv }} [options]
+ * @returns {Promise<{ code: number | null | undefined, output: string, error?: Error }>}
  */
-function runStart(command, env) {
-  const { file, args } = startCommandOf(command)
+export function runProgram(file, args, { env = process.env } = {}) {
   return new Promise((resolve) => {
     let output = ''
     const keep = (chunk) => { output = (output + chunk).slice(-2000) }
@@ -200,8 +207,57 @@ function runStart(command, env) {
     child.stdout.setEncoding('utf8').on('data', keep)
     child.stderr.setEncoding('utf8').on('data', keep)
     child.once('error', (error) => resolve({ code: undefined, output, error }))
-    child.once('exit', (code) => resolve({ code, output }))
+    child.once('close', (code) => resolve({ code, output }))
   })
+}
+
+const whyFailed = (ran) => {
+  const what = ran.error !== undefined ? String(ran.error.message ?? ran.error) : `exit code ${ran.code}`
+  const said = ran.output.trim().split('\n').filter(Boolean).slice(-3).join(' / ')
+  return said ? `${what}: ${said}` : what
+}
+
+/**
+ * Start a daemon, the first way that works:
+ *
+ *   with `preferInstalled` (the default socket, on macOS):
+ *     1. the LaunchAgent: `launchctl kickstart gui/<uid>/<label>`, when `launchctl print` knows it;
+ *     2. the app: `open -g -b <bundle id>`, when LaunchServices finds it;
+ *   3. `<command> start` (the daemon's CLI: a name on PATH or a checkout's bin/brow.mjs).
+ *
+ * A custom socket, home or daemon configuration can only be served by a daemon this process spawns, so
+ * the caller passes `preferInstalled: false` for those and only 3 runs. Every step is an async child
+ * process. Resolves `{ via, how, attempts }` (`via`: 'launch-agent' | 'app' | 'command'; `attempts`:
+ * why the earlier ways were passed over) or throws with every attempt.
+ * @param {object} options
+ * @param {string} options.command
+ * @param {NodeJS.ProcessEnv} [options.env] - for `<command> start` (launchctl and open get this process's).
+ * @param {boolean} [options.preferInstalled]
+ * @param {string} [options.platform]
+ * @param {number} [options.uid]
+ * @param {typeof runProgram} [options.run] - test seam.
+ */
+export async function startDaemon({ command, env = process.env, preferInstalled = false, platform = process.platform, uid = process.getuid?.(), run = runProgram }) {
+  const attempts = []
+  if (preferInstalled && platform === 'darwin') {
+    const target = `gui/${uid}/${LAUNCH_AGENT_LABEL}`
+    const printed = await run('launchctl', ['print', target])
+    if (printed.code === 0) {
+      const kicked = await run('launchctl', ['kickstart', target])
+      if (kicked.code === 0) return { via: 'launch-agent', how: `launchctl kickstart ${target}`, attempts }
+      attempts.push(`launchctl kickstart ${target} failed (${whyFailed(kicked)})`)
+    } else {
+      attempts.push(`no LaunchAgent ${LAUNCH_AGENT_LABEL} (launchctl print: ${whyFailed(printed)})`)
+    }
+    const opened = await run('open', ['-g', '-b', APP_BUNDLE_ID])
+    if (opened.code === 0) return { via: 'app', how: `open -g -b ${APP_BUNDLE_ID}`, attempts }
+    attempts.push(`Brow.app not found (open -b ${APP_BUNDLE_ID}: ${whyFailed(opened)})`)
+  }
+  const { file, args } = startCommandOf(command)
+  const started = await run(file, args, { env })
+  if (started.code === 0) return { via: 'command', how: `${command} start`, attempts }
+  attempts.push(`"${command} start" failed (${whyFailed(started)})`)
+  throw Object.assign(new Error(attempts.join('; ')), { attempts })
 }
 
 /**
@@ -210,9 +266,9 @@ function runStart(command, env) {
  * @param {string} options.socket
  * @param {string} [options.name] - client name for `hello`.
  * @param {string} [options.version]
- * @param {false | { command: string, env?: NodeJS.ProcessEnv, timeoutMs?: number }} [options.autostart]
- *   start a daemon when none answers: `<command> start` with `env`, then wait for the socket (default 15 s).
- * @param {(info: { command: string, output: string }) => void} [options.onStarted]
+ * @param {false | { command: string, env?: NodeJS.ProcessEnv, timeoutMs?: number, preferInstalled?: boolean, run?: typeof runProgram, platform?: string, uid?: number }} [options.autostart]
+ *   start a daemon when none answers (startDaemon), then wait for the socket (default 15 s).
+ * @param {(info: { via: string, how: string, attempts: string[] }) => void} [options.onStarted]
  */
 export async function connect({ socket: path, name = 'deepsea-tool-brow', version = '0', autostart = false, onStarted }) {
   let socket
@@ -222,22 +278,20 @@ export async function connect({ socket: path, name = 'deepsea-tool-brow', versio
     if (!autostart || !['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw describeDialError(error, path)
     const timeoutMs = autostart.timeoutMs ?? 15_000
     const deadline = Date.now() + timeoutMs
-    const started = runStart(autostart.command, autostart.env ?? process.env)
-    let exit
-    void started.then((result) => { exit = result })
+    let started
+    try {
+      started = await startDaemon({ ...autostart, env: autostart.env ?? process.env })
+    } catch (failure) {
+      throw new Error(`no brow daemon answers on ${path}, and starting one failed: ${String(failure?.message ?? failure)}`, { cause: failure })
+    }
     for (;;) {
       await new Promise(resolve => setTimeout(resolve, 100))
       try { socket = await dial(path); break } catch (retry) {
-        if (exit !== undefined && (exit.error !== undefined || exit.code !== 0)) {
-          const why = exit.error !== undefined ? String(exit.error.message ?? exit.error) : `it exited with code ${exit.code}`
-          throw new Error(`no brow daemon answers on ${path}, and starting one with "${autostart.command} start" failed: ${why}${exit.output.trim() ? `: ${exit.output.trim().split('\n').slice(-3).join(' / ')}` : ''}`, { cause: retry })
-        }
-        if (Date.now() > deadline) throw new Error(`started the brow daemon ("${autostart.command} start") but nothing answered on ${path} within ${timeoutMs} ms; is the socket path the one that command uses?`, { cause: retry })
+        if (Date.now() > deadline) throw new Error(`started the brow daemon (${started.how}) but nothing answered on ${path} within ${timeoutMs} ms; is that the socket it serves?`, { cause: retry })
       }
     }
-    onStarted?.({ command: autostart.command, output: (await started).output })
+    onStarted?.(started)
   }
-
   const listeners = new Map()
   const closeListeners = []
   const peer = createPeer(socket, {

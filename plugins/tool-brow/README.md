@@ -86,16 +86,37 @@ the same daemon). A call refused with "unknown session" re-opens the session
 and runs once more.
 
 **Starting the daemon.** When nothing answers on the socket and
-`brow.autostart` is on, the plugin runs `<command> start` (the
-daemon's own CLI, which starts a detached daemon and returns) and waits for
-the socket (`startTimeoutMs`, 15 s). `command` is `brow` on the
-server's PATH by default, or a checkout's `bin/brow.mjs` (run with
-the server's node). The daemon then outlives the DeepSea server, as intended:
-it is shared by everything on the Mac that uses it. This happens at startup
-(to learn the tools) and on a tool call, never from the app-window routes or
-a background reconnect, so a daemon the person stopped comes back only when
-an agent needs a browser.
+`brow.autostart` is on, the plugin starts one, preferring the
+installed **Brow.app** (bundle id `io.github.taliesinb.brow`,
+whose per-user LaunchAgent of the same label runs the daemon on the default
+home's socket) and falling back to the daemon's CLI:
 
+| | Way | When |
+|---|---|---|
+| 1 | `launchctl kickstart gui/<uid>/io.github.taliesinb.brow` | `launchctl print` of that service succeeds |
+| 2 | `open -g -b io.github.taliesinb.brow` (in the background) | LaunchServices finds the app |
+| 3 | `<command> start` | always last; the only way for a custom daemon |
+
+Ways 1 and 2 are tried only for the **default daemon**: no configured
+`socket` or `home`, no `BROW_HOME` / `BROW_SOCKET` in the
+server's environment, and no `BROW_CONFIG` (the server's or
+`brow.env`'s). A custom socket, home or configuration can only be
+served by a daemon the plugin spawns itself, so those go straight to 3
+(`usesDefaultDaemon` in index.js, `startDaemon` in daemon-client.mjs; every
+step is an async child process). `command` is `brow` on the
+server's PATH by default, or a checkout's `bin/brow.mjs` (run with
+the server's node); `start` starts a detached daemon and returns. Then the
+plugin waits for the socket (`startTimeoutMs`, 15 s).
+
+Which way worked is in the trace (`daemon-started { via: launch-agent | app
+| command, how, attempts }`), in the server log (with the ways passed over
+and why), and in front of the next tool result (`Started the brow daemon
+via its LaunchAgent (launchctl kickstart …). `). When every way fails, the
+error lists each attempt. The daemon outlives the DeepSea server, as
+intended: it is shared by everything on the Mac that uses it. Starting
+happens at startup (to learn the tools) and on a tool call, never from the
+app-window routes or a background reconnect, so a daemon the person stopped
+comes back only when an agent needs a browser.
 ## Images
 
 The daemon returns captures inline (`{ type: "image", data, mimeType }`
@@ -156,7 +177,7 @@ so the row is unchanged.
 
 `daemon-client.mjs` is a ~200-line copy of what the plugin needs of the
 daemon's `src/rpc.mjs` and `src/client.mjs` (framing, requests, `$/cancel`,
-notifications, hello with the protocol check, autostart through a command)
+notifications, hello with the protocol check, autostart: the installed app first, then a command)
 rather than a dependency on the `brow` package:
 
 - The protocol is small, versioned (`hello.protocol`, refused when it
@@ -187,7 +208,8 @@ full-page screenshot is one multi-megabyte line.
                                       #   $XDG_STATE_HOME/brow on Linux, or $BROW_HOME)
           home: ''                    # the daemon's home; also BROW_HOME for a daemon the plugin starts
           command: brow     # `<command> start`: a name on PATH, or a checkout's bin/brow.mjs
-          autostart: true             # start the daemon when none answers
+          autostart: true             # start the daemon when none answers (default daemon: LaunchAgent,
+                                      #   then Brow.app, then the command; otherwise the command)
           env: {}                     # extra environment for a started daemon (e.g. BROW_CONFIG)
           startTimeoutMs: 15000
         trace: false                  # JSONL trace in the variant's log directory (@deepsea/logs)
@@ -264,7 +286,8 @@ pnpm typecheck        # the browser half against the harness's declarations
 socket and both rows on a fake host (`tests/fake-host.mjs`): the vendored
 client (framing of multi-megabyte replies, notifications, `$/cancel`,
 protocol mismatch, autostart through `tests/fixtures/fake-brow.mjs`
-and its failures), the link (single dial, quick reconnects, hooks), the tools
+and its failures; the order LaunchAgent → app → command with a fake process
+runner, and when it is skipped), the link (single dial, quick reconnects, hooks), the tools
 as listed (names and schemas unchanged, argument validation, a changed list
 registered again), sessions (key, title, cwd, update, re-open after a lapsed
 lease or a restart, the restart note), images (inline for a vision model, a

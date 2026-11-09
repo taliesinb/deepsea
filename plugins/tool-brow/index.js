@@ -35,7 +35,9 @@
  *                               #      ($BROW_SOCKET, else ~/Library/Application Support/io.github.taliesinb.brow/run/daemon.sock)
  *     home: ''                  # the daemon's home (BROW_HOME for a daemon this plugin starts)
  *     command: brow   # `<command> start` starts the daemon: a name on PATH, or a checkout's bin/brow.mjs
- *     autostart: true           # start the daemon when none answers (at startup and on a tool call)
+ *     autostart: true           # start the daemon when none answers (at startup and on a tool call): for the
+ *                               # default socket and configuration, its LaunchAgent, else Brow.app,
+ *                               # else the command; otherwise the command only (usesDefaultDaemon)
  *     env: {}                   # extra environment for a daemon this plugin starts (e.g. BROW_CONFIG)
  *     startTimeoutMs: 15000
  *   trace: false
@@ -108,16 +110,30 @@ export function daemonEnv(config, env = process.env) {
 }
 
 /**
+ * Is the daemon to reach the person's own (the default home's socket, the default configuration)? Then a
+ * missing daemon is started the way it is installed (LaunchAgent, then Brow.app) before the
+ * command. A configured socket or home, BROW_HOME / _SOCKET in the server's environment, or a
+ * BROW_CONFIG (the server's or `brow.env`'s) can only be served by a daemon this
+ * plugin spawns itself.
+ */
+export function usesDefaultDaemon(config, env = process.env) {
+  const own = config.brow
+  const merged = { ...env, ...own.env }
+  return own.socket === '' && own.home === '' && !merged.BROW_HOME && !merged.BROW_SOCKET && !merged.BROW_CONFIG
+}
+
+/**
  * @param {import('@deepseek-ai/cordis').Context} ctx - host-plane plugin context.
  * @param {ReturnType<typeof Config>} config
- * @param {{ trace?: (event: object) => void, connect?: Function, scratch?: string, env?: NodeJS.ProcessEnv, startupRetryMs?: number[], reconnectDelaysMs?: number[] }} [seams] - test seams.
+ * @param {{ trace?: (event: object) => void, connect?: Function, start?: { run?: Function, platform?: string, uid?: number }, scratch?: string, env?: NodeJS.ProcessEnv, startupRetryMs?: number[], reconnectDelaysMs?: number[] }} [seams] - test seams (`start`: daemon-client.mjs startDaemon's).
  */
 export function apply(ctx, config, seams = {}) {
   const trace = seams.trace ?? createTrace({ enabled: config.trace, name: 'tool-brow', plugin: `${pkg.name}@${pkg.version}`, home: resolveDshHome() })
   const scratch = seams.scratch ?? tmpdir()
   const env = seams.env ?? process.env
-  const socket = socketPathOf(config.brow, env)
   const own = config.brow
+  const socket = socketPathOf(own, { ...env, ...own.env })
+  const preferInstalled = usesDefaultDaemon(config, env)
   for (const other of OTHER_BROWSER_SERVICES) {
     ctx.inject([other], () => {
       ctx.logger.warn(`tool-brow: ${other} (another browser plugin) is also loaded; run only one browser plugin in a variant (they register the same tools or drive the same browsers)`)
@@ -126,7 +142,7 @@ export function apply(ctx, config, seams = {}) {
 
   const link = createLink({
     socket,
-    autostart: own.autostart ? { command: own.command, env: daemonEnv(config, env), timeoutMs: own.startTimeoutMs } : false,
+    autostart: own.autostart ? { command: own.command, env: daemonEnv(config, env), timeoutMs: own.startTimeoutMs, preferInstalled, ...seams.start } : false,
     name: name,
     version: pkg.version,
     logger: ctx.logger,
@@ -181,7 +197,7 @@ export function apply(ctx, config, seams = {}) {
     try {
       client = await link.ensure({ autostart: true })
     } catch (error) {
-      throw new Error(`the brow daemon is not available: ${String(error?.message ?? error)}. ${own.autostart ? `Check that "${own.command} start" works on this machine (brow.command)` : 'Start it (brow start), or turn on brow.autostart'}, then retry.`, { cause: error })
+      throw new Error(`the brow daemon is not available: ${String(error?.message ?? error)}. ${own.autostart ? `Check that ${preferInstalled ? 'Brow.app is installed, or that ' : ''}"${own.command} start" works on this machine (brow.command)` : `Start it (${preferInstalled ? 'open Brow.app, or ' : ''}brow start), or turn on brow.autostart`}, then retry.`, { cause: error })
     }
     let entry = sessions.get(agent.id)
     if (entry === undefined) {
@@ -289,7 +305,7 @@ export function apply(ctx, config, seams = {}) {
       }
     }
     entry.used = true
-    const note = entry.note
+    const note = link.takeStartNote() + entry.note
     entry.note = ''
     const texts = []
     const images = []
@@ -395,7 +411,7 @@ export function apply(ctx, config, seams = {}) {
     await link.dispose()
   }, 'tool-brow: daemon connection')
 
-  trace({ event: 'applied', socket, command: own.command, autostart: own.autostart })
+  trace({ event: 'applied', socket, command: own.command, autostart: own.autostart, preferInstalled })
 }
 
 /**

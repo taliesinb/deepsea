@@ -263,8 +263,10 @@ test('autostart: `<command> start` with the configured home and env, then the so
   try {
     await until(() => mounted.tool('browser_read'), 10_000, 'the tools from the started daemon')
     assert.ok(existsSync(socket))
+    // A custom home: only the command (never the installed app), and the first result says so.
     const value = await mounted.tool('browser_open').execute({}, execOf(fakeAgent('s1')))
-    assert.equal(value, '[chrome:0:0]\nbrowser_open ok')
+    assert.equal(value, `Started the brow daemon with its command (${FAKE_COMMAND} start). [chrome:0:0]\nbrowser_open ok`)
+    assert.equal(await mounted.tool('browser_open').execute({}, execOf(fakeAgent('s1'))), '[chrome:0:0]\nbrowser_open ok')
   } finally {
     await mounted.dispose()
     const client = await connect({ socket }).catch(() => undefined)
@@ -348,4 +350,48 @@ test('app window: an immediately empty poll is held, so the page cannot spin', a
   const started = Date.now()
   assert.deepEqual(await relay.poll(4410), { status: 200, body: {} })
   assert.ok(Date.now() - started >= 110)
+})
+
+// ---------------------------------------------------------------- starting the installed daemon
+
+test('the default daemon (installed app first) only for the default socket and configuration', () => {
+  const config = (brow = {}) => root.Config({ brow })
+  assert.equal(root.usesDefaultDaemon(config(), {}), true)
+  assert.equal(root.usesDefaultDaemon(config({ command: '/co/bin/brow.mjs' }), {}), true, 'the command is only the fallback')
+  assert.equal(root.usesDefaultDaemon(config({ socket: '/x.sock' }), {}), false)
+  assert.equal(root.usesDefaultDaemon(config({ home: '/h' }), {}), false)
+  assert.equal(root.usesDefaultDaemon(config(), { BROW_HOME: '/h' }), false)
+  assert.equal(root.usesDefaultDaemon(config(), { BROW_SOCKET: '/s.sock' }), false)
+  assert.equal(root.usesDefaultDaemon(config(), { BROW_CONFIG: '{}' }), false)
+  assert.equal(root.usesDefaultDaemon(config({ env: { BROW_CONFIG: '{"chrome":{"headless":true}}' } }), {}), false)
+  assert.equal(root.usesDefaultDaemon(config({ env: { BROW_HOME: '/h' } }), {}), false)
+})
+
+test('default daemon missing: started via its LaunchAgent; traced, logged, and noted on the first result', async () => {
+  const temp = tempSocket()
+  const traced = []
+  const runs = []
+  let daemon
+  const { connect: realConnect } = await import('../daemon-client.mjs')
+  const dialed = []
+  // The default socket is the person's: the seam redirects every dial to the temporary one.
+  const connectSeam = (options) => { dialed.push(options.socket); return realConnect({ ...options, socket: temp.socket }) }
+  const run = async (file, args) => {
+    const line = [file, ...args].join(' ')
+    runs.push(line)
+    if (line.startsWith('launchctl kickstart')) daemon = await startFakeDaemon({ socket: temp.socket })
+    return { code: 0, output: '' }
+  }
+  const mounted = mountBoth({}, { ...quiet, trace: (e) => traced.push(e), env: {}, connect: connectSeam, start: { run, platform: 'darwin', uid: 501 } })
+  try {
+    await until(() => mounted.tool('browser_read'), 3000, 'the tools')
+    assert.match(dialed[0], /\/Library\/Application Support\/io\.github\.taliesinb\.brow\/run\/daemon\.sock$/)
+    assert.deepEqual(runs, ['launchctl print gui/501/io.github.taliesinb.brow', 'launchctl kickstart gui/501/io.github.taliesinb.brow'])
+    const started = traced.find(e => e.event === 'daemon-started')
+    assert.equal(started.via, 'launch-agent')
+    assert.equal(traced.find(e => e.event === 'applied').preferInstalled, true)
+    assert.ok(mounted.host.infos.some(m => m.includes('started the brow daemon via its LaunchAgent (launchctl kickstart gui/501/io.github.taliesinb.brow)')))
+    const value = await mounted.tool('browser_open').execute({}, execOf(fakeAgent('i1')))
+    assert.equal(value, 'Started the brow daemon via its LaunchAgent (launchctl kickstart gui/501/io.github.taliesinb.brow). [chrome:0:0]\nbrowser_open ok')
+  } finally { await mounted.dispose(); await daemon?.close(); temp.remove() }
 })
