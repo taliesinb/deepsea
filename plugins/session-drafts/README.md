@@ -8,9 +8,9 @@ time.
 ## What you see
 
 - **Drafts**, a View beside Chat and Trajectory (in the header's More menu
-  when the header is narrow). While it is shown, the composer is hidden;
-  Chat brings it back, unchanged. Each draft is a card like a compact
-  composer: its attachments and its text with reference chips and quotes,
+  when the header is narrow). While it is shown, the composer and Chat's
+  transcript-width resize handles are hidden; Chat brings them back, unchanged.
+  Each draft is a card like a compact composer: its attachments and its text with reference chips and quotes,
   editable in place (Enter is a line break; there are no `/` or `@` menus and
   no model or permission controls); its text area is two to sixteen lines
   tall, then scrolls. The card being edited is tinted slightly toward the
@@ -105,8 +105,9 @@ All optional, on the `deepsea-session-drafts` row (a patch replaces the whole `c
 ## Limits
 
 - The composer is hidden with a stylesheet rule (a Conversation body that
-  contains the Drafts View hides its `[data-composer-seat]`); the harness has
-  no per-View composer setting.
+  contains the Drafts View hides its `[data-composer-seat]` and direct-child
+  `[data-width-handle]` controls); the harness has no per-View composer setting.
+  The transcript's full-height resize hit areas must not overlay draft cards.
 - Send needs the composer: it goes through Resume, so a composer that is
   not empty is first saved as a draft, and the message is the composer's
   submission.

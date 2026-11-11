@@ -1,7 +1,8 @@
 /* Drafts View: cards drawn like the composer card (ui-conversation skeleton/InputBar.module.css .card). */
 
-/* While a Conversation body shows the Drafts View, its composer is out of the way (Chat brings it back). */
-[data-conversation-content]:has([data-deepsea-drafts-view]) [data-composer-seat] {
+/* Drafts owns its layout; hide Chat's composer and full-height transcript resize handles only here. */
+[data-conversation-content]:has([data-deepsea-drafts-view]) [data-composer-seat],
+[data-conversation-content]:has([data-deepsea-drafts-view]) > [data-width-handle] {
   display: none;
 }
 
