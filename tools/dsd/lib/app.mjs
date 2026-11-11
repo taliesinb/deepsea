@@ -51,9 +51,10 @@ function harnessVersion(harnessBuild) {
 /**
  * Build a throwaway's `DeepSea <V> <hex>.app` into `$TMPDIR/deepsea-app-<id>/`. With `entry` (`{ url,
  * fallbackUrl, tokenFile }`) its entry points are built in, as an installed variant's are, and it is
- * launched without `--url`. Returns `{ app, executable, dir, compiled }`.
+ * launched without `--url`. `name` overrides only the visible bundle name; the id and directory
+ * remain those of the isolated throwaway. Returns `{ app, executable, dir, compiled }`.
  */
-export function buildThrowawayApp(id, { source, harnessBuild, entry }) {
+export function buildThrowawayApp(id, { source, harnessBuild, entry, name = displayName(id) }) {
   if (process.platform !== 'darwin') throw new DsdError('throwaway apps need macOS (apps/macos)')
   const glyph = join(harnessBuild, 'apps', 'web', 'public', 'favicon.svg')
   if (!existsSync(glyph)) throw new DsdError(`the harness build has no ${glyph}`)
@@ -64,7 +65,7 @@ export function buildThrowawayApp(id, { source, harnessBuild, entry }) {
   let out
   try {
     out = execFileSync(process.execPath, [join(source.dir, 'build.mjs'),
-      '--out', dir, '--name', displayName(id), '--bundle-id', variantName(id), '--glyph', glyph,
+      '--out', dir, '--name', name, '--bundle-id', variantName(id), '--glyph', glyph,
       '--glyph-color', THROWAWAY_COLOR, '--version', harnessVersion(harnessBuild), '--build', source.build,
       ...(entry ? ['--url', entry.url, '--fallback-url', entry.fallbackUrl, '--token-file', entry.tokenFile] : []),
       '--cache', buildsDir()], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 16 * 1024 * 1024 })

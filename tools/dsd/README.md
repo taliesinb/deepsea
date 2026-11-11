@@ -162,7 +162,8 @@ free ports, have no Serve path, no LaunchAgent or systemd unit and no LaunchServ
 registration, and their app uses a non-persistent WebKit store, so removing
 the home and the temporary build directory removes everything. A throwaway
 runs the shared build of the pinned harness commit (`--harness <ref>` names
-another harness commit) and links plugins from the checkout dsd runs in, so
+another harness commit; `--harness-worktree` a harness checkout as it is,
+below) and links plugins from the checkout dsd runs in, so
 a topic worktree's dsd tests that worktree's plugins as they are,
 and a rebuilt client bundle hot-swaps into the open page. `--source <ref>`
 runs a commit of this repository instead, as an immutable build (below): its
@@ -192,6 +193,32 @@ variant until its next `dsd build` (a throwaway: until it is thrown away).
 `--patch <file>[,<file>…]` passes patch files of your own after the plugins'
 patches: a row there replaces a plugin row's whole `config`, or inserts a
 fixture row (a fake server, a test tool).
+
+**Uncommitted harness work.** `--harness-worktree <path | topic>` runs a
+throwaway on a harness checkout as it is, uncommitted changes included,
+without a commit, an integration or a shared build: a path, or a topic's
+name for its worktree `<worktrees>/harness-<topic>` (`base`: the harness
+repository's own checkout), as `dsd test harness` names them. dsd reads
+the checkout and never installs, builds, commits or changes it: run `pnpm
+install --frozen-lockfile` and `pnpm run build` there first (a checkout
+without `node_modules` or a built web app is refused, and one built before
+its last commit is reported), and after each edit rebuild it and start a
+new throwaway; do not rebuild it while a throwaway's server runs from it.
+The output names the checkout, its commit and whether it is dirty. A
+topic's worktree holds that topic on its parent alone, without the other
+harness topics: the macOS app's client does not load (it needs harness
+`topic/darwin-web-shortcuts`; use `--throwaway-server` and a browser),
+and plugins that need another topic may fail. For the app, work in a
+scratch worktree of `integration/<upstream>` instead (the recipe below
+has both). Directories under
+`_builds/` are refused, symlinked ones included; `--harness` is the
+alternative for a commit; named variants refuse both. `dsd play` and `dsd
+test plugins` pass it through (recipes/try-harness-worktree.md).
+
+`--display-name '<name>'` gives a throwaway's macOS app that visible name
+and bundle filename (`DeepSea Rewind.app` rather than `DeepSea Rewind
+<hex>.app`); its id, bundle id, home and automation socket stay those of
+the throwaway. Server-only throwaways and named variants refuse it.
 
 `--scripted` loads `plugins/llm-scripted` and makes its `scripted/script`
 model the throwaway's default: every prompt is then a JSONL script of the
@@ -277,13 +304,13 @@ taken over. Build logs: `~/Library/Logs/io.github.taliesinb.deepsea/builds/`.
 
 | Command | Does |
 |---|---|
-| `dsd play [--plugins <names\|all>] [--accounts <names\|standard\|none>] [--source <ref>] [--harness <ref>] [--patch <file>,…] [--real]` | a throwaway to try things in, for people: `run release --throwaway --visible --detach --scripted --source integration/base --plugins all --simulated --accounts standard` (the app in front of you, every plugin, every provider simulated with test accounts, the scripted model the default); `--real` uses the real providers and no accounts. Quitting the app throws it away |
+| `dsd play [--plugins <names\|all>] [--accounts <names\|standard\|none>] [--source <ref>] [--harness <ref> \| --harness-worktree <path \| topic>] [--patch <file>,…] [--real]` | a throwaway to try things in, for people: `run release --throwaway --visible --detach --scripted --source integration/base --plugins all --simulated --accounts standard` (the app in front of you, every plugin, every provider simulated with test accounts, the scripted model the default); `--real` uses the real providers and no accounts. Quitting the app throws it away |
 | `dsd new <v> [--source <ref>] [--color <hex>] [--plugins <names\|all>] [--no-serve \| --serve-path <path>] [--ports <first>[-<last>]] [--tailscale-socket <path>] [--after <unit>[,…]]` | create a named variant: home, `variant.yml` (port block: the first free one, inside `--ports` or `DEEPSEA_PORTS` when given; Serve path, stepping aside from another account's, or `--serve-path` as given unless another target holds it; the account's own tailscaled and the units its relay needs, when given), and the home's `logs` / `support` links (LAYOUT.md §4, §7); `--source` defaults to `integration/base`. The last three are for a machine shared by several accounts (Linux section) |
 | `dsd client <v> [<server>] [--source <ref>] [--color <hex>] [--dock]` | macOS: a thin client, the DeepSea app for a server elsewhere (above): the first run names the server and creates the variant (home with `variant.yml` and `logs` only); every run builds its app from its source (`--source` moves it, default `integration/base`) and installs it in `~/Applications`, and with `--dock` a Dock tile. A new server or `--color` replaces the old. `run` opens it, `remove` uninstalls it; `build` and `stop` refuse it |
 | `dsd build <v> [--install [--dock]] [--self]` | make sure the build of its source commit exists, install its plugins into its profile as bundles, and on macOS build its app (`apps/macos`); `--install` installs the app (`~/Applications`), the server host and relay link (Application Support), the relay LaunchAgent (loaded at once; LAYOUT.md §6) and the home's `source` link, and with `--dock` a Dock tile. The server host is replaced only when its signature changes, so privacy grants survive. On Linux (below): no app; `--install` installs the relay link and the relay's systemd user unit |
 | `dsd adopt <home> (<v> \| --throwaway [run options…]) [--move-sign-ins] [--dry-run]` | bring an old DSH home (`~/.dsh…`), or another variant's home, into a variant: copies sessions and attachments, the workspace registry, settings.yaml, API keys, each old plugin's state in its DeepSea place, the old profile's own rows and third-party bundles; re-runnable (it brings what is new or changed, and reports a conflict for anything changed on both sides); creates `<v>` as `new` would if missing (not built: `dsd build <v> --install` stays yours); `--throwaway` adopts into a fresh throwaway and starts it (run options pass through); `--move-sign-ins` moves Plan sign-ins out of the old home; `--dry-run` touches nothing (below) |
 | `dsd remove <v> [--home] [--self]` | uninstall a named variant: its LaunchAgent or systemd unit (stopping relay and server), its own Serve path, Dock tile, app, preferences and `~/Library` (Linux: XDG data and state) leftovers; the home stays unless `--home` |
-| `dsd run <v> [--throwaway \| --throwaway-app \| --throwaway-server] [--visible] [--detach] [--scripted] [--plugins <names\|all>] [--patch <file>,…] [--app <checkout \| ref>] [--source <ref>] [--harness <ref>] [--ttl <min>] [--keep]` | start it, building first if needed (a throwaway always gets plugins/dev-test-driver and plugins/host-server-log); prints id, home, URL, login URL (with token), pids, log, app path, automation socket, and with `--throwaway` the relay's pid, port, URL and log. `--source <ref>` runs a build of that commit of this repository (plugins, harness pin, app; a named plugin, or under `all` any plugin, that build lacks comes from this checkout, so a topic not integrated yet runs beside the integration); `--harness` names a harness commit directly; `--simulated [--accounts <names>]` points every model provider at the provider simulator with fresh test accounts (default `standard`: one account per provider route, keys and signed-in Plans; a later account replaces an earlier one of the same route, so `standard,openrouter-low` swaps in a nearly spent OpenRouter key; every Plan fixture also has a `<name>-signed-out` form, the Plan configured but no grant stored (printed as `signedOut: <route>`), so `standard,anthropic-max-signed-out` starts with the Anthropic Plan to sign in to through the simulated sign-in page; `none` for none; tools/provider-sim/README.md) |
+| `dsd run <v> [--throwaway \| --throwaway-app \| --throwaway-server] [--visible] [--detach] [--scripted] [--plugins <names\|all>] [--patch <file>,…] [--app <checkout \| ref>] [--source <ref>] [--harness <ref> \| --harness-worktree <path \| topic>] [--display-name <name>] [--ttl <min>] [--keep]` | start it, building first if needed (a throwaway always gets plugins/dev-test-driver and plugins/host-server-log); prints id, home, URL, login URL (with token), pids, log, app path, automation socket, and with `--throwaway` the relay's pid, port, URL and log. `--source <ref>` runs a build of that commit of this repository (plugins, harness pin, app; a named plugin, or under `all` any plugin, that build lacks comes from this checkout, so a topic not integrated yet runs beside the integration); `--harness` names a harness commit directly; `--simulated [--accounts <names>]` points every model provider at the provider simulator with fresh test accounts (default `standard`: one account per provider route, keys and signed-in Plans; a later account replaces an earlier one of the same route, so `standard,openrouter-low` swaps in a nearly spent OpenRouter key; every Plan fixture also has a `<name>-signed-out` form, the Plan configured but no grant stored (printed as `signedOut: <route>`), so `standard,anthropic-max-signed-out` starts with the Anthropic Plan to sign in to through the simulated sign-in page; `none` for none; tools/provider-sim/README.md) |
 | `dsd stop [<ref>] [--keep]` | stop it: a named variant's relay job is unloaded or its unit stopped (relay and server stop; the LaunchAgent or unit stays and starts again at login or with `dsd run`); a throwaway's home, logs and macOS leftovers are removed unless `--keep` |
 | `dsd sim [status] \| start \| stop \| accounts [<provider>] \| account <provider> <credential> [--set <json>] \| fixtures` | the provider simulator (tools/provider-sim/README.md): one per checkout, sharing one store of accounts, started on demand and left running; `fixtures` lists the test accounts `--accounts` takes, the derived `-signed-out` Plans included; `account` changes an account in the simulator, never a throwaway's stored sign-in |
 | `dsd list [--builds]` | variants, what is running, ports, ids; with `--builds`, the builds and what uses each |
@@ -293,7 +320,7 @@ taken over. Build logs: `~/Library/Logs/io.github.taliesinb.deepsea/builds/`.
 | `dsd link` | point this checkout's `harness` at the build of its pinned commit, building it if needed |
 | `dsd drive [-v <ref>] <op> …` | one operation on a running throwaway, as JSON (below) |
 | `dsd drive run <script \| dir>… [-v <ref>] [--from <line>] [--values]` | drive scripts (a directory: its `*.drive`), each in order to the first step that fails; a JSON report (below, Drive scripts) |
-| `dsd test plugins <name>… [--server \| --relay] [--keep] [--source <ref>] [--harness <ref>] [--simulated [--accounts <names>]] [--patch <file>,…] [--app <checkout \| ref>]` | a scripted throwaway with those plugins (the hidden app; `--server` none, `--relay` behind a relay), every `plugins/<name>/tests/*.drive` run in it, then stopped (`--keep` leaves it); exit 1 when a script failed (below, Testing a topic) |
+| `dsd test plugins <name>… [--server \| --relay] [--keep] [--source <ref>] [--harness <ref> \| --harness-worktree <path \| topic>] [--simulated [--accounts <names>]] [--patch <file>,…] [--app <checkout \| ref>]` | a scripted throwaway with those plugins (the hidden app; `--server` none, `--relay` behind a relay), every `plugins/<name>/tests/*.drive` run in it, then stopped (`--keep` leaves it); exit 1 when a script failed (below, Testing a topic) |
 | `dsd test harness <topic \| base> [<scenario \| test file>…] [--web] [--refresh] [--build]` | the harness's recorded-session lanes in the topic's harness worktree, without the caller's `DSH_*` environment; `--refresh` lists the expected files it rewrote (below, Testing a topic) |
 | `dsd script <file.mjs> [-v <ref>]` | run a script: its default export gets `{ id, url, login, server(op, body), app(op, body), sleep }` and its return value is printed |
 | `dsd topics [list]` | both repositories' topics: parents, commits, what each requires, how far behind |
@@ -654,7 +681,7 @@ dsd drive -v <id> run plugins/<name>/tests/rewind.drive --from 12   # one script
 
 The throwaway is the hidden app with `--scripted` and the plugins named
 (`--server` without the app, `--relay` behind a relay for scripts that
-use `restart-server`); `run`'s `--source`, `--harness`, `--simulated`,
+use `restart-server`); `run`'s `--source`, `--harness`, `--harness-worktree`, `--simulated`,
 `--accounts`, `--patch` and `--app` pass through. A script failing stops
 that script, not the others. plugins/llm-scripted/tests and
 plugins/dev-test-driver/tests have examples.
@@ -687,6 +714,20 @@ build is made, a build older than the last commit is reported, and
 `changed`, the files it wrote, for review before a commit. Recording with a
 real model (`pnpm run test:snapshot:record`) needs a key, so it stays with
 the person.
+
+To see harness changes running while working on them, uncommitted, run a
+throwaway on the checkout (above, Uncommitted harness work) and drive it,
+by hand or with a drive script kept outside the harness (its snapshots
+allow no DeepSea scenario driver). A lone topic's worktree runs
+server-only, in a browser; a scratch worktree of the integration also runs
+in the app:
+
+```sh
+(cd <worktrees>/harness-rewind && pnpm run build)  # after each edit
+dsd run release --throwaway-server --detach --scripted --plugins all --harness-worktree rewind
+dsd play --harness-worktree <worktrees>/harness-scratch   # integration/<upstream> plus your edits
+dsd drive -v <id> run <script.drive>
+```
 
 ## Implementation order
 

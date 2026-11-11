@@ -57,6 +57,7 @@ usage windows and prices, and the replies are scripts
 | test restarts and cold starts | `--throwaway` instead: the app behind a relay, as installed |
 | involve providers (models, sign-in, billing, quotas, provider errors) | add `--simulated` (default accounts `standard`; `--accounts openrouter-low,anthropic-max-80,codex-plus-signed-out` for edge states; `dsd sim fixtures` lists them) |
 | run everything together | add `--source integration/base` (after `dsd topics integrate`) |
+| try harness changes while working on them, uncommitted | build the checkout (`pnpm run build` there), then `--harness-worktree <topic \| path>` on `dsd run`, `dsd play` or `dsd test plugins`; a lone topic's worktree runs server-only, in a browser, while a scratch worktree of `integration/<upstream>` also runs in the app (recipes/try-harness-worktree.md) |
 | drive it | `dsd drive -v <id> prompt - \| command /x \| open-session \| wait-page \| click \| hover \| type \| eval \| snapshot --window \| opened \| restart-server` (a prompt with no session goes to the latest, or a new one; read the snapshot PNGs) |
 | rerun checks after each rebuild | a plugin: `plugins/<name>/tests/*.drive` (drive operations as lines, with `expect`, `let`, `try`), run by `dsd test plugins <name>`; a harness topic: its snapshot scenarios, run by `dsd test harness <topic> [<scenario>…] [--web]` (tools/dsd/README.md → Drive scripts, Testing a topic) |
 | find an option | `dsd <command> --help`; `--get <path>` prints one field of any command's JSON (`--get id`, `--get summary.text`) |
@@ -181,3 +182,4 @@ behind non-obvious choices, and what failed and why. Index it here.
 | Recipe | For |
 |---|---|
 | [rebuild-own-variant.md](recipes/rebuild-own-variant.md) | rebuilding and installing the variant your own session runs in (`build --install --self`, detached) |
+| [try-harness-worktree.md](recipes/try-harness-worktree.md) | running uncommitted harness changes in a throwaway, by hand or driven, rebuilding between edits |

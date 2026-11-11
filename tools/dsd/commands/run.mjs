@@ -1,6 +1,7 @@
 /**
  * dsd run <v> --throwaway | --throwaway-app | --throwaway-server [--visible] [--detach] [--scripted]
- *   [--plugins <names|all>] [--app <checkout | ref>] [--source <ref>] [--harness <ref>]
+ *   [--plugins <names|all>] [--app <checkout | ref>] [--source <ref>] [--harness <ref> | --harness-worktree <path | topic>]
+ *   [--display-name <name>]
  *   [--patch <file>[,<file>…]] [--ttl <minutes>] [--keep] [--timeout <s>]
  *
  * Creates `<parent>-<hex>` with an empty home, starts `dsh web` from the
@@ -38,6 +39,7 @@ import { componentSource } from '../lib/components.mjs'
 import { harnessRefuses, parsePorts, PORT_BLOCK } from '../lib/install.mjs'
 import { ensureSourceBuild, resolveSourceCommit } from '../lib/source.mjs'
 import { runNamed } from './variant.mjs'
+import { checkWorktreeOptions, harnessWorktree } from '../lib/harness-worktree.mjs'
 import { credentialsDocument, ensureSim, provisionAccounts } from '../lib/sim.mjs'
 import { buildPaths, ensureBuild, harnessRepo, linkHarness, readLock, resolveHarnessCommit } from '../lib/harness.mjs'
 import { openRunLog } from '../lib/logs.mjs'
@@ -227,8 +229,8 @@ async function freePorts(count) {
  *   runs once the home exists, before plugins are installed and anything starts; `output()` adds to the printed facts.
  */
 export async function run(argv, hooks = {}) {
-  const args = parseArgs(argv, ['source', 'harness', 'timeout', 'plugins', 'ttl', 'app', 'patch', 'accounts'])
-  onlyFlags(args, ['throwaway', 'throwaway-app', 'throwaway-server', 'detach', 'source', 'harness', 'keep', 'timeout', 'plugins', 'ttl', 'scripted', 'visible', 'app', 'patch', 'no-app', 'simulated', 'accounts'])
+  const args = parseArgs(argv, ['source', 'harness', 'harness-worktree', 'display-name', 'timeout', 'plugins', 'ttl', 'app', 'patch', 'accounts'])
+  onlyFlags(args, ['throwaway', 'throwaway-app', 'throwaway-server', 'detach', 'source', 'harness', 'keep', 'timeout', 'plugins', 'ttl', 'scripted', 'visible', 'app', 'patch', 'no-app', 'simulated', 'accounts', 'harness-worktree', 'display-name'])
   const extraPatches = typeof args.patch === 'string' ? args.patch.split(',').filter(Boolean).map(f => resolve(f)) : []
   for (const file of extraPatches) if (!existsSync(file)) usage(`--patch: no file ${file}`)
   const parent = args._[0]
@@ -238,6 +240,7 @@ export async function run(argv, hooks = {}) {
   if (kinds.length > 1) usage('--throwaway, --throwaway-app and --throwaway-server are alternatives')
   // full: relay, server and app, as an installed variant runs; app: server and app; server: server only.
   const mode = { throwaway: 'full', 'throwaway-app': 'app', 'throwaway-server': 'server' }[kinds[0]]
+  checkWorktreeOptions(args, { throwaway: mode !== undefined, withApp: mode === 'app' || (mode === 'full' && process.platform === 'darwin') })
   if (mode === undefined) return runNamed(parent, args)
   if (mode === 'server' && (args.visible || args.app)) usage('--visible and --app are for --throwaway and --throwaway-app')
   // The app is the macOS app: elsewhere --throwaway is the relay and server, as an installed variant there runs.
@@ -250,17 +253,18 @@ export async function run(argv, hooks = {}) {
   // its harness pin, its app); otherwise this checkout in place. Which harness: --harness, else the
   // pin of the source, else this checkout's pin.
   if (typeof args.source === 'string' && args.app) usage('--source gives the app too; --app is for running this checkout')
+  const localHarness = args['harness-worktree'] === undefined ? undefined : harnessWorktree(args['harness-worktree'])
   const source = typeof args.source === 'string' ? { ref: args.source, commit: resolveSourceCommit(args.source) } : undefined
   if (source) source.dir = await ensureSourceBuild(source.commit)
   const lock = readLock(undefined, source?.dir)
   const repo = harnessRepo(lock)
-  const commit = resolveHarnessCommit(args.harness ?? lock.commit, repo)
+  const commit = localHarness?.commit ?? resolveHarnessCommit(args.harness ?? lock.commit, repo)
   const app = withApp ? appSource(source ? source.dir : typeof args.app === 'string' ? args.app : undefined) : undefined
   // The relay: the source build's, else this checkout's, else topic/relay's (lib/components.mjs).
   const relaySource = mode === 'full'
     ? (source && existsSync(join(source.dir, 'apps', 'relay', 'relay.mjs')) ? componentSource('relay', source.dir) : componentSource('relay'))
     : undefined
-  const build = await ensureBuild(commit, repo)
+  const build = localHarness?.dir ?? await ensureBuild(commit, repo)
   const refused = harnessRefuses(process.execPath, build)
   if (refused !== undefined) throw new DsdError(`${process.execPath} (running dsd, and the throwaway's server) cannot run the harness: ${refused}. Run dsd with an official Node build (nodejs.org)`)
   const plugins = selectPlugins(args.plugins, source?.dir)
@@ -307,7 +311,7 @@ export async function run(argv, hooks = {}) {
     // With a relay, the app is built as an installed variant's is: the relay as its entry point and
     // fallback, the relay's standing token as its token file.
     const entry = relay ? { url: relay.url, fallbackUrl: relay.url, tokenFile: relay.tokenFile } : undefined
-    try { bundle = buildThrowawayApp(id, { source: app, harnessBuild: build, entry }) } catch (error) { await cleanup(); throw error }
+    try { bundle = buildThrowawayApp(id, { source: app, harnessBuild: build, entry, name: args['display-name'] }) } catch (error) { await cleanup(); throw error }
   }
 
   // The plugins as bundles of the profile (each loads from its own bundle patch), then the
@@ -404,7 +408,8 @@ export async function run(argv, hooks = {}) {
 
   printJson({
     ...(simulation ? { simulated: { url: simulation.url, accounts: simulation.accounts.map(a => ({ name: a.name, provider: a.provider, credential: a.credential, ...(a.route ? { [a.grant ? 'signedIn' : 'signedOut']: a.route } : {}) })) } } : {}),
-    id, name: variantName(id), display: displayName(id), home, mode,
+    id, name: variantName(id), display: args['display-name'] ?? displayName(id), home, mode,
+    ...(localHarness ? { harnessWorktree: localHarness } : {}),
     url: facts.url, login, token: facts.token,
     pid: child.pid, port, log: facts.log, harness: commit.slice(0, 10), ...(source ? { source: `${source.ref} (${source.commit.slice(0, 10)})` } : {}), plugins: plugins.map(p => p.name), detached: Boolean(args.detach), expires,
     ...(relay ? { relay: { pid: child.pid, ...facts.relay } } : {}),
@@ -456,14 +461,17 @@ export async function run(argv, hooks = {}) {
  * Quitting the app throws it away.
  */
 export async function play(argv) {
-  const args = parseArgs(argv, ['plugins', 'accounts', 'source', 'harness', 'patch'])
-  onlyFlags(args, ['plugins', 'accounts', 'source', 'harness', 'patch', 'real'])
-  if (args._.length > 0) usage('dsd play [--plugins <names|all>] [--accounts <names|standard|none>] [--source <ref>] [--harness <ref>] [--patch <file>,…] [--real]')
+  const args = parseArgs(argv, ['plugins', 'accounts', 'source', 'harness', 'harness-worktree', 'patch'])
+  onlyFlags(args, ['plugins', 'accounts', 'source', 'harness', 'harness-worktree', 'patch', 'real'])
+  if (args._.length > 0) usage('dsd play [--plugins <names|all>] [--accounts <names|standard|none>] [--source <ref>] [--harness <ref> | --harness-worktree <path | topic>] [--patch <file>,…] [--real]')
   if (args.real && args.accounts !== undefined) usage('--accounts goes with simulated providers, not --real')
   if (process.platform !== 'darwin') usage('dsd play opens the macOS app; here use dsd run release --throwaway --scripted --source integration/base --plugins all --simulated, and open its URL')
   return run([
     'release', '--throwaway', '--visible', '--detach', '--scripted',
-    ...(args.harness ? ['--harness', args.harness] : ['--source', args.source ?? 'integration/base']),
+    // A harness worktree runs with this checkout's plugins unless --source names a commit, as --harness does.
+    ...(args.harness ? ['--harness', args.harness]
+      : args['harness-worktree'] ? ['--harness-worktree', args['harness-worktree'], ...(args.source ? ['--source', args.source] : [])]
+        : ['--source', args.source ?? 'integration/base']),
     '--plugins', args.plugins ?? 'all',
     ...(args.real ? [] : ['--simulated', '--accounts', args.accounts ?? 'standard']),
     ...(args.patch ? ['--patch', args.patch] : []),

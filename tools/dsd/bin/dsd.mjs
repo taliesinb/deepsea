@@ -24,7 +24,7 @@ import { DsdError, selectOutput } from '../lib/util.mjs'
 
 const HELP = `dsd — DeepSea developer CLI (tools/dsd/README.md)
 
-  dsd play [--plugins <names|all>] [--accounts <names|standard|none>] [--source <ref>] [--real]
+  dsd play [--plugins <names|all>] [--accounts <names|standard|none>] [--source <ref>] [--harness <ref> | --harness-worktree <path|topic>] [--real]
   dsd sim [status] | start | stop | accounts [<provider>] | account <provider> <credential> [--set <json>] | fixtures
   dsd new <v> [--source <ref>] [--color <hex>] [--plugins <names|all>] [--no-serve]
   dsd build <v> [--install [--dock]] [--self]
@@ -33,7 +33,7 @@ const HELP = `dsd — DeepSea developer CLI (tools/dsd/README.md)
   dsd remove <v> [--home] [--self]
   dsd adopt <home> (<variant> | --throwaway [run options…]) [--move-sign-ins] [--dry-run]
   dsd run <variant> --throwaway | --throwaway-app | --throwaway-server [--visible] [--detach] [--scripted] [--plugins <names|all>]
-          [--app <checkout|ref>] [--patch <file>,…] [--source <ref, e.g. integration/base>] [--simulated [--accounts <names>]] [--harness <ref>] [--ttl <min>] [--keep]
+          [--app <checkout|ref>] [--patch <file>,…] [--source <ref, e.g. integration/base>] [--simulated [--accounts <names>]] [--harness <ref> | --harness-worktree <path|topic>] [--display-name <name>] [--ttl <min>] [--keep]
   dsd stop [<variant>] [--keep]
   dsd list [--builds] [--json]
   dsd logs [<variant>] [app | relay | server | dsd | plugin <name>] [--lines <n>] [--follow] [--export]

@@ -114,12 +114,19 @@ pnpm -C <repo>-worktrees/harness-<topic> install --frozen-lockfile
   the local branches it lacks (`git -C <harness repo> branch topic/<t>
   origin/topic/<t>`) before running them.
 - The harness's own checks run in the worktree (`harness/AGENTS.md`,
-  Commands). A throwaway runs a harness topic only once it is committed:
-  `dsd run … --harness topic/<topic>` builds that commit (a full harness
-  build the first time) and runs it on `topic/base` alone, without the
-  other harness topics, and the app's client may then fail to load. To see
-  a harness topic in the app, list it in `topics.txt`, run `dsd topics
-  integrate`, and run `--harness integration/<upstream>`.
+  Commands). To see harness changes running while working on them, build
+  the checkout (`pnpm run build` there) and run a throwaway on it as it
+  is, uncommitted changes included: `dsd run … --harness-worktree <topic |
+  path>` (tools/dsd/README.md, Uncommitted harness work;
+  recipes/try-harness-worktree.md). A committed topic can also be built
+  from its commit: `dsd run … --harness topic/<topic>`. Either way a topic
+  runs on its parent alone, without the other harness topics: the macOS
+  app's client does not load (it needs `topic/darwin-web-shortcuts`), so
+  use `--throwaway-server` and a browser, and plugins that need another
+  topic may fail. For the app, edit in a scratch harness worktree of
+  `integration/<upstream>` and run that; or list the topic in
+  `topics.txt`, run `dsd topics integrate`, and run `--harness
+  integration/<upstream>`.
 - The harness repository and the worktrees directory are outside `<repo>`,
   so a sandboxed agent needs approval to write to them.
 

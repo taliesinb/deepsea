@@ -1,5 +1,5 @@
 /**
- * dsd test plugins <name>… [--server | --relay] [--keep] [--source <ref>] [--harness <ref>] [--simulated [--accounts <names>]] [--patch <file>,…] [--app <checkout | ref>]
+ * dsd test plugins <name>… [--server | --relay] [--keep] [--source <ref>] [--harness <ref> | --harness-worktree <path | topic>] [--simulated [--accounts <names>]] [--patch <file>,…] [--app <checkout | ref>]
  * dsd test harness <topic | base> [<scenario | test file>…] [--web] [--refresh] [--build]
  *
  * `plugins`: start a scripted throwaway with those plugins (the app, hidden;
@@ -24,8 +24,8 @@ import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { driveScriptFiles, loadDriveScript, runDriveScript } from './drive.mjs'
-import { harnessRepo } from '../lib/harness.mjs'
-import { extrasDir, REPO, worktreesDir } from '../lib/paths.mjs'
+import { harnessCheckout } from '../lib/harness-worktree.mjs'
+import { extrasDir, REPO } from '../lib/paths.mjs'
 import { DsdError, git, note, onlyFlags, parseArgs, printJson, throwawayEnv, usage } from '../lib/util.mjs'
 import { resolveRef } from '../lib/variants.mjs'
 
@@ -59,7 +59,7 @@ function dsd(args) {
 }
 
 async function testPlugins(argv) {
-  const valued = ['source', 'harness', 'accounts', 'patch', 'app']
+  const valued = ['source', 'harness', 'harness-worktree', 'accounts', 'patch', 'app']
   const args = parseArgs(argv, valued)
   onlyFlags(args, [...valued, 'server', 'relay', 'keep', 'simulated'])
   const names = args._.flatMap(n => String(n).split(',')).map(s => s.trim()).filter(Boolean)
@@ -95,13 +95,7 @@ async function testPlugins(argv) {
 const SNAPSHOT_KINDS = { session: 'snapshots/session/headless.snapshot.ts', sdk: 'snapshots/sdk/sdk.snapshot.ts', acp: 'snapshots/acp/acp.snapshot.ts' }
 const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-/** The checkout a harness topic is worked on in. */
-export function harnessCheckout(topic) {
-  if (topic === 'base') return harnessRepo()
-  const dir = join(worktreesDir(), `harness-${topic}`)
-  if (!existsSync(dir)) throw new DsdError(`no harness worktree for ${topic} at ${dir} (LAYOUT.md §2 makes one)`)
-  return dir
-}
+export { harnessCheckout }
 
 /**
  * What a list of scenarios runs: the snapshot lane's files and test-name pattern, and the browser
