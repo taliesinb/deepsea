@@ -27,6 +27,7 @@ topic topic/provider-errors
 topic topic/request-image-max-dimension
 topic topic/fix-math-dollar
 topic topic/fix-hidden-sidebar-inert
+topic topic/fix-composer-caret
 
 # DeepSea identity: default home ~/.deepsea/release
 topic topic/deepsea-home
@@ -66,6 +67,10 @@ topic topic/code-block-toolbar
 
 # Composer: Up in an empty composer recalls the previous prompt; draft attachments survive Session switches
 topic topic/composer-recall
+
+# Composer: plugin seams for drafts kept outside the composer (document read/write,
+# draft attachments, a standalone draft editor Factory, opening a View)
+topic topic/composer-drafts topic/composer-recall
 
 [deepsea]
 base topic/base
