@@ -130,6 +130,7 @@ async function integrateOrCheck(sections, deepseaRows, { move, dry, keepBuilds =
     let current
     try { current = git(integration.path, ['rev-parse', '--verify', `refs/heads/${integration.branch}`]) } catch { /* none yet */ }
     let tip = plan.conflict ? undefined : plan.tip
+    const warnings = []
     // The generated files, made again on the merged sources (not for check or a dry run). An
     // integration whose merges are unchanged keeps its regeneration commit without running anything.
     if (tip && integration.generated && move && !dry) {
@@ -137,7 +138,7 @@ async function integrateOrCheck(sections, deepseaRows, { move, dry, keepBuilds =
       if (kept) tip = current
       else {
         note(`${integration.repo}: making the generated files again (${plan.regenerate.length ? `conflicted: ${plan.regenerate.join(', ')}` : 'no conflicts'})`)
-        tip = regenerate({ repo: integration.path, base: integration.base, tip, branch: integration.branch, conflicted: plan.regenerate, worktree: join(worktreesDir(), `${integration.repo}-integrate`) })
+        tip = regenerate({ repo: integration.path, base: integration.base, tip, branch: integration.branch, conflicted: plan.regenerate, worktree: join(worktreesDir(), `${integration.repo}-integrate`), warn: message => { warnings.push(message); note(`${integration.repo}: ${message}`) } })
       }
     }
     report.repos.push({
@@ -146,6 +147,7 @@ async function integrateOrCheck(sections, deepseaRows, { move, dry, keepBuilds =
       merged: plan.steps.map(s => short(s.topic) + (s.skipped ? ` (${s.skipped})` : s.reused ? '' : ' (new merge)') + (s.regenerate ? ` (regenerate: ${s.regenerate.join(', ')})` : '')),
       conflict: plan.conflict ? { topic: short(plan.conflict.topic), files: plan.conflict.files } : undefined,
       ...(plan.regenerate.length ? { regenerate: plan.regenerate } : {}),
+      ...(warnings.length ? { warnings } : {}),
       pairs: move ? undefined : pairConflicts(integration.path, integration.topics, integration.generated),
     })
   }

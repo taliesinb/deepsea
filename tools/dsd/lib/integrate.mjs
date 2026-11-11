@@ -49,17 +49,40 @@ const isAncestor = (repo, a, b) => spawnSync('git', ['merge-base', '--is-ancesto
  */
 export const HARNESS_GENERATED = {
   /**
-   * Every catalog generator, run on every integration so a clean merge cannot leave a stale catalog either;
-   * and the graph docs (`gen-doc-graphs`), whose generated tables cite source lines that topics shift. Those
-   * docs are partly hand-written, so a conflict in them still stops the integration (not in `isGenerated`).
+   * Every generator a harness gate checks, run on every integration so a clean merge cannot leave a stale
+   * output either: each `gen-<x>` script whose `verify-<x>` is the same command with `--check` (read from the
+   * merged package.json, so generators upstream adds are picked up). `gen-doc-graphs` runs last: its tables cite
+   * source lines, including those of other generated files. Partly hand-written outputs (the graph docs,
+   * tsconfig.base.json) are made again too, but a conflict in them still stops the integration (not in `isGenerated`).
    */
-  generators: ['gen-config-catalog', 'gen-tool-catalog', 'gen-cordis-catalog', 'gen-cordis-inspect-catalog', 'gen-client-catalog', 'gen-doc-graphs'],
+  generators: worktree => checkedGenerators(JSON.parse(readFileSync(join(worktree, 'package.json'), 'utf8')).scripts ?? {}),
+  /**
+   * Checks that no generator can satisfy; a failure is reported (`warn`), not fatal. A Session persistence-type
+   * change needs an acknowledgement record written by the topic that made it
+   * (docs/cookbook/reviewing-persistence-type-changes.md).
+   */
+  checks: ['verify-persistence-changes'],
   /** Whole generated files. */
   isGenerated: path => path === 'pnpm-lock.yaml'
     || /(^|\/)README\.i18n\.yaml$/.test(path)
-    || /^docs\/(config|tool)-catalog(\.zh)?\.(md|i18n\.yaml)$/.test(path)
+    || /^docs\/(config|tool|persistence)-catalog(\.zh)?\.(md|i18n\.yaml)$/.test(path)
+    || path === 'docs/persistence-schema.json'
+    || /^docs\/module-graph(\.zh)?\.md$/.test(path)
+    || path === 'packages/preset/agent-preset/skills/cordis-composition-reference/references/packages.md'
     || path === 'packages/extensions/tool-cordis/src/api-catalog.ts'
     || /^packages\/extensions\/cordis-client-runner\/src\/client\/(api|slot)-catalog\.ts$/.test(path),
+}
+
+/**
+ * The `gen-<x>` scripts of a package.json `scripts` table that have a `verify-<x>` script equal to
+ * `<gen-<x> command> --check`, in table order, `gen-doc-graphs` last.
+ * @param {Record<string, string>} scripts
+ * @returns {string[]}
+ */
+export function checkedGenerators(scripts) {
+  const found = Object.keys(scripts).filter(name => name.startsWith('gen-')
+    && scripts[`verify-${name.slice(4)}`]?.trim() === `${scripts[name].trim()} --check`)
+  return [...found.filter(name => name !== 'gen-doc-graphs'), ...found.filter(name => name === 'gen-doc-graphs')]
 }
 
 /**
@@ -97,15 +120,19 @@ const MARKER = /^(<<<<<<<|>>>>>>>) /m
  * Make the generated files of integration `tip` again, in `worktree`
  * (detached; created on first use, its node_modules kept between runs): the
  * lockfile from `base`'s when it conflicted, then `pnpm install`, every
- * catalog generator, and the translation record of each README whose record
+ * generator (`generated.generators`: names, or a function of the worktree
+ * returning them), then `generated.checks` (a failure goes to `warn`, with
+ * its output), and the translation record of each README whose record
  * conflicted (only those: re-recording any other pair would confirm a
  * translation nobody brought along). Fails if a conflicted file still holds
  * conflict markers. Returns `tip` when nothing changed, else a commit on it
  * (the one `branch` already has when its tree is the same).
  * @param {object} o
  * @param {(cmd: string[], cwd: string) => void} [o.run] - runs one command (default: spawned with CI=true; output shown when it fails).
+ * @param {(cmd: string[], cwd: string) => { status: number, output: string }} [o.probe] - runs one check without throwing.
+ * @param {(message: string) => void} [o.warn] - receives each failed check.
  */
-export function regenerate({ repo, base, tip, branch, conflicted, worktree, generated = HARNESS_GENERATED, run = runCommand }) {
+export function regenerate({ repo, base, tip, branch, conflicted, worktree, generated = HARNESS_GENERATED, run = runCommand, probe = probeCommand, warn = message => process.stderr.write(`${message}\n`) }) {
   if (!existsSync(join(worktree, '.git'))) git(repo, ['worktree', 'add', '--detach', '--quiet', worktree, tip])
   git(worktree, ['checkout', '--quiet', '--force', '--detach', tip])
   git(worktree, ['clean', '--quiet', '-fd'])
@@ -114,7 +141,12 @@ export function regenerate({ repo, base, tip, branch, conflicted, worktree, gene
     run(['pnpm', 'install', '--lockfile-only'], worktree)
   }
   run(['pnpm', 'install', '--frozen-lockfile'], worktree)
-  for (const script of generated.generators) run(['pnpm', 'run', script], worktree)
+  const generators = typeof generated.generators === 'function' ? generated.generators(worktree) : generated.generators
+  for (const script of generators) run(['pnpm', 'run', script], worktree)
+  for (const script of generated.checks ?? []) {
+    const result = probe(['pnpm', '--silent', 'run', script], worktree)
+    if (result.status !== 0) warn(`${script} fails on the integration:\n${result.output.trim()}`)
+  }
   for (const record of conflicted.filter(p => p.endsWith('README.i18n.yaml'))) {
     // From base's record (or none), --write records the merged pair whole.
     let previous = ''
@@ -134,9 +166,20 @@ export function regenerate({ repo, base, tip, branch, conflicted, worktree, gene
   return git(repo, ['commit-tree', tree, '-p', tip, '-m', 'Regenerate generated files'])
 }
 
-/** Run one command in `cwd` with CI=true (no git hooks installed, no prompts); its output is shown only when it fails. */
+/** Run one command in `cwd` with CI=true (no git hooks installed, no prompts). */
+function spawnCommand(cmd, cwd) {
+  return spawnSync(cmd[0], cmd.slice(1), { cwd, encoding: 'utf8', env: { ...process.env, CI: 'true' }, maxBuffer: 256 * 1024 * 1024 })
+}
+
+/** Run one command; its exit status and combined output, never a throw. */
+function probeCommand(cmd, cwd) {
+  const result = spawnCommand(cmd, cwd)
+  return { status: result.status ?? 1, output: `${result.stdout ?? ''}${result.stderr ?? ''}` }
+}
+
+/** Run one command; its output is shown only when it fails. */
 function runCommand(cmd, cwd) {
-  const result = spawnSync(cmd[0], cmd.slice(1), { cwd, encoding: 'utf8', env: { ...process.env, CI: 'true' }, maxBuffer: 256 * 1024 * 1024 })
+  const result = spawnCommand(cmd, cwd)
   if (result.status !== 0) {
     process.stderr.write(`${result.stdout ?? ''}${result.stderr ?? ''}`)
     throw new DsdError(`${cmd.join(' ')} failed in ${cwd} (exit ${result.status})`)

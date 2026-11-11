@@ -720,3 +720,38 @@ test('dsd test: plugin scripts by name; harness scenarios to lanes, files and a 
   assert.throws(() => planLanes(h, ['unused']), /used by no test/)
   assert.throws(() => planLanes(h, ['nothing']), /no scenario nothing/)
 })
+
+test('integration: every generator with a matching --check script runs, graph docs last; failed checks are warnings', async () => {
+  const { checkedGenerators, regenerate } = await import('../lib/integrate.mjs')
+  const { readFileSync } = await import('node:fs')
+  const { dirname } = await import('node:path')
+  assert.deepEqual(checkedGenerators({
+    'gen-doc-graphs': 'tsx g.ts', 'verify-doc-graphs': 'tsx g.ts --check',
+    'gen-a': 'tsx a.ts', 'verify-a': 'tsx a.ts --check',
+    'gen-unchecked': 'tsx u.ts',
+    'gen-other': 'tsx o.ts', 'verify-other': 'tsx something-else.ts',
+  }), ['gen-a', 'gen-doc-graphs'])
+  const { execFileSync } = await import('node:child_process')
+  const repo = mkdtempSync(join(tmpdir(), 'dsd-checks-'))
+  const worktree = join(mkdtempSync(join(tmpdir(), 'dsd-checks-wt-')), 'wt')
+  const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' }
+  const g = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', env }).trim()
+  try {
+    g('init', '-q', '-b', 'main')
+    writeFileSync(join(repo, 'package.json'), JSON.stringify({ scripts: { 'gen-a': 'x', 'verify-a': 'x --check' } }))
+    g('add', '.'); g('commit', '-qm', 'base')
+    const ran = [], warnings = []
+    const tip = regenerate({
+      repo, base: 'main', tip: g('rev-parse', 'HEAD'), branch: 'integration/main', conflicted: [], worktree,
+      generated: { generators: wt => checkedGenerators(JSON.parse(readFileSync(join(wt, 'package.json'), 'utf8')).scripts), checks: ['verify-history'], isGenerated: () => false },
+      run: cmd => ran.push(cmd.join(' ')),
+      probe: () => ({ status: 1, output: 'unacknowledged\n' }),
+      warn: message => warnings.push(message),
+    })
+    assert.equal(tip, g('rev-parse', 'HEAD'))
+    assert.ok(ran.includes('pnpm run gen-a'))
+    assert.deepEqual(warnings, ['verify-history fails on the integration:\nunacknowledged'])
+  } finally {
+    rmSync(repo, { recursive: true, force: true }); rmSync(dirname(worktree), { recursive: true, force: true })
+  }
+})
