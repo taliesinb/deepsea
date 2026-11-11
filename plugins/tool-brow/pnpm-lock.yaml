@@ -20,6 +20,12 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../harness/vendor/schemastery
         version: link:../../harness/vendor/schemastery
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
+      sharp:
+        specifier: link:../../harness/packages/attachment/attachment-local/node_modules/sharp
+        version: link:../../harness/packages/attachment/attachment-local/node_modules/sharp
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../harness/vendor/cordis
@@ -229,6 +235,9 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
+
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
@@ -351,5 +360,7 @@ snapshots:
       '@esbuild/win32-arm64': 0.24.2
       '@esbuild/win32-ia32': 0.24.2
       '@esbuild/win32-x64': 0.24.2
+
+  fflate@0.8.3: {}
 
   typescript@5.9.3: {}

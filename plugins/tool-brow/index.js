@@ -60,6 +60,7 @@ import { createAppRelay, registerAppRelayRoutes } from './app-relay.mjs'
 import { CONNECTION_CLOSED, ERRORS, socketPathOf } from './daemon-client.mjs'
 import { APP_NAME, DAEMON_COMMAND, ENV_CONFIG, ENV_HOME, ENV_SOCKET } from './daemon-names.mjs'
 import { createLink } from './link.mjs'
+import { createBrowsersView, registerBrowsersRoutes } from './browsers-view.mjs'
 
 export const name = 'deepsea-tool-brow'
 
@@ -163,6 +164,7 @@ export function apply(ctx, config, seams = {}) {
    * @type {Map<string, any>}
    */
   const sessions = new Map()
+  const browsers = createBrowsersView({ link, sessions })
 
   function labelOf(agent) {
     let title
@@ -193,6 +195,7 @@ export function apply(ctx, config, seams = {}) {
         : 'NOTE: the brow daemon had ended this chat\'s session (its lease lapsed); its earlier browser windows are gone. '
     }
     entry.pid = client.hello.pid
+    void browsers.watch(client)
     trace({ event: 'session-open', key: entry.key, label: entry.label, resumed: result.resumed, windows: result.windows, via })
     return result
   }
@@ -275,6 +278,7 @@ export function apply(ctx, config, seams = {}) {
     const entry = sessions.get(agent.id)
     if (entry === undefined) return
     sessions.delete(agent.id)
+    void browsers.watch()
     const client = link.current()
     if (client === undefined || entry.client !== client) return
     void client.request('session.close', { session: entry.key }).then(
@@ -349,6 +353,7 @@ export function apply(ctx, config, seams = {}) {
       }
     }
     entry.used = true
+    browsers.recordCall(entry, toolName, args ?? {}, result)
     // Cancelled by its own signal: the harness records the cancelled result and drops this value (notes kept for the next).
     if (exec.signal?.aborted) return cancelled(true)
     const note = link.takeStartNote() + entry.note
@@ -467,7 +472,7 @@ export function apply(ctx, config, seams = {}) {
 
   const relay = createAppRelay({ link, trace })
   ctx.inject(['connection'], (scoped) => {
-    const paths = registerAppRelayRoutes(scoped, relay)
+    const paths = [...registerAppRelayRoutes(scoped, relay), ...registerBrowsersRoutes(scoped, browsers)]
     trace({ event: 'serving', paths })
   })
 

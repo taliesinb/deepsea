@@ -39,6 +39,7 @@ const options = {
   jsx: 'automatic',
   sourcemap: true,
   external: PLATFORM_MODULES,
+  loader: { '.css': 'text' },
   logLevel: 'info',
   banner: {
     js: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PKG)}, factory: (require) => {\n`
