@@ -4,7 +4,7 @@
 // tool catalog (thousands of schema tokens) is dropped, so a real 400 KB log
 // becomes a ~100 KB fixture that still exercises turns, calls, results,
 // errors, images, injections and titles.
-//   node scripts/make-fixture.mjs <session.v3.jsonl.zstd> <name> [maxStringChars=160]
+//   node scripts/make-fixture.mjs <session.v4.jsonl.zstd> <name> [maxStringChars=160]
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

@@ -10,8 +10,12 @@ getting on with tool X", and for corpus-wide tool-use studies.
 
 Everything goes through `ctx.sessionQuery` (DSH's session-history service):
 the plugin never opens the home's `sessions/` directory, never decodes zstd,
-and never knows a format version. Older log generations are migrated in
+and reads only the current event shapes. Older log generations are migrated in
 memory by the persistence backend on read; live sessions are read from memory.
+The one exception is a tool result, read in one place (`resultParts` in
+`model.mjs`) both as the current tool-role message (content blocks, `isError`)
+and as the earlier `tool-result` wrapper, which a remote instance on an older
+harness still sends.
 
 With `remote`, the same tools read the sessions of **another instance on the
 tailnet** (`remote: "node/deepsea-personal"`); see
@@ -156,9 +160,9 @@ Host-only, no build step, about 2.7k schema tokens per request.
 ## Development
 
 ```sh
-pnpm install && pnpm test    # 43 tests (both rows, trimmed real logs, synthetic analytics logs, a loopback two-instance remote loop) + docs freshness
-node scripts/smoke-log.mjs <session.v3.jsonl.zstd> outline|read [turn]|stats [globs]|rows [n]
-node scripts/make-fixture.mjs <session.v3.jsonl.zstd> <name>   # trimmed fixture from a real log
+pnpm install && pnpm test    # 50 tests (both rows, trimmed real logs, a tool-role results log, synthetic analytics logs, a loopback two-instance remote loop) + docs freshness
+node scripts/smoke-log.mjs <session.v4.jsonl.zstd> outline|read [turn]|stats [globs]|rows [n]
+node scripts/make-fixture.mjs <session.v4.jsonl.zstd> <name>   # trimmed fixture from a real log
 node scripts/gen-tool-docs.mjs                                 # regenerate docs/tools.md
 ```
 

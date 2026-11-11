@@ -7,9 +7,10 @@
  *   calls   tool calls paired with their results (latency, ok/error, text)
  *   turns   per-turn summary (seq range, prompt, tool counts, how it ended)
  *
- * Pure: no I/O, no Cordis. Event shapes are the current (v3) logical format;
+ * Pure: no I/O, no Cordis. Event shapes are the current (v4) logical format;
  * the persistence backend translates historical generations before we see
- * them, so nothing here knows about format versions.
+ * them. The one exception is `resultParts`, which also reads the v3
+ * `tool-result` wrapper that an older remote instance still sends.
  */
 
 import { basename } from 'node:path'
@@ -78,26 +79,74 @@ function mediaSubtype(mediaType) {
 }
 
 /**
- * The tool-result blocks of a `tool/result` message: `{ ok, text, images }`.
+ * One-line placeholders for the blocks of a tool result that are neither text
+ * nor images (`<file report.pdf application/pdf 12345 bytes>`, `<tool-addition>`),
+ * so a result made only of such blocks does not read as empty.
+ * @param {unknown} content
+ */
+function otherBlocksOf(content) {
+  if (!Array.isArray(content)) return []
+  const out = []
+  for (const block of content) {
+    if (!block || typeof block !== 'object' || block.type === 'text' || block.type === 'image') continue
+    const att = block.attachment && typeof block.attachment === 'object' ? block.attachment : null
+    if (block.type === 'file') {
+      out.push(`<file${att?.name ? ` ${att.name}` : ''}${typeof att?.mediaType === 'string' ? ` ${att.mediaType}` : ''}${typeof att?.bytes === 'number' ? ` ${att.bytes} bytes` : ''}>`)
+    } else out.push(`<${typeof block.type === 'string' ? block.type : 'block'}>`)
+  }
+  return out
+}
+
+/**
+ * The tool call a `tool/result` event answers. Current logs carry it on the
+ * tool-role message (`source.callId`, `toolCallId`); `data.callId` is kept
+ * for hand-written fixtures.
+ * @param {any} data - the event's `data`
+ * @returns {string | null}
+ */
+export function resultCallId(data) {
+  const message = data?.message
+  return message?.source?.callId ?? message?.toolCallId ?? data?.callId ?? null
+}
+
+/**
+ * Outcome and content of a `tool/result` event: `{ ok, text, images }`.
+ *
+ * The single place a result's shape is read, for every tool. Two shapes occur:
+ *
+ *   - the tool-role message (session format v4, every current log):
+ *     `message: { role: 'tool', toolCallId, content: [blocks], isError }`;
+ *   - the released v3 wrapper, which a remote instance on an older harness
+ *     still sends (and the older fixtures carry): `message: { role: 'user',
+ *     content: [{ type: 'tool-result', content: string | [blocks], isError }] }`.
+ *
+ * A plain string `content` is accepted in either place. Text blocks are
+ * joined; images become descriptors (rendered `<image W×H type size>`);
+ * other blocks become one-line placeholders. The call failed when the
+ * message or a wrapper says `isError: true`, or the event carries `error`
+ * (failure identity, present only on failed results).
  * @param {any} data - the event's `data`
  */
-function resultParts(data) {
-  const blocks = Array.isArray(data.message?.content) ? data.message.content : []
-  let ok = true
+export function resultParts(data) {
+  const message = data?.message && typeof data.message === 'object' ? data.message : {}
+  let ok = message.isError !== true && !data?.error
   const texts = []
   const images = []
-  for (const block of blocks) {
-    if (!block || typeof block !== 'object' || block.type !== 'tool-result') continue
-    if (block.isError === true) ok = false
-    const inner = block.content
-    if (typeof inner === 'string') texts.push(inner)
-    else {
-      const t = textOf(inner)
-      if (t !== '') texts.push(t)
-      images.push(...imagesOf(inner))
-    }
+  const take = (content) => {
+    if (typeof content === 'string') { if (content !== '') texts.push(content); return }
+    const t = textOf(content)
+    if (t !== '') texts.push(t)
+    texts.push(...otherBlocksOf(content))
+    images.push(...imagesOf(content))
   }
-  if (data.error) ok = false
+  const content = message.content
+  const wrappers = Array.isArray(content) ? content.filter(b => b && typeof b === 'object' && b.type === 'tool-result') : []
+  if (wrappers.length > 0) {
+    for (const w of wrappers) {
+      if (w.isError === true) ok = false
+      take(w.content)
+    }
+  } else take(content)
   return { ok, text: texts.join('\n'), images }
 }
 
@@ -252,7 +301,7 @@ export function buildModel(snapshot, meta = {}) {
       }
       case 'tool/result': {
         const rec = turnFor(event)
-        const callId = data.message?.source?.callId ?? data.callId ?? null
+        const callId = resultCallId(data)
         const call = callId ? byCallId.get(callId) : undefined
         const parts = resultParts(data)
         const row = push({

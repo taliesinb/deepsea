@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Dev aid: render one CURRENT-generation log (session.v3.jsonl.zstd) through
+// Dev aid: render one CURRENT-generation log (session.v4.jsonl.zstd) through
 // the pure model/render code, without Cordis. Historical generations are NOT
 // handled here (the plugin gets them migrated by ctx.sessionQuery at runtime).
-//   node scripts/smoke-log.mjs <session.v3.jsonl.zstd> [outline|read|stats|grep <pattern>] [args-json]
+//   node scripts/smoke-log.mjs <session.v4.jsonl.zstd> [outline|read|stats|grep <pattern>] [args-json]
 import { execFileSync } from 'node:child_process'
 import { buildModel, sessionSummary, turnRows } from '../model.mjs'
 import { renderOutline, renderRead, renderRow, renderStats } from '../render.mjs'

@@ -7,7 +7,7 @@
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { clip, matchesTool, sessionName, sessionSummary, turnRows } from './model.mjs'
+import { clip, matchesTool, resultCallId, sessionName, sessionSummary, turnRows } from './model.mjs'
 import { boundRows, commonParameters, dropUndefined, IntrospectError, normalizeFmt, renderAs, renderValue, writeOutFile } from './output.mjs'
 import { renderEvent, renderExport, renderFind, renderGrep, renderOutline, renderRead, renderRow, renderStats } from './render.mjs'
 import { parseSince } from './resolve.mjs'
@@ -537,7 +537,7 @@ function grepText(r) {
 
 function toolOfEvent(e, m) {
   if (e.type === 'tool/call') return e.data?.name ?? '?'
-  const callId = e.data?.message?.source?.callId
+  const callId = resultCallId(e.data)
   return m.calls.find(c => c.callId === callId)?.tool ?? '?'
 }
 
