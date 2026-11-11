@@ -1,0 +1,68 @@
+{
+  "name": "@deepsea/session-drafts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: prompt drafts kept with their session, in a Drafts view beside Chat. ⌘D saves the composer (text, chips, quotes, attachments) as a draft and clears it; each draft is an editable card with Resume, which puts it back into the composer, and Delete. Stored on the host, never in the session's log or the model's context.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "store.mjs",
+    "document.mjs",
+    "download.mjs",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --check store.mjs && node --check document.mjs && node --check download.mjs && node --test tests/*.test.mjs",
+    "prepare": "node build.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths",
+    "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery",
+    "fflate": "0.8.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-api-session-controller": "link:../../harness/packages/api/session-controller",
+    "@deepseek-ai/dsh-client-shortcuts": "link:../../harness/packages/client/shortcuts",
+    "@deepseek-ai/dsh-client-store": "link:../../harness/packages/client/store",
+    "@deepseek-ai/dsh-client-ui-conversation": "link:../../harness/packages/client/ui-conversation",
+    "@deepseek-ai/dsh-client-ui-primitives": "link:../../harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-session": "link:../../harness/packages/client/ui-session",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@deepseek-ai/dsh-session": "link:../../harness/packages/core/session",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.24.0",
+    "react": "^18.3.1",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT",
+  "deepsea": {
+    "requires": [
+      "composer-drafts"
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+# Bundle patch, used when the package is installed into a profile.
+# The per-session drafts store and its routes (host), and the Drafts View,
+# the composer's Save as draft button and shortcut (browser half,
+# lib/client.js). Config (all optional): README.md.
+- insert:
+    - id: deepsea-session-drafts
+      name: "@deepsea/session-drafts"

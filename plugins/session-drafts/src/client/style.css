@@ -1,0 +1,312 @@
+/* Drafts View: cards drawn like the composer card (ui-conversation skeleton/InputBar.module.css .card). */
+
+/* While a Conversation body shows the Drafts View, its composer is out of the way (Chat brings it back). */
+[data-conversation-content]:has([data-deepsea-drafts-view]) [data-composer-seat] {
+  display: none;
+}
+
+.deepsea-drafts {
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.deepsea-drafts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--dsh-composer-card-max-width, 760px);
+  margin: 0 auto;
+  padding: 24px 16px 32px;
+}
+
+.deepsea-drafts-empty {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--dsw-alias-label-caption);
+}
+
+.deepsea-drafts-empty[data-failed] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.deepsea-drafts-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* The card holds only the draft: attachments, then its text. */
+.deepsea-drafts-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px 4px 0;
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+  --deepsea-drafts-surface: var(--dsw-specific-input-major);
+  border-radius: 12px;
+  background: var(--deepsea-drafts-surface);
+  box-shadow: var(--dsw-elevation-soft);
+  font-size: var(--dsh-content-font-size, 14px);
+  /* Text and placeholder share one line height, so an empty draft does not overflow its scrollport. */
+  line-height: calc(22px + var(--dsh-content-font-delta, 0px));
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  transition: background-color 200ms ease;
+}
+
+/* Being edited: the surface a little nearer the text colour (lighter in dark, darker in light). */
+.deepsea-drafts-card[data-editing] {
+  background: color-mix(in srgb, var(--deepsea-drafts-surface) 93%, var(--dsw-alias-label-primary));
+}
+
+/* Just saved or opened from elsewhere: the same tint, fading out. */
+.deepsea-drafts-card[data-focused] {
+  animation: deepsea-drafts-arrive 2.4s ease-out;
+}
+
+@keyframes deepsea-drafts-arrive {
+  from { background: color-mix(in srgb, var(--deepsea-drafts-surface) 88%, var(--dsw-alias-label-primary)); }
+  to { background: var(--deepsea-drafts-surface); }
+}
+
+/* Text, attachments and placeholder inset from the left as far as the thumbnails from the top (8px). */
+.deepsea-drafts-card {
+  --deepsea-drafts-line: calc(22px + var(--dsh-content-font-delta, 0px));
+}
+
+/* The text is at least two lines tall. */
+.deepsea-drafts-card [data-draft-document-input] {
+  min-height: calc(2 * var(--deepsea-drafts-line));
+  padding: 0 0 0 8px;
+}
+
+/* The editor's scrollport (the Factory's outermost box) shows at most sixteen lines, then scrolls. */
+.deepsea-drafts-card div:has(> div > [data-draft-document-input]) {
+  max-height: calc(16 * var(--deepsea-drafts-line));
+}
+
+.deepsea-drafts-card [data-draft-document-input] ~ div[aria-hidden] {
+  top: 0;
+  left: 8px;
+}
+
+.deepsea-drafts-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  /* With the card's 4px, the thumbnails sit 8px from the top and the left. */
+  padding: 4px 0 0 8px;
+}
+
+.deepsea-drafts-attachment {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 56px;
+  min-width: 56px;
+  max-width: 200px;
+  border-radius: var(--dsw-radius-sm, 6px);
+  background: var(--dsw-alias-fill-l2, rgba(127, 127, 127, 0.12));
+  overflow: hidden;
+}
+
+.deepsea-drafts-attachment img {
+  display: block;
+  height: 56px;
+  max-width: 200px;
+  object-fit: cover;
+}
+
+.deepsea-drafts-file {
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deepsea-drafts-attachment-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+
+.deepsea-drafts-attachment:hover .deepsea-drafts-attachment-remove,
+.deepsea-drafts-attachment-remove:focus-visible {
+  opacity: 1;
+}
+
+/* Under the card, one line: when it was made, save state, then Delete and Resume (or the delete confirmation). */
+.deepsea-drafts-below {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: calc(28px + var(--dsh-content-font-delta, 0px));
+  padding: 0 0 0 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+}
+
+/* Like a chat message's actions row: hidden until the pointer is over the draft, or it is being edited or in use. */
+@media (hover: hover) {
+  .deepsea-drafts-below {
+    opacity: 0;
+    transition: opacity 80ms ease;
+  }
+
+  .deepsea-drafts-item:hover .deepsea-drafts-below,
+  .deepsea-drafts-item:focus-within .deepsea-drafts-below,
+  .deepsea-drafts-item[data-active] .deepsea-drafts-below {
+    opacity: 1;
+  }
+}
+
+.deepsea-drafts-spring {
+  flex: 1;
+}
+
+.deepsea-drafts-time {
+  flex: none;
+  white-space: nowrap;
+}
+
+.deepsea-drafts-time[data-failed] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* The chat message action button (ui-chat MessageIconActions.module.css .action). */
+.deepsea-drafts-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: calc(28px + var(--dsh-content-font-delta, 0px));
+  height: calc(28px + var(--dsh-content-font-delta, 0px));
+  padding: 6px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.deepsea-drafts-action svg {
+  width: calc(15px + var(--dsh-content-font-delta, 0px));
+  height: calc(15px + var(--dsh-content-font-delta, 0px));
+}
+
+@media (hover: hover) {
+  .deepsea-drafts-action:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-secondary);
+  }
+}
+
+.deepsea-drafts-action:disabled,
+.deepsea-drafts-text-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.deepsea-drafts-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.deepsea-drafts-text-button {
+  height: 22px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 999px;
+  background: var(--dsw-alias-fill-l2, rgba(127, 127, 127, 0.14));
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.deepsea-drafts-text-button[data-danger] {
+  background: var(--dsw-alias-state-error-primary);
+  color: #fff;
+}
+
+/* New draft: the sidebar's New Session button (ui-sidebar .newSession) at its natural width, centred below the drafts. */
+.deepsea-drafts-new {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 8px 16px;
+  box-sizing: border-box;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-button-elevated-fill);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  cursor: pointer;
+}
+
+.deepsea-drafts-new > svg {
+  flex: none;
+}
+
+.deepsea-drafts-new:hover:not(:disabled) {
+  background: var(--dsw-alias-button-floating-hover);
+}
+
+.deepsea-drafts-new:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/*
+ * The composer's Save as draft button: the + button's light-grey circle (ui-conversation InputBar.module.css .add),
+ * moved from the end of the left controls to just after +. The slot's wrapper is display: contents, so this button
+ * is a flex item of the tools row; + goes first and this second, ahead of the permission and plan controls.
+ */
+[data-composer-card] div:has(> div > .deepsea-drafts-save) > button:first-child {
+  order: -2;
+}
+
+.deepsea-drafts-save {
+  order: -1;
+  margin-left: -4px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
