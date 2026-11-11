@@ -120,11 +120,11 @@ pnpm -C <repo>-worktrees/harness-<topic> install --frozen-lockfile
   path>` (tools/dsd/README.md, Uncommitted harness work;
   recipes/try-harness-worktree.md). A committed topic can also be built
   from its commit: `dsd run … --harness topic/<topic>`. Either way a topic
-  runs on its parent alone, without the other harness topics: the macOS
-  app's client does not load (it needs `topic/darwin-web-shortcuts`), so
-  use `--throwaway-server` and a browser, and plugins that need another
-  topic may fail. For the app, edit in a scratch harness worktree of
-  `integration/<upstream>` and run that; or list the topic in
+  runs on its parent alone, without the other harness topics, so plugins
+  that need another topic may fail (the macOS app itself needs nothing
+  beyond harness `topic/base`). With every topic present, edit in a
+  scratch harness worktree of `integration/<upstream>` and run that; or
+  list the topic in
   `topics.txt`, run `dsd topics integrate`, and run `--harness
   integration/<upstream>`.
 - The harness repository and the worktrees directory are outside `<repo>`,

@@ -206,11 +206,11 @@ its last commit is reported), and after each edit rebuild it and start a
 new throwaway; do not rebuild it while a throwaway's server runs from it.
 The output names the checkout, its commit and whether it is dirty. A
 topic's worktree holds that topic on its parent alone, without the other
-harness topics: the macOS app's client does not load (it needs harness
-`topic/darwin-web-shortcuts`; use `--throwaway-server` and a browser),
-and plugins that need another topic may fail. For the app, work in a
-scratch worktree of `integration/<upstream>` instead (the recipe below
-has both). Directories under
+harness topics: it runs in the macOS app (once based on the current
+harness `topic/base`, which carries what the app's page needs), but
+plugins that need another topic may fail. With every topic present, work
+in a scratch worktree of `integration/<upstream>` instead (the recipe
+below has both). Directories under
 `_builds/` are refused, symlinked ones included; `--harness` is the
 alternative for a commit; named variants refuse both. `dsd play` and `dsd
 test plugins` pass it through (recipes/try-harness-worktree.md).
@@ -723,13 +723,12 @@ the person.
 To see harness changes running while working on them, uncommitted, run a
 throwaway on the checkout (above, Uncommitted harness work) and drive it,
 by hand or with a drive script kept outside the harness (its snapshots
-allow no DeepSea scenario driver). A lone topic's worktree runs
-server-only, in a browser; a scratch worktree of the integration also runs
-in the app:
+allow no DeepSea scenario driver). A topic's worktree runs on its own; a
+scratch worktree of the integration has every other topic too:
 
 ```sh
 (cd <worktrees>/harness-rewind && pnpm run build)  # after each edit
-dsd run release --throwaway-server --detach --scripted --plugins all --harness-worktree rewind
+dsd run release --throwaway-app --detach --scripted --plugins all --harness-worktree rewind
 dsd play --harness-worktree <worktrees>/harness-scratch   # integration/<upstream> plus your edits
 dsd drive -v <id> run <script.drive>
 ```

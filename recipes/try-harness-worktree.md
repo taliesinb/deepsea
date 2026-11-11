@@ -17,24 +17,21 @@ pnpm run build                   # after each edit
 ## Which checkout
 
 A topic's worktree holds that topic on its parent alone, without the
-other harness topics. Two consequences:
+other harness topics.
 
-- **The DeepSea macOS app does not load it.** The app's page relies on
-  harness `topic/darwin-web-shortcuts`; without it the client stops at
-  "Failed to load plugins" (`dsh-client-shortcuts`). Run the topic's
-  worktree server-only and use the page in a browser:
-
-  ```sh
-  pnpm dsd run release --throwaway-server --detach --scripted --plugins all --harness-worktree <topic>
-  pnpm dsd drive -v <id> url     # open its login URL in a browser
-  ```
-
+- **It runs in the DeepSea macOS app** when it is based on the current
+  harness `topic/base`. The app marks its page as the macOS desktop
+  layout, and the harness's shortcuts service then needs base's fix for a
+  desktop page without Electron's keyboard bridge. A topic branched from
+  an older base stops at "Failed to load plugins"
+  (`dsh-client-shortcuts`) until it is rebased (`git rebase topic/base`
+  in its worktree, or `dsd topics rebase harness`).
 - **Plugins that need another harness topic** (their `"deepsea": {
   "requires" }`) may fail to load; `--plugins` can leave them out.
 
-To try changes in the app, with every other topic present, work in a
-scratch harness worktree of the integration instead, and move the
-finished change onto its topic afterwards:
+To try changes with every other topic present, work in a scratch harness
+worktree of the integration instead, and move the finished change onto
+its topic afterwards:
 
 ```sh
 git -C <harness repo> worktree add --detach <worktrees>/harness-scratch integration/<upstream>

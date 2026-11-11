@@ -11,8 +11,9 @@ throwaway's app is the real macOS app, hidden, with scripted model replies.
 
 1. Start a throwaway with the app and the plugins the flow needs. Add
    `--harness-worktree` for uncommitted harness changes
-   (recipes/try-harness-worktree.md; a lone topic's worktree cannot run in
-   the app, so use a scratch worktree of the integration):
+   (recipes/try-harness-worktree.md: a topic's worktree on the current
+   harness `topic/base`, or a scratch worktree of the integration when the
+   flow needs other topics too):
 
    ```sh
    pnpm dsd run release --throwaway-app --detach --scripted --plugins <names | all> [--harness-worktree <path>]

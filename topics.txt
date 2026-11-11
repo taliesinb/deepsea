@@ -36,7 +36,6 @@ topic topic/deepsea-home
 topic topic/launch-token
 
 # Shell and client behaviour
-topic topic/darwin-web-shortcuts
 topic topic/modal-width
 topic topic/input-triggers
 topic topic/command-claim-decoration
