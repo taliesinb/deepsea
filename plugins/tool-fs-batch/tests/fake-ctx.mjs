@@ -22,6 +22,7 @@ import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve as resolvePath } from 'node:path'
 import { writableRoots } from '@deepseek-ai/dsh-sandbox'
+import { build as buildTools } from '../index.js'
 
 class FsError extends Error {
   constructor(message, code) { super(message); this.code = code }
@@ -201,6 +202,24 @@ export function fakeCtx({ workspaceRoot, mode = 'workspace-write', withPolicy = 
 
 export function fakeExec(sessionId, cwd) {
   return { agent: { id: sessionId, session: { id: sessionId, header: { id: sessionId, cwd } } }, signal: undefined, callId: 'call-1' }
+}
+
+/** Freeze a value and everything reachable from it, in place. */
+export function deepFreeze(value) {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    for (const v of Object.values(value)) deepFreeze(v)
+    Object.freeze(value)
+  }
+  return value
+}
+
+/**
+ * The plugin's tools, each `execute` given a deep-frozen copy of its arguments,
+ * as the harness tool pipeline does: a tool that writes into its arguments
+ * fails here as it would in production.
+ */
+export function build(ctx, config) {
+  return buildTools(ctx, config).map(t => ({ ...t, execute: (args, exec) => t.execute(deepFreeze(structuredClone(args)), exec) }))
 }
 
 /** Render a canonical value through the tool's own output.render → text. */

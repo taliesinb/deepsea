@@ -44,7 +44,8 @@ export function resolveRgPath() {
 
 function stringList(value, name) {
   if (value === undefined || value === null) return []
-  const list = Array.isArray(value) ? value : [value]
+  // A copy: callers push onto the list, and the harness deep-freezes tool arguments.
+  const list = Array.isArray(value) ? [...value] : [value]
   for (const v of list) if (typeof v !== 'string' || v.trim().length === 0) throw new FsToolsError(`${name} must be a list of non-empty strings`)
   return list
 }

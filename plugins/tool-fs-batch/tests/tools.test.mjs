@@ -3,10 +3,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { Config, PROMPT_HINT, PROMPT_SECTION, apply, build } from '../index.js'
+import { Config, PROMPT_HINT, PROMPT_SECTION, apply } from '../index.js'
 import { countOccurrences, planEdit, regionsFor } from '../edit-many.mjs'
 import { buildSearchArgv, parseSearchArgs } from '../search.mjs'
-import { fakeCtx, fakeExec, outsideDir, textOf } from './fake-ctx.mjs'
+import { build, fakeCtx, fakeExec, outsideDir, textOf } from './fake-ctx.mjs'
 
 const root = mkdtempSync(join(tmpdir(), 'deepsea-tool-fs-batch-test-'))
 after(() => rmSync(root, { recursive: true, force: true }))

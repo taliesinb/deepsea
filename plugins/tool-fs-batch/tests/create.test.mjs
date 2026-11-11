@@ -5,8 +5,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, sym
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { Config, PROMPT_HINT, build } from '../index.js'
-import { fakeCtx, fakeExec, outsideDir, textOf } from './fake-ctx.mjs'
+import { Config, PROMPT_HINT } from '../index.js'
+import { build, fakeCtx, fakeExec, outsideDir, textOf } from './fake-ctx.mjs'
 
 const root = mkdtempSync(join(tmpdir(), 'deepsea-tool-fs-batch-create-'))
 after(() => rmSync(root, { recursive: true, force: true }))

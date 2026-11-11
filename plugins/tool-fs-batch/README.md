@@ -362,7 +362,10 @@ and its `checkWrite` answers that fence's decision (`checkWrite: 'unknown'`
 for a backend that cannot decide, `false` for a harness without the method);
 `refuseAtWrite` refuses chosen paths at write time only, as a policy changed
 after validation would; `outsideDir()` is a directory outside every writable
-root (beside the tests, since the temp dirs are writable).
+root (beside the tests, since the temp dirs are writable). Its `build` hands
+each tool's `execute` a deep-frozen copy of its arguments, as the harness's
+tool pipeline does, so a tool that writes into its arguments fails in the
+tests as it would in a server.
 `tests/create.test.mjs` covers `create`, one test per rule above;
 `tests/sandbox.test.mjs` the sandbox check (a refused second of three
 entries, `read-only`, a refused `create`, refusals among other problems,
@@ -372,7 +375,8 @@ policy `checkWrite` is asked with, an invalid extra root).
 holds one test per bug found exercising the tools (CRLF append, line-based
 `replace_between`, problems reported together, merged regions, overlap
 warnings, anchored globs, `rg -w` words, regex diagnostics, read ranges and
-budgets, the current working directory).
+budgets, the current working directory, list-valued `search` selectors under
+frozen arguments).
 
 In a server: `dsd run release --throwaway-server --scripted --plugins tool-fs-batch`
 (tools/dsd/README.md), then script tool calls with the scripted model.

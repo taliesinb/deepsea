@@ -2,17 +2,17 @@
 // bug write-up): CRLF append, line-based replace_between, problems reported
 // together, merged regions, overlap warnings, anchored globs, rg -w words,
 // clean regex errors, read_many ranges and budgets, the session's current
-// working directory.
+// working directory, list-valued search selectors under frozen arguments.
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { Config, build } from '../index.js'
+import { Config } from '../index.js'
 import { planEdit, regionsFor } from '../edit-many.mjs'
 import { shownPath } from '../common.mjs'
-import { formatRegexError } from '../search.mjs'
-import { fakeCtx, fakeExec, textOf } from './fake-ctx.mjs'
+import { formatRegexError, parseSearchArgs } from '../search.mjs'
+import { build, deepFreeze, fakeCtx, fakeExec, textOf } from './fake-ctx.mjs'
 
 const root = mkdtempSync(join(tmpdir(), 'deepsea-tool-fs-batch-regress-'))
 after(() => rmSync(root, { recursive: true, force: true }))
@@ -269,4 +269,24 @@ test('#14 relative paths follow the session\'s current working directory (workin
   } finally {
     writeFileSync(join(root, 'src/deep/b.ts'), before)
   }
+})
+
+// ---------------------------------------------------------------- frozen arguments
+
+test('#15 search accepts list-valued selectors although the harness deep-freezes tool arguments', async () => {
+  const { run } = setup()
+  // regex as a list (no aliases: the empty push still wrote `length`), in both modes
+  const files = await run('search', { regex: ['foobar', 'zzz'], paths: ['src'], mode: 'files' })
+  assert.deepEqual(files.files.map(f => f.path), ['src/a.ts'])
+  const lines = await run('search', { regex: ['foo\\(1\\)', 'zzz'], paths: ['src'] })
+  assert.equal(lines.totalMatches, 2)
+  // text list with literal + pattern, and exclude_regex list with exclude_pattern: the other two pushes
+  const lit = await run('search', { text: ['zzz', 'yyy'], literal: true, pattern: 'foo(1)', paths: ['src'], mode: 'files' })
+  assert.deepEqual(lit.files.map(f => f.path).sort(), ['src/a.ts', 'src/deep/b.ts'])
+  const excl = await run('search', { text: 'foo', paths: ['src'], exclude_regex: ['foobar'], exclude_pattern: 'zzz', mode: 'files' })
+  assert.deepEqual(excl.files.map(f => f.path), ['src/deep/b.ts'])
+  // the arguments are read, never written
+  const args = deepFreeze({ regex: ['a'], text: ['b'], literal: true, pattern: 'c', exclude_regex: ['d'], exclude_pattern: 'e' })
+  parseSearchArgs(args, { maxResults: 250 })
+  assert.deepEqual(args, { regex: ['a'], text: ['b'], literal: true, pattern: 'c', exclude_regex: ['d'], exclude_pattern: 'e' })
 })

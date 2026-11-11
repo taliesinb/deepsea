@@ -7,8 +7,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, beforeEach, test } from 'node:test'
-import { Config, build } from '../index.js'
-import { fakeCtx, fakeExec, outsideDir, textOf } from './fake-ctx.mjs'
+import { Config } from '../index.js'
+import { build, fakeCtx, fakeExec, outsideDir, textOf } from './fake-ctx.mjs'
 
 const root = mkdtempSync(join(tmpdir(), 'deepsea-tool-fs-batch-sandbox-'))
 const outside = outsideDir()
