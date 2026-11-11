@@ -59,6 +59,7 @@ usage windows and prices, and the replies are scripts
 | run everything together | add `--source integration/base` (after `dsd topics integrate`) |
 | try harness changes while working on them, uncommitted | build the checkout (`pnpm run build` there), then `--harness-worktree <topic \| path>` on `dsd run`, `dsd play` or `dsd test plugins`; a lone topic's worktree runs server-only, in a browser, while a scratch worktree of `integration/<upstream>` also runs in the app (recipes/try-harness-worktree.md) |
 | drive it | `dsd drive -v <id> prompt - \| command /x \| open-session \| wait-page \| click \| hover \| type \| eval \| snapshot --window \| opened \| restart-server` (a prompt with no session goes to the latest, or a new one; read the snapshot PNGs) |
+| see a UX flow as screenshots | a drive script with `snapshot --window --name <step>` at each moment, run with `dsd drive -v <id> run <script> --shots <dir>`: numbered PNGs and an `index.md` (recipes/screenshot-ux-flow.md) |
 | rerun checks after each rebuild | a plugin: `plugins/<name>/tests/*.drive` (drive operations as lines, with `expect`, `let`, `try`), run by `dsd test plugins <name>`; a harness topic: its snapshot scenarios, run by `dsd test harness <topic> [<scenario>…] [--web]` (tools/dsd/README.md → Drive scripts, Testing a topic) |
 | find an option | `dsd <command> --help`; `--get <path>` prints one field of any command's JSON (`--get id`, `--get summary.text`) |
 | change a plugin's config in a throwaway | `--patch <file>` with a row `- id: <its row id>` and `config:` (it replaces that row's whole config) |
@@ -182,4 +183,5 @@ behind non-obvious choices, and what failed and why. Index it here.
 | Recipe | For |
 |---|---|
 | [rebuild-own-variant.md](recipes/rebuild-own-variant.md) | rebuilding and installing the variant your own session runs in (`build --install --self`, detached) |
+| [screenshot-ux-flow.md](recipes/screenshot-ux-flow.md) | a feature's UX as a series of screenshots from a scripted throwaway app (`drive run --shots`), and the traps (approvals, composer settings, the hidden window) |
 | [try-harness-worktree.md](recipes/try-harness-worktree.md) | running uncommitted harness changes in a throwaway, by hand or driven, rebuilding between edits |

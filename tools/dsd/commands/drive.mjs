@@ -29,11 +29,12 @@
  *   type <text | -> [--replace] | type --key <Enter | Escape | cmd+k | …>   (--replace: select the
  *                                         focused field's contents first, so the text replaces them)
  *   describe <css> [--nth <n>]            the element inspector's record
- *   snapshot [<css> [--nth <n>]] [--window] [--chrome]
+ *   snapshot [<css> [--nth <n>]] [--window] [--chrome] [--name <n>]   (--name: its file under run --shots)
  *   window-info | app-log [--lines <n>] | opened [--clear] | quit
  *
  * Script:
- *   run <script | dir>… [--from <line>] [--values]   drive scripts, each in order to its first failing step
+ *   run <script | dir>… [--from <line>] [--values] [--shots <dir>]   drive scripts, each in order to its
+ *                                         first failing step; --shots: every snapshot copied there, numbered
  *                                         (lib/drive-script.mjs: the format; expect, let, try, sleep)
  *
  * <session> is a session id, or `last` (the default when it is left out):
@@ -45,7 +46,7 @@
  * 4 when the wait timed out.
  */
 import { request } from 'node:http'
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { homeOf } from '../lib/paths.mjs'
 import { appRequest } from '../lib/appsocket.mjs'
@@ -125,7 +126,7 @@ const seconds = (value, name) => {
   return n * 1000
 }
 
-const VALUED = ['variant', 'cwd', 'preset', 'model', 'title', 'timeout', 'since', 'types', 'limit', 'nth', 'clicks', 'x', 'y', 'key', 'selector', 'text', 'expression', 'settle', 'lines', 'from']
+const VALUED = ['variant', 'cwd', 'preset', 'model', 'title', 'timeout', 'since', 'types', 'limit', 'nth', 'clicks', 'x', 'y', 'key', 'selector', 'text', 'expression', 'settle', 'lines', 'from', 'shots', 'name']
 const BOOLEAN = ['no-wait', 'steer', 'window', 'chrome', 'clear', 'replace', 'values']
 const SERVER_OPS = new Set(['health', 'create-session', 'prompt', 'command', 'wait', 'events', 'cancel', 'sessions', 'restart-server', 'invoke', 'url'])
 /** Every operation of `dsd drive` (and so of a drive script). */
@@ -149,26 +150,58 @@ export async function drive(argv) {
 }
 
 /**
- * dsd drive run <script | dir>… [-v <ref>] [--from <line>] [--values] — drive scripts (a directory: its
+ * dsd drive run <script | dir>… [-v <ref>] [--from <line>] [--values] [--shots <dir>] — drive scripts (a directory: its
  * *.drive files, by name), each in order to its first failing step (lib/drive-script.mjs has the
  * format). Every script is read before any runs. Prints a report: steps passed, the failing step
  * (line, text, error, the value it saw), every snapshot's files, and with --values every step's
- * value; for several scripts, one report each under `scripts`. Exit status: 0; 1 when a step
- * failed; 2 when a script cannot be read.
+ * value; for several scripts, one report each under `scripts`. --shots <dir> copies every snapshot
+ * taken into the directory as `NN-<name>.png` in order (`snapshot … --name <name>`, else
+ * `<script>-<line>`) and writes an index.md showing them with their steps: a UX flow to look
+ * through. Exit status: 0; 1 when a step failed; 2 when a script cannot be read.
  */
 async function runScripts(variant, args) {
   const files = driveScriptFiles(args._.slice(1))
-  if (files.length === 0) usage('dsd drive run <script | dir>… [-v <ref>] [--from <line>] [--values]')
+  if (files.length === 0) usage('dsd drive run <script | dir>… [-v <ref>] [--from <line>] [--values] [--shots <dir>]')
   if (args.from !== undefined && files.length > 1) usage('--from takes one script')
   const scripts = files.map(file => ({ file, steps: loadDriveScript(file) }))
   const reports = []
-  for (const { file, steps } of scripts) {
-    const report = await runDriveScript(variant, file, steps, { from: args.from === undefined ? 0 : Number(args.from), values: Boolean(args.values), label: files.length > 1 })
-    reports.push(report)
-  }
+  const shots = args.shots === undefined ? undefined : shotBook(String(args.shots))
+  try {
+    for (const { file, steps } of scripts) {
+      const report = await runDriveScript(variant, file, steps, { from: args.from === undefined ? 0 : Number(args.from), values: Boolean(args.values), label: files.length > 1, shots })
+      reports.push(report)
+    }
+  } finally { shots?.finish() }
   const ok = reports.every(r => r.ok)
   printJson(reports.length === 1 ? reports[0] : { id: variant.id, ok, passed: reports.filter(r => r.ok).length, failed: reports.filter(r => !r.ok).map(r => r.script), scripts: reports })
   if (!ok) process.exitCode = 1
+}
+
+/** The image a snapshot reply points at: the element for an element snapshot, else the page. */
+export const snapshotImage = value => value?.images?.element?.path ?? value?.files?.elementPng ?? value?.image?.path ?? value?.file
+
+/**
+ * A directory collecting a run's snapshots as `NN-<name>.png`, in the order taken, with an
+ * index.md that shows each under its step. Earlier shots of the same names are replaced.
+ */
+export function shotBook(dir) {
+  mkdirSync(dir, { recursive: true })
+  for (const f of readdirSync(dir)) if (/^\d{2,}-.*\.png$/.test(f)) rmSync(join(dir, f))
+  const entries = []
+  return {
+    add(value, name, where, text) {
+      const source = snapshotImage(value)
+      if (!source) return undefined
+      const file = `${String(entries.length + 1).padStart(2, '0')}-${name.replace(/[^\w.-]+/g, '-')}.png`
+      copyFileSync(source, join(dir, file))
+      entries.push({ file, where, text })
+      return join(dir, file)
+    },
+    finish() {
+      const body = entries.map(e => `## ${e.file.replace(/\.png$/, '')}\n\n\`${e.where}\` \`${e.text.replace(/`/g, "'")}\`\n\n![${e.file}](${e.file})\n`).join('\n')
+      writeFileSync(join(dir, 'index.md'), `# Snapshots\n\n${body}`)
+    },
+  }
 }
 
 /** Scripts named, or a directory's `*.drive` files by name. */
@@ -199,7 +232,7 @@ export function loadDriveScript(file) {
 }
 
 /** Run one loaded script against a throwaway; its report (never throws for a failing step). */
-export async function runDriveScript(variant, file, steps, { from = 0, values = false, label = false } = {}) {
+export async function runDriveScript(variant, file, steps, { from = 0, values = false, label = false, shots } = {}) {
   const vars = {}
   const report = { script: file, id: variant.id, ok: true, steps: steps.length, passed: 0, snapshots: [] }
   if (values) report.values = []
@@ -229,7 +262,11 @@ export async function runDriveScript(variant, file, steps, { from = 0, values = 
         const { value, exitCode } = await perform(variant, opArgs, input)
         last = value
         lastExit = exitCode ?? 0
-        if (opArgs._[0] === 'snapshot') report.snapshots.push({ line: step.line, ...value })
+        if (opArgs._[0] === 'snapshot') {
+          const name = opArgs.name === undefined ? `${basename(file).replace(/\.drive$/, '')}-${step.line}` : String(opArgs.name)
+          const copied = shots?.add(value, name, `${basename(file)}:${step.line}`, step.text)
+          report.snapshots.push({ line: step.line, ...(copied ? { shot: copied } : {}), ...value })
+        }
         if (lastExit && !lenient) throw new DsdError(lastExit === 4 ? 'the wait timed out' : `the turn ended with an error: ${JSON.stringify(value?.summary?.turnEnd ?? null)}`)
       }
       report.passed++

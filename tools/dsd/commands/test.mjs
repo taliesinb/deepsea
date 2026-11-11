@@ -1,5 +1,5 @@
 /**
- * dsd test plugins <name>… [--server | --relay] [--keep] [--source <ref>] [--harness <ref> | --harness-worktree <path | topic>] [--simulated [--accounts <names>]] [--patch <file>,…] [--app <checkout | ref>]
+ * dsd test plugins <name>… [--server | --relay] [--keep] [--shots <dir>] [--source <ref>] [--harness <ref> | --harness-worktree <path | topic>] [--simulated [--accounts <names>]] [--patch <file>,…] [--app <checkout | ref>]
  * dsd test harness <topic | base> [<scenario | test file>…] [--web] [--refresh] [--build]
  *
  * `plugins`: start a scripted throwaway with those plugins (the app, hidden;
@@ -23,7 +23,7 @@ import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
-import { driveScriptFiles, loadDriveScript, runDriveScript } from './drive.mjs'
+import { driveScriptFiles, loadDriveScript, runDriveScript, shotBook } from './drive.mjs'
 import { harnessCheckout } from '../lib/harness-worktree.mjs'
 import { extrasDir, REPO } from '../lib/paths.mjs'
 import { DsdError, git, note, onlyFlags, parseArgs, printJson, throwawayEnv, usage } from '../lib/util.mjs'
@@ -60,8 +60,8 @@ function dsd(args) {
 
 async function testPlugins(argv) {
   const valued = ['source', 'harness', 'harness-worktree', 'accounts', 'patch', 'app']
-  const args = parseArgs(argv, valued)
-  onlyFlags(args, [...valued, 'server', 'relay', 'keep', 'simulated'])
+  const args = parseArgs(argv, [...valued, 'shots'])
+  onlyFlags(args, [...valued, 'shots', 'server', 'relay', 'keep', 'simulated'])
   const names = args._.flatMap(n => String(n).split(',')).map(s => s.trim()).filter(Boolean)
   if (names.length === 0) usage(USAGE)
   if (args.server && args.relay) usage('--server or --relay, not both')
@@ -77,13 +77,15 @@ async function testPlugins(argv) {
   const started = dsd(['run', 'release', mode, '--detach', '--scripted', '--plugins', names.join(','), ...passed, ...(args.simulated ? ['--simulated'] : [])])
   note(`started ${started.id}; ${scripts.length} script${scripts.length === 1 ? '' : 's'}`)
   const reports = []
+  const shots = args.shots === undefined ? undefined : shotBook(String(args.shots))
   try {
     const variant = resolveRef(started.id)
     for (const { plugin, file, steps } of scripts) {
       note(`${relative(REPO, file)}`)
-      reports.push({ plugin, ...await runDriveScript(variant, relative(REPO, file), steps, { label: true }) })
+      reports.push({ plugin, ...await runDriveScript(variant, relative(REPO, file), steps, { label: true, shots }) })
     }
   } finally {
+    shots?.finish()
     if (args.keep) note(`kept ${started.id} running (dsd stop ${started.id})`)
     else dsd(['stop', started.id])
   }

@@ -239,7 +239,8 @@ a missing required service makes the preset unusable.
 - Keep the checks you make by hand as drive scripts,
   `plugins/<name>/tests/*.drive` (tools/dsd/README.md → Drive scripts), and
   rerun them after each change with `dsd test plugins <name>` (a throwaway
-  started, every script run, stopped). A change to the harness itself is
+  started, every script run, stopped); `--shots <dir>` keeps their
+  snapshots as numbered PNGs to look through (recipes/screenshot-ux-flow.md). A change to the harness itself is
   checked in the harness's own snapshot lanes instead: `dsd test harness
   <topic>` (tools/dsd/README.md → Testing a topic).
 - Anything that touches model providers (routes, the model picker, sign-in,

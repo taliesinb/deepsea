@@ -319,8 +319,8 @@ taken over. Build logs: `~/Library/Logs/io.github.taliesinb.deepsea/builds/`.
 | `dsd builds [list \| make [<harness ref>]]` | list builds (harness and deepsea), or make a harness build (default: the pinned commit) |
 | `dsd link` | point this checkout's `harness` at the build of its pinned commit, building it if needed |
 | `dsd drive [-v <ref>] <op> …` | one operation on a running throwaway, as JSON (below) |
-| `dsd drive run <script \| dir>… [-v <ref>] [--from <line>] [--values]` | drive scripts (a directory: its `*.drive`), each in order to the first step that fails; a JSON report (below, Drive scripts) |
-| `dsd test plugins <name>… [--server \| --relay] [--keep] [--source <ref>] [--harness <ref> \| --harness-worktree <path \| topic>] [--simulated [--accounts <names>]] [--patch <file>,…] [--app <checkout \| ref>]` | a scripted throwaway with those plugins (the hidden app; `--server` none, `--relay` behind a relay), every `plugins/<name>/tests/*.drive` run in it, then stopped (`--keep` leaves it); exit 1 when a script failed (below, Testing a topic) |
+| `dsd drive run <script \| dir>… [-v <ref>] [--from <line>] [--values] [--shots <dir>]` | drive scripts (a directory: its `*.drive`), each in order to the first step that fails; a JSON report; `--shots`: every snapshot copied into `<dir>` as numbered PNGs with an index (below, Drive scripts; recipes/screenshot-ux-flow.md) |
+| `dsd test plugins <name>… [--server \| --relay] [--keep] [--shots <dir>] [--source <ref>] [--harness <ref> \| --harness-worktree <path \| topic>] [--simulated [--accounts <names>]] [--patch <file>,…] [--app <checkout \| ref>]` | a scripted throwaway with those plugins (the hidden app; `--server` none, `--relay` behind a relay), every `plugins/<name>/tests/*.drive` run in it, then stopped (`--keep` leaves it); exit 1 when a script failed (below, Testing a topic) |
 | `dsd test harness <topic \| base> [<scenario \| test file>…] [--web] [--refresh] [--build]` | the harness's recorded-session lanes in the topic's harness worktree, without the caller's `DSH_*` environment; `--refresh` lists the expected files it rewrote (below, Testing a topic) |
 | `dsd script <file.mjs> [-v <ref>]` | run a script: its default export gets `{ id, url, login, server(op, body), app(op, body), sleep }` and its return value is printed |
 | `dsd topics [list]` | both repositories' topics: parents, commits, what each requires, how far behind |
@@ -608,7 +608,7 @@ The app's operations (apps/macos/README.md has the protocol):
 | `hover <css> [--nth <n>]`, `hover --text <label> [<css>]` | the page events of a pointer arriving on the element (`pointerover`/`enter`, `mouseover`/`enter`, `mousemove`), so controls a script reveals on hover (React's `onMouseEnter`) can then be clicked; CSS `:hover` does not change in a hidden window (WebKit tracks hover only in the active window) |
 | `type <text \| -> [--replace]`, `type --key <Enter \| Escape \| cmd+k \| …>` | real key events, finished when it answers; `--replace` first selects what the focused field holds, so the text replaces it (typing appends otherwise) |
 | `describe <css> [--nth <n>]` | the element inspector's record: selector, rect, text, HTML, accessibility, styles, slots, React chain, ancestors, children |
-| `snapshot <css>`, `snapshot --window [--chrome]` | an element snapshot (element, page with it outlined, record) or the page; files under the app's log directory, images by content hash. WebKit's snapshot does not render `backdrop-filter`: a translucent, blurred surface (menus, popups) shows what is behind it sharply, as it never does on screen |
+| `snapshot <css>`, `snapshot --window [--chrome]` | an element snapshot (element, page with it outlined, record) or the page; files under the app's log directory, images by content hash (in a script, `--name <n>` names its copy under `run --shots`). WebKit's snapshot does not render `backdrop-filter`: a translucent, blurred surface (menus, popups) shows what is behind it sharply, as it never does on screen |
 | `window-info`, `app-log [--lines <n>]`, `quit` | the window's frame, screen and modes; the run log; quit (which removes the throwaway) |
 | `opened [--clear]` | URLs the app opened, or would have, outside itself: a hidden test build never opens a browser, a sign-in page or Preview, it records them |
 
@@ -657,7 +657,12 @@ feeds the lines up to `TAG` to the operation's `-`. Each step is reported on
 stderr as it finishes; the JSON report on stdout has the steps passed, the
 failing step (line, text, error, and the value it saw), every snapshot's
 files, and with `--values` each step's value; with several scripts, one
-report each under `scripts`. `--from <line>` (one script) skips the steps
+report each under `scripts`. `--shots <dir>` copies each snapshot into
+`<dir>` as it is taken, `NN-<name>.png` in order (`snapshot … --name
+<name>`, else `<script>-<line>`), replacing the shots of an earlier run, and
+writes `<dir>/index.md` showing each under the step that took it: a UX flow
+to look through, or to compare after a change
+(recipes/screenshot-ux-flow.md has a worked example and the traps). `--from <line>` (one script) skips the steps
 above that line, and with them what their `let`s saved. Exit status 0, 1
 when a step failed, 2 when a script cannot be read (an unknown step, an
 unclosed quote or heredoc): every script is read whole before any runs.

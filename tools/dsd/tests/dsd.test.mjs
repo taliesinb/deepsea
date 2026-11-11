@@ -755,3 +755,22 @@ test('integration: every generator with a matching --check script runs, graph do
     rmSync(repo, { recursive: true, force: true }); rmSync(dirname(worktree), { recursive: true, force: true })
   }
 })
+
+test('drive run --shots: snapshots copied in order as NN-<name>.png, an index, old shots replaced', async () => {
+  const { shotBook, snapshotImage } = await import('../commands/drive.mjs')
+  const dir = join(root, 'shots')
+  const src = join(root, 'src.png')
+  writeFileSync(src, 'png')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, '07-stale.png'), 'old')
+  assert.equal(snapshotImage({ images: { element: { path: 'e' } }, files: { windowPng: 'w' } }), 'e')
+  assert.equal(snapshotImage({ image: { path: 'w' } }), 'w')
+  const book = shotBook(dir)
+  assert.equal(book.add({ image: { path: src } }, 'empty session', 'a.drive:3', 'snapshot --window'), join(dir, '01-empty-session.png'))
+  assert.equal(book.add({ images: { element: { path: src } } }, 'a-9', 'a.drive:9', "snapshot '.x'"), join(dir, '02-a-9.png'))
+  assert.equal(book.add({}, 'none', 'a.drive:10', 'snapshot'), undefined)
+  book.finish()
+  assert.deepEqual(readdirSync(dir).sort(), ['01-empty-session.png', '02-a-9.png', 'index.md'])
+  const { readFileSync } = await import('node:fs')
+  assert.match(readFileSync(join(dir, 'index.md'), 'utf8'), /## 01-empty-session\n\n`a\.drive:3` `snapshot --window`\n\n!\[01-empty-session\.png\]\(01-empty-session\.png\)/)
+})
