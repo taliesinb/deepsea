@@ -28,6 +28,7 @@ topic topic/request-image-max-dimension
 topic topic/fix-math-dollar
 topic topic/fix-hidden-sidebar-inert
 topic topic/fix-composer-caret
+topic topic/fix-thinking-spacing
 
 # DeepSea identity: default home ~/.deepsea/release
 topic topic/deepsea-home
