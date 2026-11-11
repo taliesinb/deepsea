@@ -1,0 +1,24 @@
+# A scripted turn: streamed text, reasoning, a tool call and its result, an expectation.
+create-session --title turns
+prompt - <<EOF
+{"cmd": "think", "text": "planning"}
+{"cmd": "say", "text": "two words", "chunks": 2}
+EOF
+expect summary.text = two words
+expect summary.turnEnd.kind != error
+
+# A tool call ends the response; the script continues once its result is in.
+prompt - <<EOF
+{"cmd": "tool", "name": "bash", "args": {"command": "echo scripted", "description": "echo"}}
+{"cmd": "expect", "contains": "scripted"}
+{"cmd": "say", "text": "saw it"}
+EOF
+expect summary.text = saw it
+expect summary.tools.0.name = bash
+
+# A failed expectation ends the turn with an error.
+try prompt - <<EOF
+{"cmd": "expect", "value": "tools.last.text", "equals": "never"}
+EOF
+expect-exit 3
+expect summary.turnEnd.error.code = SCRIPT_EXPECTATION

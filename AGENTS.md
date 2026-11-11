@@ -58,6 +58,7 @@ usage windows and prices, and the replies are scripts
 | involve providers (models, sign-in, billing, quotas, provider errors) | add `--simulated` (default accounts `standard`; `--accounts openrouter-low,anthropic-max-80,codex-plus-signed-out` for edge states; `dsd sim fixtures` lists them) |
 | run everything together | add `--source integration/base` (after `dsd topics integrate`) |
 | drive it | `dsd drive -v <id> prompt - \| command /x \| open-session \| wait-page \| click \| hover \| type \| eval \| snapshot --window \| opened \| restart-server` (a prompt with no session goes to the latest, or a new one; read the snapshot PNGs) |
+| rerun checks after each rebuild | a plugin: `plugins/<name>/tests/*.drive` (drive operations as lines, with `expect`, `let`, `try`), run by `dsd test plugins <name>`; a harness topic: its snapshot scenarios, run by `dsd test harness <topic> [<scenario>…] [--web]` (tools/dsd/README.md → Drive scripts, Testing a topic) |
 | find an option | `dsd <command> --help`; `--get <path>` prints one field of any command's JSON (`--get id`, `--get summary.text`) |
 | change a plugin's config in a throwaway | `--patch <file>` with a row `- id: <its row id>` and `config:` (it replaces that row's whole config) |
 | read its logs | `dsd logs <id> [server \| app \| relay \| plugin <name>] [--follow]` |

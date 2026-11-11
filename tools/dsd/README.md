@@ -292,6 +292,9 @@ taken over. Build logs: `~/Library/Logs/io.github.taliesinb.deepsea/builds/`.
 | `dsd builds [list \| make [<harness ref>]]` | list builds (harness and deepsea), or make a harness build (default: the pinned commit) |
 | `dsd link` | point this checkout's `harness` at the build of its pinned commit, building it if needed |
 | `dsd drive [-v <ref>] <op> …` | one operation on a running throwaway, as JSON (below) |
+| `dsd drive run <script \| dir>… [-v <ref>] [--from <line>] [--values]` | drive scripts (a directory: its `*.drive`), each in order to the first step that fails; a JSON report (below, Drive scripts) |
+| `dsd test plugins <name>… [--server \| --relay] [--keep] [--source <ref>] [--harness <ref>] [--simulated [--accounts <names>]] [--patch <file>,…] [--app <checkout \| ref>]` | a scripted throwaway with those plugins (the hidden app; `--server` none, `--relay` behind a relay), every `plugins/<name>/tests/*.drive` run in it, then stopped (`--keep` leaves it); exit 1 when a script failed (below, Testing a topic) |
+| `dsd test harness <topic \| base> [<scenario \| test file>…] [--web] [--refresh] [--build]` | the harness's recorded-session lanes in the topic's harness worktree, without the caller's `DSH_*` environment; `--refresh` lists the expected files it rewrote (below, Testing a topic) |
 | `dsd script <file.mjs> [-v <ref>]` | run a script: its default export gets `{ id, url, login, server(op, body), app(op, body), sleep }` and its return value is printed |
 | `dsd topics [list]` | both repositories' topics: parents, commits, what each requires, how far behind |
 | `dsd topics check` | merge in memory (no working tree touched): every pair of topics of each repository and each full integration; reports conflicts, missing harness topics, topic worktrees with uncommitted work (integrated as committed) |
@@ -585,6 +588,105 @@ The app's operations (apps/macos/README.md has the protocol):
 A throwaway started with `--throwaway-server` has no app; app operations
 fail with "has no app". Behind a relay, server operations follow the server
 across restarts (above).
+
+### Drive scripts
+
+A check made by hand with `dsd drive` after every rebuild can be kept as a
+file beside the topic's code and rerun: `dsd drive run <script>`. One
+operation per line, written as its `dsd drive` arguments, plus a few steps
+of the script's own:
+
+```sh
+# rewind: the cut keeps the steering closers
+create-session --title rewind
+let s sessionId                       # save a field of the last value
+prompt '{"cmd": "say", "text": "one"}'
+expect summary.text = one
+prompt - <<EOF                        # `-` reads the heredoc
+{"cmd": "say", "text": "two"}
+EOF
+open-session ${s}
+wait-page --text two
+eval - <<JS
+return document.querySelectorAll('[data-turn]').length
+JS
+expect = 2
+snapshot --window
+try prompt '{"cmd": "nope"}'          # an invalid script: the turn ends in an error
+expect-exit 3
+```
+
+| Step | Does |
+|---|---|
+| any `dsd drive` operation | as on the command line (no `-v`; `run` gives it); a prompt or wait that ends in an error or times out fails the step |
+| `expect [<path>] [= \| != \| ~ \| !~ <value>]` | a field of the last operation's value (`--get`'s dotted path; the whole value without one): present and not false or null; equal (the value read as JSON, else as text); matching a regular expression |
+| `let <name> [<path>]` | save a field of the last value; `${name}` in later words (not inside single quotes or heredocs) |
+| `try <operation …>` | run it without failing on its exit status; `expect-exit <n>` then checks it (3 a turn's error, 4 a timeout) |
+| `sleep <seconds>` | |
+
+Words are split as a shell splits them (quotes, backslashes, `#`
+comments, a trailing `\` continues the line); `<<TAG` at the end of a line
+feeds the lines up to `TAG` to the operation's `-`. Each step is reported on
+stderr as it finishes; the JSON report on stdout has the steps passed, the
+failing step (line, text, error, and the value it saw), every snapshot's
+files, and with `--values` each step's value; with several scripts, one
+report each under `scripts`. `--from <line>` (one script) skips the steps
+above that line, and with them what their `let`s saved. Exit status 0, 1
+when a step failed, 2 when a script cannot be read (an unknown step, an
+unclosed quote or heredoc): every script is read whole before any runs.
+Format and checks: lib/drive-script.mjs. Each script starts its own
+session (`create-session`); scripts run one after another in the same
+throwaway.
+
+## Testing a topic
+
+Where a topic's repeatable checks live follows where its change lives.
+
+**A plugin (this repository).** Its drive scripts are
+`plugins/<name>/tests/*.drive`, beside its `node:test` files (which `pnpm
+test` runs; the scripts need a running throwaway). After each change:
+
+```sh
+dsd test plugins <name>[,<other>…]      # start, run every script, stop
+dsd test plugins <name> --keep           # leave it running to look (dsd drive -v <id> …)
+dsd drive -v <id> run plugins/<name>/tests/rewind.drive --from 12   # one script again, from a line
+```
+
+The throwaway is the hidden app with `--scripted` and the plugins named
+(`--server` without the app, `--relay` behind a relay for scripts that
+use `restart-server`); `run`'s `--source`, `--harness`, `--simulated`,
+`--accounts`, `--patch` and `--app` pass through. A script failing stops
+that script, not the others. plugins/llm-scripted/tests and
+plugins/dev-test-driver/tests have examples.
+
+**A harness topic.** The harness requires a keyless recorded-session
+snapshot for every user- or model-visible change (its AGENTS.md;
+snapshots/AGENTS.md has the rules: a shipped profile, no DeepSea plugins,
+no scenario driver), so a harness topic's checks are written there, in the
+harness's own format, and become the evidence its upstream PR needs.
+`dsd test harness` runs them in the topic's worktree
+(`<worktrees>/harness-<topic>`, LAYOUT.md §2):
+
+```sh
+dsd test harness rewind                          # the snapshot lane (snapshots/session, sdk, acp)
+dsd test harness rewind --web                    # the whole browser lane (slow: minutes)
+dsd test harness rewind rewind-cut approval-composer   # those scenarios, in whichever lanes have them
+dsd test harness rewind rewind-cut --refresh     # rewrite their expected output from the committed input
+```
+
+A scenario is a directory under the harness's `snapshots/`: in
+`session`, `sdk` or `acp` it runs in the snapshot lane, filtered to its
+name; in `web`, the test files in `apps/web/tests` that name
+`snapshots/web/<scenario>` run in the browser lane (headless Chromium, so
+none of a hidden app's focus or hover limits apply). A path to a test file
+runs as it is. The caller's `DSH_*` variables (an agent's shell inside a
+variant has `DSH_HOME`, `DSH_PROFILE`, …) are left out, as for a
+throwaway. The browser lane serves the worktree's built web app: a missing
+build is made, a build older than the last commit is reported, and
+`--build` rebuilds. `--refresh` sets `DSH_SNAPSHOT=refresh` and lists, under
+`changed`, the files it wrote, for review before a commit. Recording with a
+real model (`pnpm run test:snapshot:record`) needs a key, so it stays with
+the person.
 
 ## Implementation order
 

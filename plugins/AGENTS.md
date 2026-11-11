@@ -236,6 +236,12 @@ a missing required service makes the preset unusable.
   (`/reboot`, `/restore`, a cold start), use `--throwaway`: the same app
   behind a relay, as an installed variant runs; `dsd logs <id> server
   --follow` shows each start.
+- Keep the checks you make by hand as drive scripts,
+  `plugins/<name>/tests/*.drive` (tools/dsd/README.md → Drive scripts), and
+  rerun them after each change with `dsd test plugins <name>` (a throwaway
+  started, every script run, stopped). A change to the harness itself is
+  checked in the harness's own snapshot lanes instead: `dsd test harness
+  <topic>` (tools/dsd/README.md → Testing a topic).
 - Anything that touches model providers (routes, the model picker, sign-in,
   keys, billing, quotas, errors from a provider) is tested with
   `--simulated` (tools/provider-sim/README.md): every provider is replaced

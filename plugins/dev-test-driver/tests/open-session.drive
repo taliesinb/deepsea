@@ -1,0 +1,11 @@
+# The browser half: open-session shows a session the driver made, and the page renders its turn.
+create-session --title shown
+let s sessionId
+prompt '{"cmd": "say", "text": "rendered reply"}'
+open-session ${s}
+wait-page --text "rendered reply"
+eval - <<JS
+return document.title
+JS
+expect ~ .
+snapshot --window

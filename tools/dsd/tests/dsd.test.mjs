@@ -648,3 +648,75 @@ test('duplicateNatives: a plugin\'s own copy of a native package the harness als
   ])
   assert.deepEqual(duplicateNatives(join(dir, 'harness'), join(dir, 'nowhere')), [])
 })
+
+test('drive scripts: shell words, heredocs, continuation, ${name} outside single quotes', async () => {
+  const { parseDriveScript, render } = await import('../lib/drive-script.mjs')
+  const steps = parseDriveScript([
+    '# a comment',
+    '',
+    `prompt '{"cmd": "say", "text": "a b"}'   # trailing`,
+    'click --text "Allow once" \\',
+    '  .dialog',
+    'eval - <<JS',
+    '  return `${x}`',
+    'JS',
+    `type "\${who} \\$x" '\${who}'`,
+  ].join('\n'))
+  const words = (s, vars = {}) => s.words.map(w => render(w, vars, s.line))
+  assert.deepEqual(steps.map(s => s.line), [3, 4, 6, 9])
+  assert.deepEqual(words(steps[0]), ['prompt', '{"cmd": "say", "text": "a b"}'])
+  assert.deepEqual(words(steps[1]), ['click', '--text', 'Allow once', '.dialog'])
+  assert.deepEqual(words(steps[2]), ['eval', '-'])
+  assert.equal(steps[2].input, '  return `${x}`')
+  assert.deepEqual(words(steps[3], { who: 'me' }), ['type', 'me $x', '${who}'])
+  assert.throws(() => words(steps[3]), /\$\{who\} is not set/)
+  assert.throws(() => parseDriveScript('eval - <<JS\nreturn 1\n'), /line 1: no line JS ends the heredoc/)
+  assert.throws(() => parseDriveScript("prompt 'open"), /line 1: unclosed '/)
+})
+
+test('drive scripts: expect checks presence, equality as JSON or text, and patterns', async () => {
+  const { parseDriveScript, expectStep } = await import('../lib/drive-script.mjs')
+  const check = (line, value) => { const [s] = parseDriveScript(line); expectStep(s.words.slice(1), {}, value, s.line) }
+  const value = { summary: { text: 'two words', turnEnd: { kind: 'completed' } }, n: 2, items: [{ id: 'a' }] }
+  check('expect summary.text', value)
+  check('expect summary.text = two words', value)
+  check('expect n = 2', value)
+  check(`expect items.-1 = '{"id": "a"}'`, value)
+  check('expect = 2', 2)
+  check('expect summary.text ~ ^two', value)
+  check('expect summary.turnEnd.kind != error', value)
+  check("expect summary.text !~ 'three|four'", value)
+  assert.throws(() => check('expect missing', value), /missing is nothing/)
+  assert.throws(() => check('expect n = 3', value), /n is 2, expected 3/)
+  assert.throws(() => check('expect summary.text ~ ^words', value), /expected it to match/)
+  check("expect summary.text = 'two words'", value)
+  check("expect '=' = '='", { '=': '=' })
+})
+
+test('dsd test: plugin scripts by name; harness scenarios to lanes, files and a name pattern', async () => {
+  const { planLanes, pluginScripts } = await import('../commands/test.mjs')
+  const repo = join(root, 'repo')
+  for (const p of ['plugins/a/tests', 'plugins/b']) mkdirSync(join(repo, p), { recursive: true })
+  writeFileSync(join(repo, 'plugins/a/package.json'), '{}')
+  writeFileSync(join(repo, 'plugins/b/package.json'), '{}')
+  for (const f of ['z.drive', 'a.drive', 'a.test.mjs']) writeFileSync(join(repo, 'plugins/a/tests', f), '')
+  assert.deepEqual(pluginScripts('a', [repo]), [join(repo, 'plugins/a/tests/a.drive'), join(repo, 'plugins/a/tests/z.drive')])
+  assert.deepEqual(pluginScripts('b', [repo]), [])
+  assert.throws(() => pluginScripts('c', [repo]), /no plugin "c"/)
+
+  const h = join(root, 'harness')
+  for (const p of ['snapshots/session/both', 'snapshots/web/both', 'snapshots/sdk/sdk-one', 'snapshots/web/unused', 'apps/web/tests']) mkdirSync(join(h, p), { recursive: true })
+  writeFileSync(join(h, 'apps/web/tests/both.e2e.ts'), "const D = new URL('../../../snapshots/web/both', import.meta.url)\n")
+  writeFileSync(join(h, 'apps/web/tests/other.e2e.ts'), "const D = '../../../snapshots/web/both-not/session.jsonl'\n")
+  assert.deepEqual(planLanes(h, []), { snapshot: { files: [], pattern: undefined } })
+  assert.deepEqual(planLanes(h, [], { web: true }), { browser: { files: [] } })
+  const plan = planLanes(h, ['both', 'sdk-one'])
+  assert.deepEqual(plan.snapshot.files, ['snapshots/session/headless.snapshot.ts', 'snapshots/sdk/sdk.snapshot.ts'])
+  assert.deepEqual(plan.browser.files, ['apps/web/tests/both.e2e.ts'])
+  const pattern = new RegExp(plan.snapshot.pattern)
+  assert.ok(pattern.test('replays both through dsh'))
+  assert.ok(!pattern.test('replays both-more through dsh'))
+  assert.deepEqual(planLanes(h, ['apps/web/tests/other.e2e.ts']), { browser: { files: ['apps/web/tests/other.e2e.ts'] } })
+  assert.throws(() => planLanes(h, ['unused']), /used by no test/)
+  assert.throws(() => planLanes(h, ['nothing']), /no scenario nothing/)
+})

@@ -11,6 +11,7 @@ import { logs } from '../commands/logs.mjs'
 import { buildsCommand, gc, link, list, stop } from '../commands/manage.mjs'
 import { play, run } from '../commands/run.mjs'
 import { script } from '../commands/script.mjs'
+import { test } from '../commands/test.mjs'
 import { supervise } from '../commands/supervise.mjs'
 import { build, newVariant, remove } from '../commands/variant.mjs'
 import { sim } from '../commands/sim.mjs'
@@ -41,6 +42,9 @@ const HELP = `dsd — DeepSea developer CLI (tools/dsd/README.md)
   dsd link
   dsd drive [-v <ref>] <op> …   server: health create-session prompt command wait events cancel sessions invoke url
                                 app: load reload wait-page eval resize view appearance click type describe snapshot window-info app-log opened quit
+  dsd drive run <script | dir>… [-v <ref>] [--from <line>] [--values]   files of drive operations and checks
+  dsd test plugins <name>… [--server | --relay] [--keep] [run options]   a throwaway, their tests/*.drive, stopped
+  dsd test harness <topic | base> [<scenario>…] [--web] [--refresh] [--build]   the harness's snapshot lanes in its worktree
   dsd script <file.mjs> [-v <ref>]
   dsd worktree add <topic> [--from <ref>] | list | remove <topic>
   dsd topics [list] | check | integrate [--dry-run]
@@ -50,7 +54,7 @@ A <variant> reference is a full id, a unique part of a throwaway's hex, or
 nothing when exactly one of your throwaways is running.
 `
 
-const COMMANDS = { new: newVariant, client, build, remove, adopt: adoptCommand, sim, play, run, stop, list, logs, gc, builds: buildsCommand, link, drive, script, worktree, topics, check, __supervise: supervise }
+const COMMANDS = { new: newVariant, client, build, remove, adopt: adoptCommand, sim, play, run, stop, list, logs, gc, builds: buildsCommand, link, drive, script, test, worktree, topics, check, __supervise: supervise }
 
 /**
  * Warn when this dsd is run inside another checkout of the same repository:
