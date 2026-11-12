@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "title": "等待控制",
+    "description": "等待工具的进度条，可跳过或中止；智能体等待后台任务时，job_output 行中显示倒计时，可跳过。"
+  },
+  "card": {
+    "title": "等待",
+    "skip": "跳过",
+    "abort": "中止",
+    "progress": "{elapsed} / {total}",
+    "progress.aria": "等待进度",
+    "job.progress.aria": "后台任务等待进度",
+    "outcome.skipped": "已跳过",
+    "outcome.aborted": "已被用户中止",
+    "outcome.interrupted": "已中断",
+    "verdict.waited": "已等待 {duration}",
+    "verdict.done": "已完成",
+    "verdict.failed": "失败",
+    "verdict.after": "{outcome}（已等待 {waited}）",
+    "verdict.afterOf": "{outcome}（已等待 {waited} / {total}）",
+    "duration.s": "{s}秒",
+    "duration.m": "{m}分钟",
+    "duration.ms": "{m}分{s}秒",
+    "duration.h": "{h}小时",
+    "duration.hm": "{h}小时{m}分",
+    "duration.hms": "{h}小时{m}分{s}秒"
+  }
+}

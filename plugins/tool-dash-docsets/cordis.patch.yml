@@ -1,0 +1,9 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers dash_list_docsets, dash_search and dash_get_page. Defaults: launch
+# Dash in the background and turn its API server on when a tool needs them.
+# dsd moves this row into the agent presets that have tool-web and disables it
+# here (package.json deepsea.presets). Override `config` in the profile's patch
+# (a later layer replaces the whole value); dsd carries it into the presets.
+- insert:
+    - id: deepsea-tool-dash-docsets
+      name: "@deepsea/tool-dash-docsets"

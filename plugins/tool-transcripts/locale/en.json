@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Transcript sharing",
+    "description": "Lets other servers' transcript tools read this server's sessions."
+  }
+}
