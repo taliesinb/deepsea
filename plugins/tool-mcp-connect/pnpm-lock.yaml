@@ -1,0 +1,13 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@deepseek-ai/dsh-experimental-mcp-connect':
+        specifier: link:../../harness/packages/experimental/mcp-connect
+        version: link:../../harness/packages/experimental/mcp-connect
