@@ -56,6 +56,9 @@ topic topic/model-picker topic/llm-route-metadata
 # Tools: job_output waits a plugin can release (tool-wait's Skip)
 topic topic/job-wait-release
 
+# Tools: MCP servers connected to one session after approval (an opt-in bundle; plugins/tool-mcp-connect enables it)
+topic topic/mcp-connect
+
 # Files: a write check plugins can ask; new files with open()'s mode
 topic topic/fs-check-write
 topic topic/fs-new-file-mode
