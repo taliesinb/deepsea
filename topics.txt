@@ -46,6 +46,8 @@ topic topic/tool-row-disclosure
 # Embedding, sessions and workspaces
 topic topic/embed-session
 topic topic/session-relocation
+# Prompt rewind: edit, resend or delete an earlier prompt with everything after it
+topic topic/rewind topic/session-relocation
 topic topic/workspace-seats
 topic topic/command-session
 
