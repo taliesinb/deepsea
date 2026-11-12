@@ -6,8 +6,10 @@ calls, so an agent can create sessions, run prompts and commands, wait for
 turns and read what happened from a shell, without a browser and without
 decoding session logs. The browser half (`src/client/index.ts`): what only
 the page can do, on `window.__DEEPSEA_TEST_DRIVER__` for the app's
-automation channel; today `openSession(id)` (`dsd drive open-session`),
-the verb a sidebar row's click runs.
+automation channel: `openSession(id)` (`dsd drive open-session`), the verb
+a sidebar row's click runs, and `expand({ turn?, all?, collapse? })`
+(`dsd drive expand`), which clicks a Turn's completed-Turn control, process
+groups and tool rows open (or closed), in passes until nothing changes.
 
 `dsd run` loads it into every throwaway. Use it through `dsd drive`
 (tools/dsd/README.md); with `--scripted` every prompt is a script of the

@@ -24,8 +24,10 @@ throwaway's app is the real macOS app, hidden, with scripted model replies.
 
    ```sh
    # approval.drive: a tool call that needs the person's approval, asked and answered
+   wait-page --expression "return !!window.__DEEPSEA_TEST_DRIVER__" --timeout 90
    create-session --title approval
    let s sessionId
+   sleep 2
    open-session ${s}
    prompt --no-wait - <<EOF
    {"cmd": "tool", "name": "bash", "args": {"command": "echo hi > /tmp/approval-demo.txt", "description": "write outside", "sandbox_permissions": "danger-full-access", "justification": "the file lives outside the workspace"}}
@@ -36,8 +38,13 @@ throwaway's app is the real macOS app, hidden, with scripted model replies.
    click --text "Allow once"
    wait ${s} --timeout 30
    wait-page --text "wrote it"
+   expand
    snapshot --window --name approval-done
    ```
+
+   `expand` opens the finished Turn's work (its control, groups and tool
+   rows), which a completed Turn otherwise shows folded; a shot of the tool
+   call's input and output needs it.
 
 3. Run it, then look through `<dir>/index.md` (each shot under the step that
    took it) or the PNGs:
@@ -87,6 +94,28 @@ and stops it in one go.
   and `:focus-within` do not match, and controls shown only on hover need
   `hover` (script-revealed) or `eval` with `.click()`. `run --visible`
   shows the window when a flow depends on it.
+- **A fresh throwaway's page may not be ready**: the first `open-session`
+  fails with "the test driver's browser half is not loaded". Start the
+  script with `wait-page --expression "return !!window.__DEEPSEA_TEST_DRIVER__" --timeout 90`.
+- **`open-session` straight after `create-session`** can fail with
+  "sessions.retain: unknown session" while the page has not heard of the
+  blank session yet: put `sleep 2` between them.
+- **Tool calls are collapsed** under "Completed in …", then the group
+  ("Called tools", "Read files and searched code", …), then each "Tool call"
+  row. `expand` (the last Turn), `expand <turn>` or `expand --all` opens
+  them all, as clicks would; `expand --collapse` closes them. The tool list
+  then scrolls by itself, inside the chat's own scroller.
+  To show a later call, `scrollIntoView({ block: 'start' })` its row rather
+  than scrolling the page.
+- **`click` sends no modifier keys.** For an Option-click (or Shift, Cmd),
+  `eval` a dispatched event: `el.dispatchEvent(new MouseEvent('click', {
+  bubbles: true, altKey: true }))`, then wait a moment before the snapshot.
+- **`expect` values are words a shell would split**, so quotes are removed:
+  `expect = "true"` compares with the JSON `true`, not the string an
+  attribute returns. Match text with `expect ~ ^true$`.
+- **Harness plugins that are opt-in bundles** load in a throwaway through a
+  `--patch` file with an `insert:` row (`- insert: [{ id: <id>, name: '<package>' }]`).
+  `drive health` lists the loader rows that failed or are stuck.
 - **A wait-page that times out says what the page shows** (text, open
   dialogs): read it before guessing at selectors. `dsd drive -v <id>
   describe '<css>'` gives an element's record, and the harness's own web

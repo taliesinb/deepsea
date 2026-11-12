@@ -21,6 +21,8 @@
  * App (a throwaway started with --throwaway-app):
  *   load <url> | reload
  *   open-session <session>                show that session in the app (as a sidebar click would)
+ *   expand [<turn> | --all] [--collapse]  open (close) every disclosure of the shown session's last Turn,
+ *                                         one Turn, or all: the completed-Turn control, groups, rows
  *   wait-page [--selector <css>] [--text <t>] [--expression <js>] [--timeout <s>] [--settle <ms>]
  *   eval <js | ->                         a function body (await allowed); its JSON value
  *   resize <W>x<H> | view desktop|mobile | appearance light|dark|system
@@ -55,7 +57,7 @@ import { readState, resolveRef } from '../lib/variants.mjs'
 import { DsdError, note, onlyFlags, parseArgs, pick, printJson, sleep, usage } from '../lib/util.mjs'
 import { expectStep, parseDriveScript, render, STEPS } from '../lib/drive-script.mjs'
 
-const USAGE = 'dsd drive [-v <ref>] <op> …  script: run <file>; server: health create-session prompt command wait events cancel sessions restart-server invoke url; app: load reload open-session wait-page eval resize view appearance click hover type describe snapshot window-info app-log opened quit (tools/dsd/README.md)'
+const USAGE = 'dsd drive [-v <ref>] <op> …  script: run <file>; server: health create-session prompt command wait events cancel sessions restart-server invoke url; app: load reload open-session expand wait-page eval resize view appearance click hover type describe snapshot window-info app-log opened quit (tools/dsd/README.md)'
 const APP_OPS = new Set(['load', 'reload', 'wait-page', 'eval', 'resize', 'view', 'appearance', 'click', 'hover', 'type', 'describe', 'snapshot', 'window-info', 'app-log', 'opened', 'quit'])
 const LAST_SESSION = 'run/drive-last-session'
 
@@ -127,10 +129,10 @@ const seconds = (value, name) => {
 }
 
 const VALUED = ['variant', 'cwd', 'preset', 'model', 'title', 'timeout', 'since', 'types', 'limit', 'nth', 'clicks', 'x', 'y', 'key', 'selector', 'text', 'expression', 'settle', 'lines', 'from', 'shots', 'name']
-const BOOLEAN = ['no-wait', 'steer', 'window', 'chrome', 'clear', 'replace', 'values']
+const BOOLEAN = ['no-wait', 'steer', 'window', 'chrome', 'clear', 'replace', 'values', 'all', 'collapse']
 const SERVER_OPS = new Set(['health', 'create-session', 'prompt', 'command', 'wait', 'events', 'cancel', 'sessions', 'restart-server', 'invoke', 'url'])
 /** Every operation of `dsd drive` (and so of a drive script). */
-export const DRIVE_OPS = new Set([...SERVER_OPS, 'open-session', ...APP_OPS])
+export const DRIVE_OPS = new Set([...SERVER_OPS, 'open-session', 'expand', ...APP_OPS])
 
 /** One operation's words as parsed arguments; `-v <ref>` is short for `--variant <ref>`. */
 function driveArgs(argv) {
@@ -321,6 +323,13 @@ async function perform(variant, args, input) {
     return { value: await appOp(variant, 'eval', [`const driver = window.__DEEPSEA_TEST_DRIVER__
       if (!driver) throw new Error("the test driver's browser half is not loaded")
       return await driver.openSession(${JSON.stringify(sessionId)})`], {}, input) }
+  }
+  if (op === 'expand') {
+    if (rest.length > 1 || (rest.length === 1 && (args.all || !/^\d+$/.test(rest[0])))) usage('dsd drive expand [<turn> | --all] [--collapse]')
+    const options = { ...(rest.length === 1 ? { turn: Number(rest[0]) } : {}), all: Boolean(args.all), collapse: Boolean(args.collapse) }
+    return { value: await appOp(variant, 'eval', [`const driver = window.__DEEPSEA_TEST_DRIVER__
+      if (!driver?.expand) throw new Error("the test driver's browser half is not loaded, or predates expand")
+      return await driver.expand(${JSON.stringify(options)})`], {}, input) }
   }
   if (APP_OPS.has(op)) return { value: await appOp(variant, op, rest, args, input) }
   if (op === 'url') {

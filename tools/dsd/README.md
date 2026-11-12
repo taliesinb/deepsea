@@ -570,7 +570,7 @@ does not choose. Without `-v`, it drives the caller's one running throwaway.
 |---|---|
 | Server driver (plugins/dev-test-driver, loaded into every throwaway; done) | `health`, `create-session`, `prompt`, `wait`, `command`, `events`, `cancel`, `sessions`, `restart-server`, `invoke`, `url` |
 | App automation socket (`apps/macos`, throwaway apps only; done) | `load`, `reload`, `wait-page`, `eval`, `resize`, `view desktop\|mobile`, `appearance light\|dark\|system`, `click`, `hover`, `type` (real input events in the app's own window), `describe`, `snapshot` (element or page), `window-info`, `app-log`, `opened`, `quit` |
-| Page helpers (dev-test-driver plugin, browser half: `window.__DEEPSEA_TEST_DRIVER__`) | `open-session` (done); `new-session`, `archive`, `select-model`, `set-mode`, `last-card` when a topic needs them |
+| Page helpers (dev-test-driver plugin, browser half: `window.__DEEPSEA_TEST_DRIVER__`) | `open-session`, `expand` (done); `new-session`, `archive`, `select-model`, `set-mode`, `last-card` when a topic needs them |
 
 The server driver's operations:
 
@@ -601,6 +601,7 @@ The app's operations (apps/macos/README.md has the protocol):
 |---|---|
 | `load <url>`, `reload` | navigate; answers when the page has loaded. The URL may be outside the throwaway's server (a sign-in page, a proxy's token URL), and so may its redirects on the same origin until it has loaded; a link clicked afterwards is opened outside, as any other |
 | `open-session [<session>]` | show a session in the main view, as a click on its sidebar row would (the test driver's browser half), even one the sidebar does not list |
+| `expand [<turn> \| --all] [--collapse]` | open every disclosure of the shown session's last Turn (or that Turn, or every Turn), as clicks would: the completed-Turn control, its process groups, the tool rows; `--collapse` closes them. Answers the Turns and how many controls it clicked |
 | `wait-page [--selector <css>] [--text <t>] [--expression <js>] [--timeout <s>] [--settle <ms>]` | until a selector matches, the page shows the text, or the function body returns something truthy; a timeout reports what the page shows instead (URL, title, open dialogs and menus, the start of its text) |
 | `eval <js \| ->` | run a function body in the page (`await` allowed); its JSON value |
 | `resize <W>x<H>`, `view desktop\|mobile`, `appearance light\|dark\|system` | the window's content size, View ▸ Desktop / Mobile, the app's appearance |
@@ -743,7 +744,7 @@ dsd drive -v <id> run <script.drive>
    parallel.
 2. `apps/macos` builds, `run --throwaway-app`, the automation socket, the
    app operations of `drive`, `script` (done); the page helpers (dev-test-driver
-   browser half: `open-session` done, others when a topic needs them).
+   browser half: `open-session`, `expand` done, others when a topic needs them).
 3. Named variants: `new`, `build --install`, `run`, `stop`, `remove`;
    `run --throwaway` with the relay; `logs` (done).
 4. `topics check | integrate` and `run --source` from deepsea builds (done);
