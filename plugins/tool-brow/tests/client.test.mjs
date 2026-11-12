@@ -28,6 +28,11 @@ const primitives = {
       open ? React.createElement('div', { className: 'body' }, children) : null),
   StateDot: ({ state }) => React.createElement('i', { 'data-dot': state }),
   IconGlobeOutlineRegular: () => React.createElement('i', { 'data-icon': 'globe' }),
+  IconChevronDownOutlineRegular: () => React.createElement('i', { 'data-icon': 'down' }),
+  IconDownloadOutlineRegular: () => React.createElement('i', { 'data-icon': 'download' }),
+  IconShareOutlineRegular: () => React.createElement('i', { 'data-icon': 'share' }),
+  IconTrashOutlineRegular: () => React.createElement('i', { 'data-icon': 'trash' }),
+  Tooltip: ({ children }) => children,
 }
 const platform = {
   react: React,
@@ -110,14 +115,29 @@ test('apply registers one toolview per tool that can carry a screenshot, and the
   const ctx = {
     effect(run) { effects.push(run()) },
     slots: {
-      inject: (slot, cb) => { assert.equal(slot, 'tool.call.toolview'); cb() },
+      inject: (slot, cb) => { assert.ok(['tool.call.toolview', 'conversation.view'].includes(slot)); cb() },
       register: (spec, component) => { registered.push({ spec, component }); return () => {} },
     },
   }
-  mod.apply(ctx)
-  assert.deepEqual(registered.map(r => r.spec.key), ['browser_screenshot', 'browser_navigate', 'browser_eval', 'browser_act', 'browser_script'])
-  for (const r of registered) assert.equal(r.component, mod.BrowserRow)
-  assert.equal(typeof effects[0], 'function', 'a disposer, even with no window')
+  const savedDocument = globalThis.document
+  let removed = false
+  let stylesheet
+  globalThis.document = {
+    createElement: () => ({ dataset: {}, textContent: '', remove: () => { removed = true } }),
+    head: { appendChild: element => { stylesheet = element.textContent } },
+  }
+  try { mod.apply(ctx) } finally { globalThis.document = savedDocument }
+  assert.match(stylesheet, /\[data-conversation-content\]:has\(\[data-deepsea-browsers-view\]\) > \[data-width-handle\]\s*\{\s*display:\s*none/, 'transcript width handles cannot intercept the Browsers view')
+  const view = registered.find(r => r.spec.name === 'conversation.view')
+  assert.equal(view.spec.id, 'deepsea-browsers')
+  assert.equal(view.spec.label(), 'Browsers')
+  assert.deepEqual(view.spec.inject('session-1'), { browserSessionId: 'session-1' })
+  assert.match(renderToStaticMarkup(React.createElement(view.component, view.spec.inject('session-1'))), /data-deepsea-browsers-view/)
+  const toolviews = registered.filter(r => r.spec.name === 'tool.call.toolview')
+  assert.deepEqual(toolviews.map(r => r.spec.key), ['browser_screenshot', 'browser_navigate', 'browser_eval', 'browser_act', 'browser_script'])
+  for (const r of toolviews) assert.equal(r.component, mod.BrowserRow)
+  for (const dispose of effects) dispose()
+  assert.equal(removed, true, 'the view stylesheet is removed on unload')
 })
 
 test('a settled capture: the summary is window · target; open, the image (not JSON) and the result text', () => {
@@ -323,4 +343,26 @@ test('cooperation: a page outside the DeepSea app does nothing', async () => {
     assert.equal(app.listeners.size, 0)
     assert.equal(app.requests.length, 0)
   })
+})
+
+test('Browsers rows: headless placeholder, page details, accessible actions, and inert tombstones', () => {
+  const { mod } = loadBundle()
+  const page = { handle: 'chrome:1:2', backend: 'Chrome for Testing', title: 'Page title', url: 'https://example.com/', headless: true, visible: false, opened: 1, usage: { commands: 4, screenshots: 2, scripts: 1 } }
+  const row = data => renderToStaticMarkup(React.createElement(mod.BrowserPageRow, { page: data, sessionId: 'session-1', refresh: async () => {} }))
+  const headless = row(page)
+  assert.match(headless, /data-headless="true"/)
+  assert.match(headless, />Headless</)
+  assert.doesNotMatch(headless, /<img/)
+  assert.match(headless, /Chrome for Testing/)
+  assert.match(headless, /4 commands · 2 screenshots · 1 scripts/)
+  assert.match(headless, /aria-label="Show"/)
+  assert.match(headless, /aria-label="Open in browser"[^>]*href="https:\/\/example.com\/"/)
+  assert.match(headless, /aria-label="Download records"/)
+  assert.match(headless, /aria-label="Close"/)
+  const closed = row({ ...page, closedAt: 2 })
+  assert.match(closed, /data-closed="true"/)
+  assert.equal((closed.match(/disabled=""/g) ?? []).length, 3)
+  assert.match(closed, /aria-disabled="true"/)
+  assert.doesNotMatch(closed, /href=/)
+  assert.match(row({ ...page, visible: true }), /aria-label="Hide"/)
 })

@@ -43,6 +43,8 @@
  *    Anywhere else (a browser, a phone) it does nothing.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import { registerBrowsersView } from './browsers.tsx'
+export { PageRow as BrowserPageRow } from './browsers.tsx'
 // Type-only imports (erased at build time): SlotMap merges for
 // 'tool.call.toolview' and the session-scope standard props.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -472,6 +474,7 @@ export const name = 'deepsea-tool-brow'
 export const inject = ['slots']
 
 export function apply(ctx: Context): void {
+  registerBrowsersView(ctx)
   ctx.slots.inject('tool.call.toolview', () =>
     IMAGE_TOOLS.map(key => ctx.slots.register({ name: 'tool.call.toolview', key }, BrowserRow)))
   ctx.effect(() => startAppCooperation())

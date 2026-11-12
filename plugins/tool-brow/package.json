@@ -20,6 +20,7 @@
     "daemon-names.mjs",
     "link.mjs",
     "app-relay.mjs",
+    "browsers-view.mjs",
     "lib/client.js",
     "lib/client.js.map",
     "cordis.patch.yml",
@@ -56,7 +57,9 @@
     "@deepsea/logs": "link:../../packages/logs",
     "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths",
     "@deepseek-ai/dsh-tools": "link:../../harness/packages/core/tools",
-    "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery"
+    "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery",
+    "sharp": "link:../../harness/packages/attachment/attachment-local/node_modules/sharp",
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",

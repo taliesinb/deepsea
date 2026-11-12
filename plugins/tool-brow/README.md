@@ -407,3 +407,40 @@ path there. Restarting the daemon between prompts (`stop`, then `start` with
 result and, a minute later, the idle notice in the session's events. The app-window
 routes can be tried with curl after logging in with the throwaway's token
 URL (a report answers `{"ok":true}`, a poll waits 20 s).
+
+## Browsers view
+
+The Browsers tab uses the existing `conversation.view` slot beside Chat and Timeline/Trajectory; no harness change is needed. Rows are scoped to the displayed session. Each row has a viewport thumbnail and details panel of equal height, followed by hover/focus actions: Show/Hide, Open in browser, Download records, and Close on the right. Headless pages use a dotted placeholder instead of a screenshot. Controls remain keyboard-accessible; touch devices show actions without hovering. The composer and transcript-width drag handles are hidden while this tab is selected; Chat restores them.
+
+Only a mounted view polls metadata (every two seconds); hidden browser tabs pause requests. IntersectionObserver defers thumbnail requests until a row is near the viewport. Thumbnails refresh every 30 seconds, and sooner when page revisions change after navigation/new-page events. Closed rows are dimmed and disabled, disappear after 30 seconds, and retain fallback data for ten minutes. Open in browser opens the URL externally, not the agent's cookie/session context.
+
+### Server API and isolation
+
+The global row registers these authenticated Fetch routes. All request bodies are buffered; mutations require JSON.
+
+| Method and path under `/api/deepsea-tool-brow` | Response/action |
+|---|---|
+| `GET /pages?sessionId=…` | `{ pages: [{ handle, backend, title, url, opened, headless, visible, closedAt?, revision, usage }], refreshMs: 30000 }` |
+| `GET /thumbnail?sessionId=…&handle=…&revision=…&width=…&height=…` | Viewport image fitted inside the physical-pixel target box |
+| `POST /page-action` | `{ sessionId, handle, action: "show" \| "hide" \| "close" }` |
+| `POST /page-records` | `{ sessionId, handle }`; ZIP attachment |
+
+`sessionId` is persisted `agent.session.header.id`, not `agent.id` (the daemon session key). Only entries in this plugin's agent map with that exact header id are considered. Every native list, history, capture and control request includes its daemon session key; no daemon-wide session/status listing is returned. Requests do not start a stopped daemon, create sessions, or resolve browser aliases. A chat with no browser use has an empty list. These routes rely on the harness's existing authentication and session access policy.
+
+The plugin subscribes to `window.watch { sessions: [own keys] }` on connection, opening and disposal; `window.event` changes invalidate revisions. Older daemons without watch still work by polling. Live title/URL probes happen at most once per 30 seconds per daemon session; intermediate native lists use `pages: false`. Native `window.show`, `window.park` and `window.close` implement controls. Headless Show uses Brow's observation-only screencast viewer when available. Safari Hide needs the daemon's parking configuration/permissions; unavailable controls surface native errors.
+
+### Retina thumbnails
+
+ResizeObserver measures each preview box, whose height follows its details panel. The rounded border follows the aspect-preserving image itself, not the wider layout box, so unused space has no gray frame or bars. The client requests that CSS box multiplied by `devicePixelRatio`, rounded up and bounded to 2048 pixels per dimension. Thus a preview displayed at approximately 286×179 CSS pixels needs approximately 573×358 image pixels on a 2× Retina display. A fixed 320-image-pixel cap would blur that preview. The requested target takes priority over the approximate 1/32-area bandwidth preference.
+
+The server prefers `window.thumbnail { session, handle, width, height }`, using native source-scaled captures when supported. Native previews are not model tool calls. Only method-not-found falls back to a full Brow screenshot resized server-side with the harness's shared Sharp instance (JPEG quality 82). Other native errors surface rather than silently changing capture paths. No-dimension legacy clients retain an approximately 1/32-source-area fallback with a 320-pixel longest-side cap. Image aspect ratio is preserved and images are never upscaled. Cache entries include page revision and physical target size, with eight size variants per page revision; in-flight identical requests are shared.
+
+### Records download
+
+Archives are named `<timestamp>.<session-name>.page-records.zip`. The preferred native `window.records { session, handle }` returns versioned artifacts; the plugin validates ownership, safe relative paths, encodings, total size and duplicate names, merges the displayed details into `page.json`, and creates the ZIP asynchronously. Native source/capture and retention details remain in `manifest.json` and `page.json`.
+
+The intended contents are `page.html` (original downloaded response, when the backend can retain it), `page.md` (Brow markdown reader), `page.png` (full viewport PNG, not a full scrolling-page capture), `page.json` (details and capture metadata), `tool-calls.jsonl`, matching `tool-results.json`, and every retained original screenshot under `screenshots/`. Unsupported or unavailable source artifacts are explicitly identified; no refetch or DOM serialization is presented as originally downloaded HTML. The captures are sequential, not an atomic page snapshot. Archives can contain sensitive arguments and private page content.
+
+On older daemons, only method-not-found activates the legacy fallback. That fallback's `page.html` is explicitly marked current serialized DOM, not original response HTML. Its tool calls/results/screenshots are observed in this plugin process only (including UI captures), bounded to 200 calls/64 MiB per page and 128 MiB globally; they disappear on process restart. `command-history.json` supplements them with native bounded command summaries, not missing raw results. Calls by other clients and individual tools inside `browser_script` cannot be reconstructed in this fallback. Missing captures get named `.unavailable.txt` artifacts and error metadata. The fallback manifest identifies its source and truncation.
+
+Downloads use `application/zip` and an attachment filename. There is no portable HTTP header requesting automatic extraction; that remains a browser/OS preference.
