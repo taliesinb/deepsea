@@ -40,6 +40,8 @@ topic topic/modal-width
 topic topic/input-triggers
 topic topic/command-claim-decoration
 topic topic/title-slug
+topic topic/approval-reason-lines
+topic topic/tool-row-disclosure
 
 # Embedding, sessions and workspaces
 topic topic/embed-session
