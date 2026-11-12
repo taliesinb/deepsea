@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Prompt excision",
+    "description": "Removes chosen paragraphs from the system prompt sent to selected providers."
+  }
+}

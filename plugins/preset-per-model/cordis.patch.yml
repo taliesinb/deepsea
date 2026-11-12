@@ -1,0 +1,16 @@
+# Bundle patch, used when the package is installed into a profile.
+# Binds tiny local models to tiny compositions: Apple Foundation on-device to
+# minimal-no-tools (a preset of @deepsea/preset-chat-only), LM Studio models to
+# the shipped minimal. Any other model leaves the session's preset alone, except
+# that it undoes a switch this plugin made. A profile override of `config`
+# replaces the whole value; `trace: true` writes a decision trace to the
+# variant's log directory.
+- insert:
+    - id: deepsea-preset-per-model
+      name: "@deepsea/preset-per-model"
+      config:
+        rules:
+          - provider: apple
+            preset: minimal-no-tools
+          - provider: lmstudio
+            preset: minimal
