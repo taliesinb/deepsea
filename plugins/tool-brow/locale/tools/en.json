@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Brow tools",
+    "description": "Gives agents their own browser windows (Safari or Chrome) from the brow daemon to browse, read pages, act on them and take screenshots."
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "name": "@deepsea/tool-brow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: per-chat browser windows for agents from the standalone brow daemon \u2014 a thin client of its Unix socket that registers the daemon's browser_* tools, maps each agent to a daemon session, shows screenshots inline, passes idle notices to the agent and relays the DeepSea app's window for Safari parking.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./tools": "./tools-row.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./tools/locale/*.json": "./locale/tools/*.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "tools-row.js",
+    "daemon-client.mjs",
+    "daemon-names.mjs",
+    "link.mjs",
+    "app-relay.mjs",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "README.md",
+    "locale/*.json",
+    "locale/tools/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "deepsea": {
+    "presets": {
+      "joinWith": [
+        "@deepseek-ai/dsh-tool-web"
+      ],
+      "module": "@deepsea/tool-brow/tools"
+    },
+    "machineWide": "the brow daemon of this macOS user (Safari Technology Preview and Chrome for Testing windows): connects to it, starts it when none runs, and relays the DeepSea app's window to it for Safari parking"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --check tools-row.js && node --test tests/*.test.mjs",
+    "prepare": "node build.mjs"
+  },
+  "dependencies": {
+    "@deepsea/logs": "link:../../packages/logs",
+    "@deepseek-ai/dsh-home-paths": "link:../../harness/packages/util/home-paths",
+    "@deepseek-ai/dsh-tools": "link:../../harness/packages/core/tools",
+    "@deepseek-ai/schemastery": "link:../../harness/vendor/schemastery"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../harness/vendor/cordis",
+    "@deepseek-ai/dsh-client-ui-chat": "link:../../harness/packages/client/ui-chat",
+    "@deepseek-ai/dsh-client-ui-conversation": "link:../../harness/packages/client/ui-conversation",
+    "@deepseek-ai/dsh-client-ui-primitives": "link:../../harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../harness/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-session": "link:../../harness/packages/client/ui-session",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../harness/packages/client/ui-slots",
+    "@deepseek-ai/dsh-client-ui-tool": "link:../../harness/packages/client/ui-tool",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.7",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Brow",
+    "description": "Connects to the brow daemon, which runs the Safari Technology Preview and Chrome for Testing windows behind the browser tools, and starts it when none is running."
+  }
+}
