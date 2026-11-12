@@ -113,6 +113,10 @@ Both this repository and the harness fork are kept as **topic branches**:
 - **Only `topic/base` touches shared files and the harness pin.** Plugin
   topics add their own directories; registries that list plugins or recipes
   are derived by scanning, not edited by hand, so topics do not conflict.
+- **A plugin missing from the main checkout's `plugins/`** lives on the
+  topic branch that adds it, not yet on `topic/base`: find it with
+  `for b in $(git for-each-ref --format='%(refname:short)' 'refs/heads/topic/*'); do git cat-file -e "$b:plugins/<name>/package.json" 2>/dev/null && echo $b; done`
+  and edit it in that topic's worktree (LAYOUT.md §2).
 - **The main checkout stays on `topic/base`**, in both repositories (this
   one, and the harness repository `harness.lock` names). Base changes are
   made there. Integration branches are only built (`dsd topics integrate`)
