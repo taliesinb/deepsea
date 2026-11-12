@@ -29,6 +29,7 @@
   },
   "deepsea": {
     "machineWide": "Dash: launches it when it is not running and turns on its API server setting",
+    "optIn": "needs Dash, a licensed macOS app most machines lack",
     "presets": {
       "joinWith": [
         "@deepseek-ai/dsh-tool-web"

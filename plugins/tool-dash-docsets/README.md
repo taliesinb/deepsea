@@ -49,9 +49,9 @@ Node (`dash.mjs`):
   1.7 s); when the API server is off it is enabled with `defaults write
   <domain> DHAPIServerEnabled -bool YES` (Dash picks it up live, about
   100 ms). Both are configurable (`autoLaunch`, `autoEnableApi`). Nothing is
-  contacted until a tool is called. Because it acts on Dash, the plugin is
-  machine-wide: `dsd run … --plugins all` leaves it out of throwaways; name
-  it to include it.
+  contacted until a tool is called. Because it needs Dash, the plugin is
+  opt-in (plugins/AGENTS.md): `plugins: all` leaves it out of every variant,
+  named or throwaway; a variant has it only when its plugin list names it.
 
 Search semantics (measured on Dash 8.1.1): `/search` matches **symbol and
 section names** fuzzily. Body-text hits appear as type `Full-Text Search` for
