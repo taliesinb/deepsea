@@ -124,9 +124,24 @@ build: 2cb0966d55                # written by build --install: the commit instal
 
 `plugins: all` on a named variant means every plugin of its build,
 machine-wide ones included, `llm-scripted` too (its `scripted` model is
-there to pick, never the default), except the test-only `dev-test-driver`;
+there to pick, never the default), except opt-in plugins (plugins/AGENTS.md;
+name them in the list to have them) and the test-only `dev-test-driver`;
 `host-server-log` is always first. A plugin renamed since
 the list was written answers to its old name (below, Renamed plugins).
+
+There is no file listing the plugins a new variant gets: `dsd new` writes
+`plugins: all`, and each build works the list out again from the plugin
+directories of its source build (`variantPlugins`, commands/variant.mjs;
+`selectPlugins`, lib/plugins.mjs). `dsd build <v>` without `--install`
+prints it (`plugins`). So:
+
+- a plugin left out of `all`, and so off for new variants, declares itself
+  opt-in in its package.json (plugins/AGENTS.md → On by default or not);
+- a variant whose `plugins` is a list is unaffected by either change:
+  it has exactly what it names;
+- the change reaches a variant only through a build that has it: a
+  variant built from `integration/base` waits for `dsd topics integrate`,
+  and the flag sits on the plugin's own topic branch.
 
 **Thin clients** (`dsd client`, macOS) are named variants with no server
 here: the DeepSea app for a server elsewhere (another Mac, a Linux server).
@@ -180,7 +195,7 @@ profile's `@deepsea/*` packages; anything else installed there stays. A
 plugin never installed or built is installed and built first; one that
 installed its own copy of a native package the harness also ships is
 warned about (both would load into the server; plugins/AGENTS.md). `all` leaves
-machine-wide plugins (plugins/AGENTS.md) out; naming one includes it. A
+machine-wide and opt-in plugins (plugins/AGENTS.md) out; naming one includes it. A
 name not found in the source build or this checkout is looked up in the
 **extras**, the private repository of plugins not published with this one
 (`<main checkout>-extras`, or `DEEPSEA_EXTRAS`; LAYOUT.md §3), and `all`

@@ -143,6 +143,24 @@ copies identical.
   `dsd run … --plugins all` leaves such plugins out of throwaway variants
   (naming one includes it), so a throwaway never acts on a resource a real
   variant is using.
+- **Opt-in plugins.** A plugin most variants should not have unless asked
+  for (it needs a program many machines lack, say) declares why in
+  package.json: `"deepsea": { "optIn": "<why>" }`. `plugins: all` leaves it
+  out of every variant, named or throwaway; a variant has it only when its
+  plugin list names it.
+
+### On by default or not
+
+Three different things, often all called "disabled by default":
+
+| Want | Do | Effect |
+|---|---|---|
+| not installed unless asked for | `"deepsea": { "optIn": "<why>" }` in package.json | `plugins: all` leaves it out of every variant; a variant's plugin list naming it brings it in |
+| kept out of throwaways only | `"deepsea": { "machineWide": "<what it controls>" }` | throwaways' `all` leaves it out; named variants' `all` has it |
+| installed but switched off | `disabled: true` on its row in cordis.patch.yml | Settings lists it under Global plugins, off; switching it on there needs no rebuild. A row its bundle disables joins no preset (lib/presets.mjs), even if it declares `deepsea.presets` |
+
+There is no other list of default plugins: `all` is every plugin directory
+of the build, less the rows above (tools/dsd/README.md → Variants).
 - Fetch routes (`ctx.connection.fetch.register`) sit behind DSH's own
   authentication; a state-changing route takes POST with a JSON body so a
   cross-site form cannot reach it without a CORS preflight.

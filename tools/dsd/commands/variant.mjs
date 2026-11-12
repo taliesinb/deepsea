@@ -122,7 +122,8 @@ export async function createVariant(id, { source = 'integration/base', color, pl
 
 /**
  * The plugins a named variant loads, from its build: its list, or all of them (machine-wide ones too:
- * the rule that leaves those out is for throwaways) except the test-only one (dev-test-driver). host-server-log comes first.
+ * the rule that leaves those out is for throwaways) except opt-in ones (package.json deepsea.optIn)
+ * and the test-only one (dev-test-driver). host-server-log comes first.
  */
 function variantPlugins(config, dir) {
   const value = config.plugins ?? 'all'

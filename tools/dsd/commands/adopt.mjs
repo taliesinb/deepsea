@@ -96,10 +96,10 @@ export async function adoptCommand(argv) {
     const named = sourceConfig?.id ?? /^\.dsh-([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(basename(source))?.[1]
     const parent = named && !/-[0-9a-f]{6}$/.test(named) ? named : 'release'
     if (dryRun) {
-      // As the run would select them: every plugin but the machine-wide ones, unless --plugins names some.
+      // As the run would select them: every plugin but the machine-wide and opt-in ones, unless --plugins names some.
       const all = availablePlugins(pluginRoots(args.source))
       const named = typeof args.plugins === 'string' && args.plugins !== 'all' ? args.plugins.split(',').map(currentName) : undefined
-      const plugins = new Map([...all].filter(([name, p]) => (named ? named.includes(name) : !p.machineWide)))
+      const plugins = new Map([...all].filter(([name, p]) => (named ? named.includes(name) : !p.machineWide && !p.optIn)))
       printJson(adopt({ source, target: join(tmpdir(), `deepsea-adopt-dry-run-${process.pid}`), throwaway: true, dryRun, plugins, map }))
       return
     }

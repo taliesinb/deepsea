@@ -878,8 +878,13 @@ export function availablePlugins(roots) {
       const rows = [...patch.matchAll(/^\s*-\s+id:\s*['"]?([\w-]+)['"]?\s*$/gm)].map(x => x[1])
       const presets = [...patch.matchAll(/name:\s*['"]?@deepseek-ai\/dsh-agent-preset['"]?\s*\n\s*config:\s*\n\s*id:\s*['"]?([\w-]+)/g)].map(x => x[1])
       let machineWide = false
-      try { machineWide = Boolean(JSON.parse(atCommit ? show(`plugins/${name}/package.json`) : readFileSync(join(dir, 'package.json'), 'utf8')).deepsea?.machineWide) } catch { /* unreadable */ }
-      out.set(currentName(name), { dir, rows: rows.filter(r => r === `deepsea-${name}`).concat(rows.filter(r => r !== `deepsea-${name}`)), presets, machineWide })
+      let optIn = false
+      try {
+        const deepsea = JSON.parse(atCommit ? show(`plugins/${name}/package.json`) : readFileSync(join(dir, 'package.json'), 'utf8')).deepsea
+        machineWide = Boolean(deepsea?.machineWide)
+        optIn = Boolean(deepsea?.optIn)
+      } catch { /* unreadable */ }
+      out.set(currentName(name), { dir, rows: rows.filter(r => r === `deepsea-${name}`).concat(rows.filter(r => r !== `deepsea-${name}`)), presets, machineWide, optIn })
     }
   }
   return out

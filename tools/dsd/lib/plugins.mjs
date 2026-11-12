@@ -26,6 +26,7 @@ function describe(name, root = REPO) {
     entry: join(dir, pkg.main ?? 'index.js'),
     client: pkg.dsh?.client !== undefined,
     machineWide: pkg.deepsea?.machineWide,
+    optIn: pkg.deepsea?.optIn,
   }
 }
 
@@ -39,8 +40,9 @@ export function allPlugins(root = REPO) {
 }
 
 /**
- * The plugins a `--plugins` value selects: names, or `all` (which, for a
- * throwaway, leaves machine-wide plugins out; naming one includes it).
+ * The plugins a `--plugins` value selects: names, or `all` (which leaves
+ * opt-in plugins out and, for a throwaway, machine-wide ones too; naming
+ * one includes it).
  */
 export function selectPlugins(value, root = REPO, { machineWide = false } = {}) {
   if (value === undefined || value === true) return []
@@ -60,7 +62,10 @@ export function selectPlugins(value, root = REPO, { machineWide = false } = {}) 
   }
   if (value === 'all') {
     const more = [...(root === REPO ? [] : allPlugins(REPO).filter(own)), ...allPlugins(extras).filter(extra)]
-    const picked = [...allPlugins(root).map(name => describe(name, root)), ...more.map(from)]
+    const every = [...allPlugins(root).map(name => describe(name, root)), ...more.map(from)]
+    const optIn = every.filter(p => p.optIn)
+    if (optIn.length) note(`leaving out opt-in plugins (name them to include): ${optIn.map(p => `${p.name} (${p.optIn})`).join(', ')}`)
+    const picked = every.filter(p => !p.optIn)
     if (machineWide) return picked
     const skipped = picked.filter(p => p.machineWide)
     if (skipped.length) note(`leaving out machine-wide plugins (name them to include): ${skipped.map(p => `${p.name} (${p.machineWide})`).join(', ')}`)
