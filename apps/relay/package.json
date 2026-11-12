@@ -1,0 +1,12 @@
+{
+  "name": "@deepsea/relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea: the relay every installed variant runs; starts dsh web on the first connection.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "deepsea-relay": "./relay.mjs" },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  }
+}
