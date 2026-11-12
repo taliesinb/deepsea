@@ -2,8 +2,9 @@
  * @deepsea/ui-session-reference-picker: browser half.
  *
  * `%` in the composer opens a picker of ordinary sessions only, named
- * `workspace/session`, newest activity first; picking one inserts the same
- * session-reference chip the built-in `@` picker inserts. It is one input
+ * `workspace/session`, the current one (also `%this`) first, then newest
+ * activity first; picking one inserts the same session-reference chip the
+ * built-in `@` picker inserts (the current one: a chip of plain text). It is one input
  * trigger source (`ctx.inputTriggers.registerSource`) on `%`, which the
  * harness topic `input-triggers` makes possible (stock triggers are `/` and
  * `@` only); rows dim the `/` through its `labelSegments`.
@@ -14,7 +15,10 @@ import type { IWorkspaces } from '@deepseek-ai/dsh-api-workspace-controller/clie
 import type {
   ClientSessionContext, InputTriggerServiceContract, InputTriggerSource,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { filterSessionPickerItems, relativeSessionAge, sessionLabelSegments, sessionPickerItems } from './catalog.ts'
+import {
+  currentSessionPickerItem, filterSessionPickerItems, relativeSessionAge, sessionLabelSegments, sessionPickerItems,
+  THIS_SESSION, thisSessionText,
+} from './catalog.ts'
 import { formatSessionReferenceMention } from './mention.ts'
 
 /** The trigger character. */
@@ -39,23 +43,42 @@ export function apply(ctx: Context): void {
     showGroupTitle: false,
     candidates(session: ClientSessionContext, { query, signal }) {
       if (signal.aborted) return Promise.resolve([])
-      const catalog = sessionPickerItems(
-        sessions.list.getSnapshot(),
-        workspaces.list.getSnapshot(),
-        session.sessionId,
-      )
+      const sessionList = sessions.list.getSnapshot()
+      const workspaceList = workspaces.list.getSnapshot()
+      const catalog = sessionPickerItems(sessionList, workspaceList, session.sessionId)
+      const current = currentSessionPickerItem(sessionList, workspaceList, session.sessionId, query)
       const now = Date.now()
-      return Promise.resolve(filterSessionPickerItems(catalog, query).map(item => ({
+      // The current session comes first; picking it inserts plain text
+      // (thisSessionText), since the server refuses a self-reference.
+      const currentRow = current === undefined ? [] : [{
+        name: current.qualifiedName,
+        labelSegments: sessionLabelSegments(current.workspaceName, current.sessionName),
+        description: THIS_SESSION,
+        icon: 'session' as const,
+        value: JSON.stringify({ sessionId: current.sessionId, label: current.qualifiedName, text: thisSessionText(current) }),
+      }]
+      return Promise.resolve([...currentRow, ...filterSessionPickerItems(catalog, query).map(item => ({
         name: item.qualifiedName,
         labelSegments: sessionLabelSegments(item.workspaceName, item.sessionName),
         description: relativeSessionAge(item.updatedAt, now),
         icon: 'session' as const,
         value: JSON.stringify({ sessionId: item.sessionId, label: item.qualifiedName }),
-      })))
+      }))])
     },
     onPick({ candidate }) {
       const value = parseValue(candidate.value)
       if (value === undefined) return undefined
+      if (value.text !== undefined) {
+        return {
+          insert: {
+            source: SOURCE_NAME,
+            ref: value.text,
+            label: value.label,
+            appearance: 'session',
+            clipboardText: value.text,
+          },
+        }
+      }
       // The chip's text is the canonical mention, which is also what is
       // sent: the server's session-reference resolver reads the session id
       // from its URI; the label is only for reading.
@@ -78,14 +101,14 @@ export function apply(ctx: Context): void {
   ctx.effect(() => inputTriggers.registerSource(source), 'ui-session-reference-picker: % source')
 }
 
-function parseValue(value: string | undefined): { sessionId: string; label: string } | undefined {
+function parseValue(value: string | undefined): { sessionId: string; label: string; text?: string } | undefined {
   if (value === undefined) return undefined
   try {
     const parsed: unknown = JSON.parse(value)
     if (typeof parsed !== 'object' || parsed === null) return undefined
     const record = parsed as Record<string, unknown>
     return typeof record.sessionId === 'string' && typeof record.label === 'string'
-      ? { sessionId: record.sessionId, label: record.label }
+      ? { sessionId: record.sessionId, label: record.label, ...typeof record.text === 'string' ? { text: record.text } : {} }
       : undefined
   } catch {
     return undefined

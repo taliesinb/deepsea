@@ -35,15 +35,34 @@ test('registers one % source whose chips it owns', async () => {
   assert.equal(source.trigger, TRIGGER)
   assert.equal(source.name, SOURCE_NAME)
   const candidates = await source.candidates({ sessionId: 's-current' }, { query: '', signal: new AbortController().signal })
-  assert.deepEqual(candidates.map((c: { name: string }) => c.name), ['widgets/Other'])
-  assert.deepEqual(candidates[0].labelSegments, [{ text: 'widgets' }, { text: ' / ', dim: true }, { text: 'Other' }])
-  const outcome = source.onPick({ candidate: candidates[0] })
+  assert.deepEqual(candidates.map((c: { name: string }) => c.name), ['widgets/Current', 'widgets/Other'])
+  assert.deepEqual(candidates[1].labelSegments, [{ text: 'widgets' }, { text: ' / ', dim: true }, { text: 'Other' }])
+  const outcome = source.onPick({ candidate: candidates[1] })
   const mention = `@[widgets/Other](${encodeSessionReferenceUri('s-other')})`
   assert.deepEqual(outcome, { insert: { source: SOURCE_NAME, ref: mention, label: 'widgets/Other', appearance: 'session', clipboardText: mention } })
   assert.equal(await source.codec.serialize(mention), mention)
   assert.equal(source.onPick({ candidate: { value: 'not json' } }), undefined)
   dispose()
   assert.equal(sources.length, 0)
+})
+
+test('the current session is offered first, also as %this, and inserts plain text', async () => {
+  const { ctx, sources } = fakeContext()
+  apply(ctx as never)
+  const [source] = sources
+  const names = async (query: string) => (await source.candidates({ sessionId: 's-current' }, { query, signal: new AbortController().signal }))
+    .map((c: { name: string }) => c.name)
+  assert.deepEqual(await names('this'), ['widgets/Current'])
+  assert.deepEqual(await names('thi'), ['widgets/Current'])
+  assert.deepEqual(await names('curr'), ['widgets/Current'])
+  assert.deepEqual(await names('oth'), ['widgets/Other'])
+  const [current] = await source.candidates({ sessionId: 's-current' }, { query: 'this', signal: new AbortController().signal })
+  assert.equal(current.description, 'this')
+  const text = 'this session (widgets/Current, id s-current)'
+  assert.deepEqual(source.onPick({ candidate: current }), {
+    insert: { source: SOURCE_NAME, ref: text, label: 'widgets/Current', appearance: 'session', clipboardText: text },
+  })
+  assert.equal(await source.codec.serialize(text), text)
 })
 
 test('an aborted request lists nothing', async () => {

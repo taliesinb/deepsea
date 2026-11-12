@@ -12,9 +12,14 @@ referenced session the usual way.
 
 ## Behavior
 
-- The list holds ordinary sessions other than the current one: no subagent
-  sessions, no blank New Session, nothing archived (as the sidebar hides
-  archived sessions).
+- The list holds the current session, then ordinary sessions other than the
+  current one: no subagent sessions, no blank New Session, nothing archived
+  (as the sidebar hides archived sessions).
+- The current session comes first, marked `this`, whenever the query is a
+  prefix of `this` (so `%` and `%this`) or matches its name. The server's
+  session-reference resolver refuses a session that references itself, so
+  picking it inserts a chip of plain text instead of a mention:
+  `this session (workspace/session, id <id>)`, which is what is sent.
 - Rows read `workspace / session`, the separator dimmed, with a compact age
   of the last activity (`now`, `2min`, `4h`, `3d`), newest first. The workspace is its stored
   title (the default workspace's is `default-workspace`).
@@ -24,7 +29,7 @@ referenced session the usual way.
   searches session names across all workspaces.
 - A session registered to no workspace is named after its working directory
   (`(unregistered)` when it has none).
-- A pick inserts the chip `@[workspace/session](dsh-session:…)`, the
+- Any other pick inserts the chip `@[workspace/session](dsh-session:…)`, the
   canonical mention the server's session-reference resolver reads: the
   session is found by its id in the URI, the label is only for reading.
 

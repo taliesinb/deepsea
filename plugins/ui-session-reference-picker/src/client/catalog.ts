@@ -1,6 +1,9 @@
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 
+type SessionId = SessionListState['ids'][number]
+type SessionSummary = SessionListState['byId'][SessionId]
+
 export interface SessionPickerItem {
   readonly sessionId: string
   readonly workspaceName: string
@@ -19,27 +22,70 @@ export function sessionPickerItems(
   workspaces: WorkspaceSnapshot,
   currentSessionId: string,
 ): SessionPickerItem[] {
-  const workspaceBySession = new Map<string, string>()
-  for (const workspace of workspaces.items) {
-    for (const sessionId of workspace.sessionIds) workspaceBySession.set(sessionId, workspace.title)
-  }
+  const workspaceBySession = workspaceNames(workspaces)
   const archived = new Set<string>(workspaces.archivedSessionIds)
   const items: SessionPickerItem[] = []
   for (const sessionId of sessions.ids) {
     const session = sessions.byId[sessionId]
     if (session === undefined || session.id === currentSessionId || session.origin === 'subagent'
       || session.blank || archived.has(session.id)) continue
-    const workspaceName = workspaceBySession.get(session.id) ?? fallbackWorkspaceName(session.cwd)
-    items.push({
-      sessionId: session.id,
-      workspaceName,
-      sessionName: session.displayTitle,
-      qualifiedName: `${workspaceName}/${session.displayTitle}`,
-      updatedAt: session.updatedAt,
-    })
+    items.push(pickerItem(session, workspaceBySession))
   }
   return items.sort((left, right) => right.updatedAt - left.updatedAt
     || left.qualifiedName.localeCompare(right.qualifiedName))
+}
+
+/** The word that always names the current session: `%this`. */
+export const THIS_SESSION = 'this'
+
+/**
+ * The current session as a picker row, offered whenever the query is a
+ * prefix of `this` (so also for a bare `%`) or matches its own name.
+ * @returns the row, or `undefined` when the session is not in the list or the query misses it.
+ */
+export function currentSessionPickerItem(
+  sessions: SessionListState,
+  workspaces: WorkspaceSnapshot,
+  currentSessionId: string,
+  query: string,
+): SessionPickerItem | undefined {
+  const session = sessions.byId[currentSessionId as SessionId] as SessionSummary | undefined
+  if (session === undefined) return undefined
+  const item = pickerItem(session, workspaceNames(workspaces))
+  return THIS_SESSION.startsWith(query.toLocaleLowerCase()) || filterSessionPickerItems([item], query).length > 0
+    ? item
+    : undefined
+}
+
+/**
+ * What picking the current session inserts and sends: plain text, not a
+ * `dsh-session:` mention, because the server's session-reference resolver
+ * refuses a session that references itself.
+ */
+export function thisSessionText(item: SessionPickerItem): string {
+  return `this session (${item.qualifiedName}, id ${item.sessionId})`
+}
+
+function workspaceNames(workspaces: WorkspaceSnapshot): Map<string, string> {
+  const workspaceBySession = new Map<string, string>()
+  for (const workspace of workspaces.items) {
+    for (const sessionId of workspace.sessionIds) workspaceBySession.set(sessionId, workspace.title)
+  }
+  return workspaceBySession
+}
+
+function pickerItem(
+  session: SessionSummary,
+  workspaceBySession: ReadonlyMap<string, string>,
+): SessionPickerItem {
+  const workspaceName = workspaceBySession.get(session.id) ?? fallbackWorkspaceName(session.cwd)
+  return {
+    sessionId: session.id,
+    workspaceName,
+    sessionName: session.displayTitle,
+    qualifiedName: `${workspaceName}/${session.displayTitle}`,
+    updatedAt: session.updatedAt,
+  }
 }
 
 /** Apply `%foo` full-name or `%foo/bar` component-aware matching. */
