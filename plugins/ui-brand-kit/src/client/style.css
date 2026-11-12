@@ -1,0 +1,25 @@
+.deepsea-brand-kit-card { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-primary); display: flex; flex-direction: column; gap: 14px; }
+.deepsea-brand-kit-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.deepsea-brand-kit-muted { color: var(--dsw-alias-label-tertiary); }
+.deepsea-brand-kit-error { color: var(--dsw-alias-state-error-primary); }
+.deepsea-brand-kit-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.deepsea-brand-kit-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 10px; background: var(--dsw-alias-bg-layer-3); }
+.deepsea-brand-kit-item.deepsea-brand-kit-active { border-color: var(--dsw-alias-state-business-primary); }
+.deepsea-brand-kit-item-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deepsea-brand-kit-item .deepsea-brand-kit-name-field { flex: 1; }
+.deepsea-brand-kit-tag { font-size: 11px; padding: 1px 7px; border-radius: 12px; background: var(--dsw-alias-state-business-tertiary); color: var(--dsw-alias-label-primary-bluish); }
+.deepsea-brand-kit-card input[type=text], .deepsea-brand-kit-card input[type=number], .deepsea-brand-kit-card select {
+  font: inherit; padding: 4px 8px; border-radius: 8px; border: 0.5px solid var(--dsw-alias-border-l4);
+  background: var(--dsw-alias-bg-layer-1); color: inherit; min-width: 0; box-sizing: border-box;
+}
+.deepsea-brand-kit-name-field { width: 220px; }
+.deepsea-brand-kit-form { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; }
+.deepsea-brand-kit-form > label { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.deepsea-brand-kit-form > input[type=text] { width: 100%; }
+.deepsea-brand-kit-form input[type=number] { width: 5.5em; }
+.deepsea-brand-kit-form input[type=color] { width: 34px; height: 26px; padding: 0; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: 6px; background: none; }
+.deepsea-brand-kit-inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.deepsea-brand-kit-inline input[type=text] { flex: 1; min-width: 140px; }
+.deepsea-brand-kit-inline .deepsea-brand-kit-family { flex: 0 1 200px; }
+.deepsea-brand-kit-stack { display: flex; flex-direction: column; gap: 6px; }
+.deepsea-brand-kit-heading { grid-column: 1 / -1; margin-top: 6px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
