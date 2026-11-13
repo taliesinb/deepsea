@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session reference picker",
+    "description": "Typing % in the composer opens a picker of sessions to reference."
+  }
+}
