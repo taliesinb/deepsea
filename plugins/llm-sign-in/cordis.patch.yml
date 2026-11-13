@@ -1,0 +1,8 @@
+# Bundle patch, used when the package is installed into a profile.
+# Registers the /login, /logout and /logins slash commands (host), their chat
+# card, and the Models page's sign-in cards and Add login (browser half,
+# lib/client.js). Needs the harness topic llm-route-metadata (sign-in routes
+# and their sign-in state). No config.
+- insert:
+    - id: deepsea-llm-sign-in
+      name: "@deepsea/llm-sign-in"
