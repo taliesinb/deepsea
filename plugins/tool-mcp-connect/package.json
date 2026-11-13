@@ -1,0 +1,30 @@
+{
+  "name": "@deepsea/tool-mcp-connect",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSea plugin: enables the harness's mcp_connect, mcp_disconnect and mcp_list tools, which connect an MCP server to one session after the user approves it, inline or by name from a project .mcp.json.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": ["index.js", "cordis.patch.yml", "README.md", "locale/*.json"],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-experimental-mcp-connect": "link:../../harness/packages/experimental/mcp-connect"
+  },
+  "deepsea": {
+    "requires": ["mcp-connect"]
+  }
+}

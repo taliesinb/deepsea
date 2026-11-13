@@ -1,0 +1,8 @@
+# Bundle patch, used when the package is installed into a profile.
+# The harness's mcp-connect plugin (an opt-in harness bundle) under this
+# package's row: mcp_connect, mcp_disconnect, mcp_list. Config, as the
+# harness plugin's: startupTimeoutMs (default 120000), projectFiles (true:
+# offer servers a project .mcp.json declares).
+- insert:
+    - id: deepsea-tool-mcp-connect
+      name: "@deepsea/tool-mcp-connect"
