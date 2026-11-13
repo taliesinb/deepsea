@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "title": "系统权限控制",
+    "description": "seek_system_permission 的卡片：每项 macOS 权限显示勾号、带“授权”和“拒绝”的问号，或叉号。"
+  },
+  "card": {
+    "title": "系统权限",
+    "summary": "{granted}/{total}",
+    "grant": "授权",
+    "deny": "拒绝",
+    "grant.aria": "授权{name}",
+    "deny.aria": "拒绝{name}",
+    "state.checking": "检查中",
+    "state.granted": "已授权",
+    "state.grantedAfter": "{duration}后已授权",
+    "state.pending": "未授权",
+    "state.switchedOff": "已关闭",
+    "state.stale": "失效条目",
+    "state.notRunning": "应用未运行",
+    "state.granting": "等待中",
+    "state.grantingStale": "失效条目：请移除",
+    "state.denied": "已拒绝",
+    "state.restricted": "受限制",
+    "state.notInstalled": "未安装",
+    "state.cancelled": "已取消",
+    "state.notApplicable": "不适用",
+    "perm.screen-recording": "屏幕录制",
+    "perm.accessibility": "辅助功能",
+    "perm.microphone": "麦克风",
+    "perm.camera": "摄像头",
+    "perm.input-monitoring": "输入监控",
+    "perm.full-disk-access": "完全磁盘访问权限",
+    "perm.automation": "自动化：{app}",
+    "duration.s": "{s}秒",
+    "duration.m": "{m}分钟",
+    "duration.ms": "{m}分{s}秒",
+    "duration.h": "{h}小时",
+    "duration.hm": "{h}小时{m}分",
+    "duration.hms": "{h}小时{m}分{s}秒",
+    "workspace.default": "默认工作区"
+  }
+}

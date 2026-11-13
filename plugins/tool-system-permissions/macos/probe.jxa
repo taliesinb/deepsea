@@ -1,0 +1,173 @@
+// probe.jxa — the macOS half of seek_system_permission, run with
+// `osascript -l JavaScript probe.jxa <command> …`, ALWAYS as a fresh child
+// process of the server: macOS charges every privacy check to the
+// "responsible" process (the variant's server host app), and some answers
+// (CGPreflightScreenCaptureAccess) are cached for a process's lifetime, so
+// each poll must be a new process.
+//
+//   probe <id>…        preflight only, never prompts; prints
+//                      {"pid", "subject": {pid, executable, app, bundleId, name}, "results": {<id>: {status, code?}}}
+//   trigger <id> <s>   asks macOS to show its Allow / Don't Allow dialog for
+//                      Microphone, Camera or an Automation target, or the
+//                      request alert for Screen Recording or Input
+//                      Monitoring, staying alive up to <s> seconds for the
+//                      asynchronous ones (Microphone, Camera); prints {"ok", …}
+//   selftest           which bindings resolve, calling none of the prompting ones
+//
+// Statuses: granted, denied, not-determined, restricted, not-running
+// (Automation target not running), unavailable (target not installed),
+// unknown. Screen Recording and Accessibility answer only yes or no here;
+// macos.mjs refines "no" from tccd's log (denied / not-determined / stale).
+ObjC.import('Foundation')
+ObjC.import('AppKit')
+
+function bind(name, signature) {
+  ObjC.bindFunction(name, signature)
+  return $[name]
+}
+
+function subject() {
+  const getpid = bind('getpid', ['int', []])
+  const responsible = bind('responsibility_get_pid_responsible_for_pid', ['int', ['int']])
+  const pidpath = bind('proc_pidpath', ['int', ['int', 'void *', 'unsigned int']])
+  const pid = responsible(getpid())
+  const out = { pid }
+  const buffer = $.NSMutableData.dataWithLength(4096)
+  const length = pidpath(pid, buffer.mutableBytes, 4096)
+  if (length <= 0) return out
+  buffer.length = length
+  const executable = $.NSString.alloc.initWithDataEncoding(buffer, 4).js
+  out.executable = executable
+  const marker = executable.lastIndexOf('.app/Contents/MacOS/')
+  if (marker === -1) {
+    out.name = executable.split('/').pop()
+    return out
+  }
+  out.app = executable.slice(0, marker + 4)
+  const bundle = $.NSBundle.bundleWithPath(out.app)
+  if (!bundle.isNil()) {
+    out.bundleId = ObjC.unwrap(bundle.bundleIdentifier)
+    const info = bundle.infoDictionary
+    out.name = ObjC.unwrap(info.objectForKey('CFBundleDisplayName')) || ObjC.unwrap(info.objectForKey('CFBundleName'))
+  }
+  if (!out.name) out.name = out.app.split('/').pop().replace(/\.app$/, '')
+  return out
+}
+
+function captureDevice() {
+  $.NSBundle.bundleWithPath('/System/Library/Frameworks/AVFoundation.framework').load
+  return $.NSClassFromString('AVCaptureDevice')
+}
+
+// AVAuthorizationStatus: 0 not determined, 1 restricted, 2 denied, 3 authorized.
+const AV = ['not-determined', 'restricted', 'denied', 'granted']
+const MEDIA = { microphone: 'soun', camera: 'vide' }
+
+function fullDiskAccess() {
+  const open = bind('open', ['int', ['char *', 'int']])
+  const close = bind('close', ['int', ['int']])
+  const errno = bind('__error', ['int *', []])
+  const home = $.NSHomeDirectory().js
+  // Directories every Mac has and only Full Disk Access may read. A missing
+  // one (ENOENT: never created, or hidden without the grant) says nothing.
+  const paths = [home + '/Library/Safari', home + '/Library/Mail', home + '/Library/Messages', '/Library/Application Support/com.apple.TCC']
+  for (const path of paths) {
+    const fd = open(path, 0)
+    if (fd >= 0) { close(fd); return { status: 'granted', path } }
+    const code = errno()[0]
+    // EPERM: not granted; whether the app's row is missing or switched off, nothing says.
+    if (code === 1) return { status: 'not-granted', path }
+  }
+  return { status: 'unknown' }
+}
+
+function automationDescriptor(bundleId) {
+  return $.NSAppleEventDescriptor.descriptorWithBundleIdentifier(bundleId)
+}
+
+const AE_WILDCARD = 0x2a2a2a2a // typeWildCard '****'
+
+function automation(bundleId, ask) {
+  if ($.NSWorkspace.sharedWorkspace.URLForApplicationWithBundleIdentifier(bundleId).isNil()) return { status: 'unavailable' }
+  const determine = bind('AEDeterminePermissionToAutomateTarget', ['int', ['void *', 'unsigned int', 'unsigned int', 'bool']])
+  const code = determine(automationDescriptor(bundleId).aeDesc, AE_WILDCARD, AE_WILDCARD, ask)
+  // noErr, errAEEventNotPermitted, errAEEventWouldRequireUserConsent, procNotFound.
+  const status = { 0: 'granted', [-1743]: 'denied', [-1744]: 'not-determined', [-600]: 'not-running' }[code] ?? 'unknown'
+  return { status, code }
+}
+
+function probeOne(id) {
+  if (id === 'screen-recording') return { status: bind('CGPreflightScreenCaptureAccess', ['bool', []])() ? 'granted' : 'not-granted' }
+  if (id === 'accessibility') return { status: bind('AXIsProcessTrusted', ['bool', []])() ? 'granted' : 'not-granted' }
+  if (id in MEDIA) {
+    const code = Number(captureDevice().authorizationStatusForMediaType(MEDIA[id]))
+    return { status: AV[code] ?? 'unknown', code }
+  }
+  if (id === 'input-monitoring') {
+    // IOHIDAccessType: 0 granted, 1 denied, 2 unknown (never asked).
+    const code = bind('IOHIDCheckAccess', ['int', ['int']])(1)
+    return { status: ['granted', 'denied', 'not-determined'][code] ?? 'unknown', code }
+  }
+  if (id === 'full-disk-access') return fullDiskAccess()
+  if (id.startsWith('automation:')) return automation(id.slice('automation:'.length), false)
+  return { status: 'unavailable', error: 'unknown permission ' + id }
+}
+
+function runLoopFor(seconds, done) {
+  const until = Date.now() + seconds * 1000
+  while (!done() && Date.now() < until) $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.25))
+}
+
+// The classes whose Grant goes through macOS: Allow / Don't Allow (Microphone, Camera, Automation),
+// or the request API's alert, which lists the app and leads to the pane (Screen Recording, Input
+// Monitoring). Accessibility's alert is never raised: AXIsProcessTrusted lists the app silently, so
+// the tool opens the pane itself (permissions.mjs `grant`).
+function triggerOne(id, keepAlive) {
+  if (id === 'screen-recording') return { ok: true, result: bind('CGRequestScreenCaptureAccess', ['bool', []])() }
+  // IOHIDRequestType 1: ListenEvent.
+  if (id === 'input-monitoring') return { ok: true, result: bind('IOHIDRequestAccess', ['bool', ['int']])(1) }
+  if (id in MEDIA) {
+    let answered = false
+    captureDevice().requestAccessForMediaTypeCompletionHandler(MEDIA[id], () => { answered = true })
+    runLoopFor(keepAlive, () => answered)
+    return { ok: true, answered }
+  }
+  if (id.startsWith('automation:')) {
+    const bundleId = id.slice('automation:'.length)
+    // The target must be running to be asked about; macos.mjs launches it hidden first.
+    const until = Date.now() + 10_000
+    let answer = automation(bundleId, false)
+    while (answer.status === 'not-running' && Date.now() < until) { delay(0.5); answer = automation(bundleId, false) }
+    if (answer.status !== 'not-determined') return { ok: true, status: answer.status }
+    return { ok: true, status: automation(bundleId, true).status }
+  }
+  return { ok: false, error: 'no trigger for ' + id }
+}
+
+// The Objective-C methods the triggers call exist (C functions bind lazily, so only methods can be checked without calling them).
+function selftest() {
+  const device = captureDevice()
+  return {
+    AVCaptureDevice: !device.isNil(),
+    requestAccessForMediaTypeCompletionHandler: !device.isNil() && device.respondsToSelector('requestAccessForMediaType:completionHandler:'),
+    NSAppleEventDescriptor: typeof automationDescriptor('com.apple.finder').aeDesc !== 'undefined',
+  }
+}
+
+function run(argv) {
+  const [command, ...rest] = argv
+  if (command === 'probe') {
+    const results = {}
+    for (const id of rest) {
+      try { results[id] = probeOne(id) } catch (error) { results[id] = { status: 'unknown', error: String(error) } }
+    }
+    let who
+    try { who = subject() } catch (error) { who = { error: String(error) } }
+    return JSON.stringify({ pid: bind('getpid', ['int', []])(), subject: who, results })
+  }
+  if (command === 'trigger') {
+    try { return JSON.stringify(triggerOne(rest[0], Number(rest[1]) || 600)) } catch (error) { return JSON.stringify({ ok: false, error: String(error) }) }
+  }
+  if (command === 'selftest') return JSON.stringify(selftest())
+  return JSON.stringify({ ok: false, error: 'usage: probe <id>… | trigger <id> <seconds> | selftest' })
+}

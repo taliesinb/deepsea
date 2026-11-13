@@ -1,0 +1,14 @@
+# Bundle patch, used when the package is installed into a profile. Two rows:
+# - deepsea-tool-system-permissions (global): the prober and the running calls
+#   (service deepseaSystemPermissions), the status and action routes, and the
+#   card (browser half, lib/client.js);
+# - deepsea-tool-system-permissions-tools: the seek_system_permission tool and
+#   its system-prompt hint. dsd moves it into the agent presets that have
+#   @deepseek-ai/dsh-tool-bash (package.json deepsea.presets) and disables it here.
+# The test mode (fakeStateFile) is the first row's config; pollSeconds,
+# autoGrantSeconds and promptHint are the second's.
+- insert:
+    - id: deepsea-tool-system-permissions
+      name: "@deepsea/tool-system-permissions"
+    - id: deepsea-tool-system-permissions-tools
+      name: "@deepsea/tool-system-permissions/tools"
