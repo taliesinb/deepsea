@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Transcript end margin",
+    "description": "Adds empty space under a session's last message, so its end is easy to see."
+  }
+}

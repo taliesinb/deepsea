@@ -1,0 +1,11 @@
+# Bundle patch, used when the package is installed into a profile.
+# ⌘. (Ctrl+. off Apple devices) toggles the Settings panel (browser half,
+# lib/client.js). No config.
+- insert:
+    - id: deepsea-ui-settings-entry
+      name: "@deepsea/ui-settings-entry"
+# Upstream's account launcher (the sidebar foot's account menu, the Account
+# section of Settings, the DeepSeek sign-in) off: the sidebar foot shows the
+# shell's own Settings button instead.
+- id: ui-settings-account
+  disabled: true
